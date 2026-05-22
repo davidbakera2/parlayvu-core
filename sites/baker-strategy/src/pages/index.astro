@@ -1,0 +1,54 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import SiteNav from "@/components/SiteNav.astro";
+import ContactForm from "@/components/ContactForm.astro";
+
+const year = new Date().getFullYear();
+---
+
+<Layout title="Baker Strategy" description="Market strategy, execution, and growth.">
+  <div class="min-h-screen bg-zinc-950 text-white">
+    <SiteNav />
+    <section class="pt-20 pb-16 px-6">
+      <div class="max-w-5xl mx-auto text-center">
+        <p class="text-sm text-zinc-400 mb-4">Market Strategy • Execution • Growth</p>
+        <h1 class="text-5xl md:text-6xl font-semibold tracking-tighter leading-tight mb-6">
+          Market Strategy That Turns Your Business Dream Into Reality
+        </h1>
+        <p class="max-w-2xl mx-auto text-lg text-zinc-400 mb-10">
+          Baker Strategy provides clear, actionable market strategy so you can stop guessing and start growing with
+          confidence.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a
+            href="#contact"
+            class="inline-flex h-12 items-center justify-center rounded-2xl bg-white text-black font-semibold px-8 hover:bg-blue-600 hover:text-white transition-all"
+          >
+            Book Your Strategy Session
+          </a>
+          <a
+            href="/parlayvu"
+            class="inline-flex h-12 items-center justify-center rounded-2xl border border-zinc-700 px-8 font-semibold hover:border-blue-500 transition-colors"
+          >
+            Explore ParlayVU
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact" class="py-20 border-t border-zinc-800 scroll-mt-24 px-6">
+      <div class="max-w-xl mx-auto">
+        <h2 class="text-3xl font-semibold tracking-tight text-center mb-3">Contact</h2>
+        <p class="text-zinc-400 text-center mb-10">Tell us about your goals. We will respond via email.</p>
+        <ContactForm />
+      </div>
+    </section>
+
+    <footer class="border-t border-zinc-800 py-8 text-center text-sm text-zinc-500">
+      © {year} Baker Strategy LLC ·
+      <a href="/parlayvu" class="hover:text-blue-400 transition-colors">ParlayVU</a>
+      {" · "}
+      <a href="/outlook-survey" class="hover:text-amber-400 transition-colors">Outlook Survey</a>
+    </footer>
+  </div>
+</Layout>

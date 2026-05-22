@@ -1,0 +1,8 @@
+name = "scaffold-test-site"
+pages_build_output_dir = "./dist"
+compatibility_date = "2024-06-01"
+
+[vars]
+CONTACT_TO_EMAIL = "hello@example.test"
+CONTACT_FROM_EMAIL = "contact@example.test"
+CONTACT_FROM_NAME = "Test Co Website"

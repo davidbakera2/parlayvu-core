@@ -1,0 +1,77 @@
+---
+import { ramairCaseStudy } from "@/lib/ramair-case-study";
+
+const study = ramairCaseStudy;
+---
+
+<section class="py-20 border-t border-zinc-800 bg-gradient-to-b from-zinc-950 via-zinc-900/80 to-zinc-950">
+  <div class="max-w-6xl mx-auto px-6">
+    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-400 mb-4">ParlayVU in the field</p>
+    <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-end mb-12">
+      <h2 class="text-4xl md:text-5xl font-semibold tracking-tighter leading-tight">
+        How RamAir turns one weekly podcast into a content engine.
+      </h2>
+      <p class="text-lg text-zinc-400 leading-relaxed">
+        The first client story in a reusable case study library built to show how ParlayVU compounds source material
+        into channel reach.
+      </p>
+    </div>
+
+    <div class="grid lg:grid-cols-[1fr_minmax(280px,0.38fr)] gap-5">
+      <article class="rounded-3xl border border-zinc-700/80 bg-zinc-900/90 p-8 md:p-10 shadow-2xl shadow-black/30">
+        <p class="text-xs font-bold uppercase tracking-[0.18em] text-cyan-400 mb-3">{study.eyebrow}</p>
+        <h3 class="text-3xl md:text-4xl font-semibold tracking-tight mb-4">{study.title}</h3>
+        <p class="text-zinc-400 leading-relaxed mb-8">{study.summary}</p>
+        <ul class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8 list-none p-0 m-0">
+          {
+            study.outputs.map((output) => (
+              <li class="rounded-2xl border border-zinc-700/70 bg-zinc-950/60 p-4 text-sm text-zinc-300 leading-snug">
+                {output}
+              </li>
+            ))
+          }
+        </ul>
+        <div class="flex flex-wrap gap-2">
+          {
+            study.links.map((link) => (
+              <a
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                class="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-zinc-100 hover:border-cyan-400/60 hover:bg-cyan-500/20 transition-colors"
+              >
+                {link.label}
+              </a>
+            ))
+          }
+        </div>
+      </article>
+
+      <aside class="rounded-3xl border border-zinc-700/80 bg-zinc-900/90 overflow-hidden shadow-2xl shadow-black/30 flex flex-col">
+        <div class="relative aspect-[4/5] w-full min-h-[220px] bg-zinc-800">
+          <img
+            src="/case-studies/ramair-david-hart.png"
+            alt="David Hart of RamAir"
+            class="absolute inset-0 h-full w-full object-cover object-center"
+            loading="lazy"
+          />
+        </div>
+        <div class="p-6 md:p-8 flex flex-col gap-4">
+          <p class="text-xs font-bold uppercase tracking-[0.18em] text-cyan-400">Client testimonial</p>
+          <blockquote class="text-zinc-300 text-sm md:text-base leading-relaxed border-l-2 border-cyan-500/50 pl-4 m-0">
+            &ldquo;{study.quote}&rdquo;
+          </blockquote>
+          <cite class="not-italic text-sm font-semibold text-zinc-500">{study.cite}</cite>
+          <a
+            href="https://parlayvu.ai/#case-studies"
+            target="_blank"
+            rel="noreferrer"
+            class="text-sm font-medium text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            See the full story on parlayvu.ai →
+          </a>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>

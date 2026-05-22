@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.astro/
+.wrangler/
+
+# Legacy Next.js (remove after migration verified)
+.next/
+out/

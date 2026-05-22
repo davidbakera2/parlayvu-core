@@ -1,0 +1,155 @@
+---
+import Layout from '../layouts/Layout.astro';
+const pageTitle = "Parlayvu Inspired";
+const pageDescription = "AI-powered content repurposing landing page";
+---
+
+<Layout title={pageTitle} description={pageDescription}>
+  <main class="parlay-shell">
+    <header class="mx-auto flex max-w-6xl items-center justify-between px-6 py-7">
+      <a href="#" class="text-2xl font-black tracking-tight">ParlayVu</a>
+      <nav class="hidden items-center gap-8 text-sm font-semibold uppercase tracking-[0.2em] text-[#52645d] md:flex">
+        <a href="#start">Method</a>
+        <a href="#assets">Team</a>
+        <a href="#message">Contact</a>
+        <a href="#subscribe">Start</a>
+      </nav>
+    </header>
+
+    <section class="px-6 pb-16 pt-10 sm:pb-24">
+      <div class="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
+        <div>
+          <p class="mb-5 text-sm font-bold uppercase tracking-[0.28em] text-[#a25f2b]">AI-powered content systems</p>
+          <h1 class="max-w-4xl text-5xl font-black leading-[0.95] tracking-tight text-[#20352f] sm:text-6xl lg:text-7xl">
+            AI agents that parlay your content into multi-channel reach.
+          </h1>
+          <p class="mt-7 max-w-2xl text-xl leading-8 text-[#52645d]">
+            Turn one blog, interview, podcast, or social post into threads, ads, emails, reels, shorts, and more.
+          </p>
+          <div class="mt-10 flex flex-col gap-4 sm:flex-row">
+            <a href="#start" class="rounded-full bg-[#20352f] px-8 py-4 text-center font-bold text-white shadow-lg shadow-black/10 transition hover:bg-[#304d45]">
+              Start Your Parlay
+            </a>
+            <a href="#assets" class="rounded-full border-2 border-[#20352f]/20 px-8 py-4 text-center font-bold text-[#20352f] transition hover:border-[#20352f]">
+              Meet The Team
+            </a>
+          </div>
+        </div>
+        <div class="overflow-hidden rounded-[2rem] bg-[#20352f] shadow-2xl shadow-[#20352f]/20">
+          <div class="aspect-[4/3] bg-[linear-gradient(135deg,_#d9904f,_#f3d7a6_52%,_#7f9b8f)] p-8">
+            <div class="flex h-full flex-col justify-end rounded-[1.5rem] border border-white/40 bg-white/75 p-7 backdrop-blur">
+              <p class="text-sm font-bold uppercase tracking-[0.25em] text-[#a25f2b]">Web & Deployment</p>
+              <p class="mt-4 text-2xl font-black leading-tight text-[#20352f]">Dylan Brooks</p>
+              <p class="mt-4 text-base font-semibold leading-relaxed text-[#20352f]">AI agents that parlay your content into multi-channel reach.</p>
+            </div>
+          </div>
+          <div class="grid gap-4 p-6 text-white sm:grid-cols-2">
+            <div>
+              <p class="text-sm uppercase tracking-[0.25em] text-white/55">Brand Voice</p>
+              <p class="mt-2 font-semibold">Bold, focused, and conversion-minded</p>
+            </div>
+            <div>
+              <p class="text-sm uppercase tracking-[0.25em] text-white/55">Output</p>
+              <p class="mt-2 font-semibold">Astro site plus campaign-ready sections</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="border-y border-[#20352f]/10 bg-white/55 px-6 py-10">
+      <div class="mx-auto grid max-w-6xl gap-6 text-center md:grid-cols-3">
+        <div>
+          <p class="text-3xl font-black text-[#20352f]">1</p>
+          <p class="mt-2 font-semibold text-[#52645d]">source idea</p>
+        </div>
+        <div>
+          <p class="text-3xl font-black text-[#20352f]">12+</p>
+          <p class="mt-2 font-semibold text-[#52645d]">campaign assets</p>
+        </div>
+        <div>
+          <p class="text-3xl font-black text-[#20352f]">1</p>
+          <p class="mt-2 font-semibold text-[#52645d]">simple client experience</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="start" class="px-6 py-20">
+      <div class="mx-auto max-w-6xl">
+        <p class="text-sm font-bold uppercase tracking-[0.28em] text-[#a25f2b]">The Parlay Method</p>
+        <h2 class="mt-4 max-w-3xl text-4xl font-black tracking-tight sm:text-5xl">One source idea, many useful assets.</h2>
+        <div class="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <a href="#assets" class="rounded-[1.75rem] bg-white p-7 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+            <h3 class="text-2xl font-black">Parlay Engine</h3>
+            <p class="mt-4 text-[#52645d]">The core AI engine intelligently parlays your content across formats and platforms.</p>
+            <p class="mt-6 font-bold text-[#a25f2b]">Start engine -></p>
+          </a>
+          <a href="#assets" class="rounded-[1.75rem] bg-white p-7 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+            <h3 class="text-2xl font-black">Content Repurpose</h3>
+            <p class="mt-4 text-[#52645d]">Transform one idea into threads, ads, emails, shorts, reels, and social posts.</p>
+            <p class="mt-6 font-bold text-[#a25f2b]">Repurpose -></p>
+          </a>
+          <a href="#assets" class="rounded-[1.75rem] bg-white p-7 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+            <h3 class="text-2xl font-black">Engagement Boost</h3>
+            <p class="mt-4 text-[#52645d]">Use AI-optimized strategies to maximize reach, interactions, and conversions.</p>
+            <p class="mt-6 font-bold text-[#a25f2b]">Boost reach -></p>
+          </a>
+          <a href="#subscribe" class="rounded-[1.75rem] bg-white p-7 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+            <h3 class="text-2xl font-black">Human Review</h3>
+            <p class="mt-4 text-[#52645d]">Keep approval gates, quality checks, and final delivery decisions visible.</p>
+            <p class="mt-6 font-bold text-[#a25f2b]">Review -></p>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section id="message" class="bg-[#20352f] px-6 py-20 text-white">
+      <div class="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.9fr_1.1fr]">
+        <div>
+          <p class="text-sm font-bold uppercase tracking-[0.28em] text-[#f3d7a6]">The Team</p>
+          <h2 class="mt-4 text-4xl font-black tracking-tight sm:text-5xl">Nathan leads the orchestration.</h2>
+        </div>
+        <div class="rounded-[2rem] bg-white p-8 text-[#20352f]">
+          <h3 class="text-3xl font-black">Dylan turns strategy into pages.</h3>
+          <p class="mt-5 text-lg leading-8 text-[#52645d]">
+            Below Nathan, specialist agents operate with defined roles, approval boundaries, and quality checks.
+          </p>
+          <a href="#subscribe" class="mt-8 inline-flex rounded-full bg-[#d9904f] px-7 py-3 font-bold text-white transition hover:bg-[#b86e31]">
+            Play Intro
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section id="assets" class="px-6 py-20">
+      <div class="mx-auto max-w-6xl">
+        <p class="text-sm font-bold uppercase tracking-[0.28em] text-[#a25f2b]">Web & Deployment</p>
+        <div class="mt-10 grid gap-6 md:grid-cols-3">
+          <div class="rounded-[2rem] border border-[#20352f]/10 bg-white/70 p-8">
+            <h3 class="text-2xl font-black">Landing Page</h3>
+            <p class="mt-4 text-[#52645d]">Hero, benefits, proof, pathways, and CTA sections ready for Astro.</p>
+          </div>
+          <div class="rounded-[2rem] border border-[#20352f]/10 bg-white/70 p-8">
+            <h3 class="text-2xl font-black">Campaign Map</h3>
+            <p class="mt-4 text-[#52645d]">A clear view of how one idea turns into follow-up assets.</p>
+          </div>
+          <div class="rounded-[2rem] border border-[#20352f]/10 bg-white/70 p-8">
+            <h3 class="text-2xl font-black">Deployment Path</h3>
+            <p class="mt-4 text-[#52645d]">Local build output now, Cloudflare Pages deployment next.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="subscribe" class="px-6 pb-20">
+      <div class="mx-auto max-w-6xl rounded-[2rem] bg-[#d9904f] p-10 text-center text-white sm:p-16">
+        <p class="text-sm font-bold uppercase tracking-[0.28em] text-white/75">Ready to scale your reach?</p>
+        <h2 class="mt-4 text-4xl font-black tracking-tight sm:text-5xl">Send the raw content. We will build the Parlay.</h2>
+        <p class="mx-auto mt-5 max-w-2xl text-lg text-white/85">Fill out the form or email the team and ParlayVU will be in touch with a clear production path.</p>
+        <a href="mailto:hello@parlayvu.ai" class="mt-8 inline-flex rounded-full bg-[#20352f] px-10 py-4 font-bold text-white transition hover:bg-[#304d45]">
+          Book a Strategy Call
+        </a>
+      </div>
+    </section>
+  </main>
+</Layout>

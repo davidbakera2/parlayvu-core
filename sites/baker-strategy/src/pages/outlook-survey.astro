@@ -1,0 +1,114 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import SiteNav from "@/components/SiteNav.astro";
+import OutlookFeatured2026 from "@/components/OutlookFeatured2026.astro";
+import OutlookPresentationArchive from "@/components/OutlookPresentationArchive";
+import { FEATURED_PARTICIPANTS, OUTLOOK_ARCHIVE } from "@/lib/outlook-survey-data";
+
+const year = new Date().getFullYear();
+---
+
+<Layout
+  title="Michigan Economic Outlook Survey | Baker Strategy"
+  description="The Michigan Economic Outlook Survey gathers business leader perspectives on economic outlook."
+>
+  <div class="min-h-screen bg-zinc-950 text-white">
+    <SiteNav />
+
+    <section class="pt-20 pb-16 px-6">
+      <div class="max-w-4xl mx-auto text-center">
+        <p class="text-sm font-semibold uppercase tracking-[0.2em] text-amber-400 mb-4">Baker Strategy program</p>
+        <h1 class="text-5xl md:text-6xl font-semibold tracking-tighter leading-tight mb-6">
+          Michigan Economic Outlook Survey
+        </h1>
+        <p class="text-xl text-zinc-400 max-w-2xl mx-auto">
+          For chambers, business associations, and economic development groups. Make Michigan a great state to grow a
+          business.
+        </p>
+      </div>
+    </section>
+
+    <section class="py-16 border-t border-zinc-800 px-6">
+      <div class="max-w-3xl mx-auto space-y-6 text-lg text-zinc-400 leading-relaxed">
+        <h2 class="text-3xl font-semibold tracking-tight text-white text-center mb-8">About the survey</h2>
+        <p>
+          The Economic Outlook Survey is an online survey that gathers the perspectives of business leaders and
+          entrepreneurs on the economic outlook for their organizations and their economic regions.
+        </p>
+        <p>
+          In return, each participating association receives a free report on their results as well as the overall
+          results. This program is offered at no charge to promote the value of private-sector growth.
+        </p>
+      </div>
+    </section>
+
+    <section class="py-16 border-t border-zinc-800 bg-zinc-900/50 px-6">
+      <div class="max-w-3xl mx-auto">
+        <div class="rounded-3xl border border-amber-500/25 bg-amber-500/5 p-8 md:p-10">
+          <h2 class="text-2xl md:text-3xl font-semibold tracking-tight text-white mb-3">
+            2027 Michigan Economic Outlook Survey
+          </h2>
+          <p class="text-zinc-400 mb-6">
+            Planning is underway for the next wave. Chambers and associations can register interest to distribute the
+            survey to members and receive localized results.
+          </p>
+          <a
+            href="https://www.outlooksurvey.com/"
+            target="_blank"
+            rel="noreferrer"
+            class="inline-flex h-12 items-center justify-center rounded-2xl bg-white text-black font-semibold px-8 hover:bg-amber-500 hover:text-black transition-all"
+          >
+            Participate on outlooksurvey.com
+          </a>
+        </div>
+        <div class="mt-8">
+          <OutlookFeatured2026 />
+        </div>
+      </div>
+    </section>
+
+    <section class="py-16 border-t border-zinc-800 px-6">
+      <div class="max-w-4xl mx-auto">
+        <h2 class="text-3xl font-semibold tracking-tight text-white mb-3 text-center">Presentation archive</h2>
+        <p class="text-center text-zinc-400 mb-10 max-w-2xl mx-auto">
+          Select a thumbnail to play the video or view slides below.
+        </p>
+        <OutlookPresentationArchive client:load items={OUTLOOK_ARCHIVE} />
+      </div>
+    </section>
+
+    <section class="py-16 border-t border-zinc-800 px-6">
+      <div class="max-w-3xl mx-auto">
+        <h2 class="text-3xl font-semibold tracking-tight text-white mb-4 text-center">
+          Participating chambers &amp; associations
+        </h2>
+        <ul class="grid sm:grid-cols-2 gap-3">
+          {
+            FEATURED_PARTICIPANTS.map((name) => (
+              <li class="rounded-xl border border-zinc-700/60 bg-zinc-950/50 px-4 py-3 text-sm text-zinc-300">
+                {name}
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
+
+    <section class="py-16 border-t border-zinc-800 px-6">
+      <div class="max-w-xl mx-auto text-center">
+        <p class="text-zinc-400 mb-6">Questions about the survey or association participation?</p>
+        <a
+          href="/#contact"
+          class="inline-flex h-12 items-center justify-center rounded-2xl bg-white text-black font-semibold px-8 hover:bg-blue-600 hover:text-white transition-all"
+        >
+          Contact Baker Strategy
+        </a>
+      </div>
+    </section>
+
+    <footer class="border-t border-zinc-800 py-8 text-center text-sm text-zinc-500">
+      © {year} Baker Strategy LLC ·
+      <a href="/outlook-survey" class="hover:text-amber-400 transition-colors">Economic Outlook Survey</a>
+    </footer>
+  </div>
+</Layout>

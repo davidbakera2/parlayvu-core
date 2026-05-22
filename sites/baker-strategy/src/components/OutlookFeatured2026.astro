@@ -1,0 +1,59 @@
+---
+import { OUTLOOK_2026_VIDEO } from "@/lib/outlook-survey-data";
+import { youtubeEmbedUrl, youtubeId, youtubeThumbnail } from "@/lib/youtube";
+
+const videoId = youtubeId(OUTLOOK_2026_VIDEO.url);
+const embedSrc = videoId ? youtubeEmbedUrl(videoId, OUTLOOK_2026_VIDEO.startSeconds) : null;
+---
+
+{
+  videoId && embedSrc ? (
+    <div class="rounded-3xl border border-zinc-700/80 bg-zinc-900/90 overflow-hidden shadow-xl shadow-black/20">
+      <div class="p-8 md:p-10 border-b border-zinc-800">
+        <h2 class="text-2xl md:text-3xl font-semibold tracking-tight text-white mb-3">2026 results</h2>
+        <p class="text-zinc-400">
+          Results were presented at the Detroit Economic Club on {OUTLOOK_2026_VIDEO.presentedOn}. The recording below
+          starts at <span class="text-amber-300 font-medium">12:12</span> where the Michigan Economic Outlook Survey
+          results are presented.
+        </p>
+      </div>
+      <div class="relative w-full bg-black aspect-video min-h-[280px] md:min-h-[420px]">
+        <iframe
+          src={embedSrc}
+          title={`${OUTLOOK_2026_VIDEO.label} — survey results`}
+          class="absolute inset-0 h-full w-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+        />
+      </div>
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-6 py-4 bg-zinc-950/60 border-t border-zinc-800">
+        <div class="flex items-center gap-3 min-w-0">
+          <img
+            src={youtubeThumbnail(videoId)}
+            alt=""
+            class="h-14 w-24 rounded-lg object-cover shrink-0 border border-zinc-700"
+          />
+          <p class="text-sm text-zinc-400 truncate">Full Detroit Economic Club meeting recording</p>
+        </div>
+        <div class="flex flex-wrap gap-2 shrink-0">
+          <a
+            href={OUTLOOK_2026_VIDEO.url}
+            target="_blank"
+            rel="noreferrer"
+            class="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-600 font-semibold px-5 text-sm hover:border-amber-400 hover:text-amber-300 transition-colors"
+          >
+            Open on YouTube ↗
+          </a>
+          <a
+            href="https://www.outlooksurvey.com/"
+            target="_blank"
+            rel="noreferrer"
+            class="inline-flex h-10 items-center justify-center rounded-xl bg-white text-black font-semibold px-5 text-sm hover:bg-amber-500 transition-colors"
+          >
+            Survey downloads
+          </a>
+        </div>
+      </div>
+    </div>
+  ) : null
+}

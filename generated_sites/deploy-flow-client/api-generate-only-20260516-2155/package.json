@@ -1,0 +1,18 @@
+{
+  "name": "api-generate-only",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/styles/global.css -o ./src/styles/tailwind.css --minify",
+    "dev": "tailwindcss -i ./src/styles/global.css -o ./src/styles/tailwind.css --minify && astro dev",
+    "build": "tailwindcss -i ./src/styles/global.css -o ./src/styles/tailwind.css --minify && astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@tailwindcss/cli": "latest",
+    "astro": "latest",
+    "tailwindcss": "latest"
+  },
+  "devDependencies": {}
+}

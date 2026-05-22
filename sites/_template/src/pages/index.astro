@@ -1,0 +1,46 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import SiteNav from "@/components/SiteNav.astro";
+import ContactForm from "@/components/ContactForm.astro";
+import site from "../../site.contact.json";
+
+const year = new Date().getFullYear();
+const brandName = site.brand?.name ?? "Client";
+const tagline = site.brand?.tagline ?? "Your tagline";
+const description = site.brand?.description ?? "Tell visitors what you offer.";
+---
+
+<Layout title={brandName} description={description}>
+  <div class="min-h-screen bg-zinc-950 text-white">
+    <SiteNav />
+    <section class="pt-20 pb-16 px-6">
+      <div class="max-w-5xl mx-auto text-center">
+        <p class="text-sm text-zinc-400 mb-4">{tagline}</p>
+        <h1 class="text-5xl md:text-6xl font-semibold tracking-tighter leading-tight mb-6">
+          {brandName}
+        </h1>
+        <p class="max-w-2xl mx-auto text-lg text-zinc-400 mb-10">
+          {description}
+        </p>
+        <a
+          href="#contact"
+          class="inline-flex h-12 items-center justify-center rounded-2xl bg-white text-black font-semibold px-8 hover:bg-blue-600 hover:text-white transition-all"
+        >
+          Get in touch
+        </a>
+      </div>
+    </section>
+
+    <section id="contact" class="py-20 border-t border-zinc-800 scroll-mt-24 px-6">
+      <div class="max-w-xl mx-auto">
+        <h2 class="text-3xl font-semibold tracking-tight text-center mb-3">Contact</h2>
+        <p class="text-zinc-400 text-center mb-10">We will respond via email.</p>
+        <ContactForm />
+      </div>
+    </section>
+
+    <footer class="border-t border-zinc-800 py-8 text-center text-sm text-zinc-500">
+      © {year} {brandName}
+    </footer>
+  </div>
+</Layout>

@@ -1,0 +1,59 @@
+{
+    "$schema":  "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+    "manifestVersion":  "1.17",
+    "version":  "1.0.1",
+    "id":  "7518473e-f7aa-4e7a-a9ce-8c43ec4fa878",
+    "developer":  {
+                      "name":  "ParlayVU",
+                      "websiteUrl":  "https://parlayvu.ai",
+                      "privacyUrl":  "https://parlayvu.ai/privacy",
+                      "termsOfUseUrl":  "https://parlayvu.ai/terms"
+                  },
+    "name":  {
+                 "short":  "Nathan",
+                 "full":  "ParlayVU Nathan Agent"
+             },
+    "description":  {
+                        "short":  "Chat with Nathan, the ParlayVU orchestrator.",
+                        "full":  "Nathan is the ParlayVU orchestrator for Teams-native project-aware campaign operations, approvals, and client-ready workflow support."
+                    },
+    "icons":  {
+                  "color":  "color.png",
+                  "outline":  "outline.png"
+              },
+    "accentColor":  "#0F766E",
+    "bots":  [
+                 {
+                     "botId":  "2dc8aa66-9c5b-4ff5-9151-48408f1f6554",
+                     "scopes":  [
+                                    "personal",
+                                    "team",
+                                    "groupchat"
+                                ],
+                     "supportsFiles":  false,
+                     "isNotificationOnly":  false,
+                     "commandLists":  [
+                                          {
+                                              "scopes":  [
+                                                             "personal",
+                                                             "team",
+                                                             "groupchat"
+                                                         ],
+                                              "commands":  [
+                                                               {
+                                                                   "title":  "summarize",
+                                                                   "description":  "Summarize a project and identify approvals"
+                                                               },
+                                                               {
+                                                                   "title":  "approvals",
+                                                                   "description":  "List pending project approvals"
+                                                               }
+                                                           ]
+                                          }
+                                      ]
+                 }
+             ],
+    "validDomains":  [
+                         "parlayvu-api.greengrass-202e3ea6.eastus.azurecontainerapps.io"
+                     ]
+}

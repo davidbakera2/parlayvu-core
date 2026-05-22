@@ -1,0 +1,30 @@
+---
+const navLinks = [
+  { href: "/parlayvu", label: "ParlayVU" },
+  { href: "/outlook-survey", label: "Outlook Survey" },
+  { href: "/#contact", label: "Contact" },
+] as const;
+---
+
+<nav class="border-b border-zinc-800 bg-black/50 backdrop-blur-lg sticky top-0 z-50">
+  <div class="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-6">
+    <a href="/" class="flex items-center gap-3 shrink-0">
+      <div class="w-9 h-9 bg-blue-600 rounded-2xl flex items-center justify-center font-bold text-xl">BS</div>
+      <span class="font-semibold text-xl md:text-2xl tracking-tighter">Baker Strategy</span>
+    </a>
+    <ul class="flex items-center gap-1 sm:gap-2">
+      {
+        navLinks.map(({ href, label }) => (
+          <li>
+            <a
+              href={href}
+              class="text-sm font-medium text-zinc-300 hover:text-blue-400 transition-colors px-2 sm:px-3 py-2 rounded-lg hover:bg-zinc-800/60"
+            >
+              {label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</nav>

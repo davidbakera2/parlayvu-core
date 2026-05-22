@@ -1,0 +1,132 @@
+---
+import siteContact from "../../site.contact.json";
+
+const successMessage =
+  siteContact.successMessage ??
+  "Someone from Baker Strategy will get back to you soon at the email you provided.";
+---
+
+<div id="contact-form-root" data-success-message={successMessage}>
+  <form id="contact-form" class="space-y-5 text-left" novalidate>
+    <input type="text" name="website" class="hidden" tabindex="-1" autocomplete="off" aria-hidden="true" />
+
+    <div id="contact-form-error" class="hidden rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200" role="alert" aria-live="polite"></div>
+
+    <div class="grid sm:grid-cols-2 gap-5">
+      <label class="block">
+        <span class="text-sm font-medium text-zinc-300">Name</span>
+        <input
+          type="text"
+          name="name"
+          required
+          maxlength="120"
+          autocomplete="name"
+          class="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60"
+          placeholder="Your name"
+        />
+      </label>
+      <label class="block">
+        <span class="text-sm font-medium text-zinc-300">Email</span>
+        <input
+          type="email"
+          name="email"
+          required
+          maxlength="254"
+          autocomplete="email"
+          class="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60"
+          placeholder="you@company.com"
+        />
+      </label>
+    </div>
+    <label class="block">
+      <span class="text-sm font-medium text-zinc-300">Message</span>
+      <textarea
+        name="message"
+        required
+        maxlength="8000"
+        rows="5"
+        class="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white placeholder:text-zinc-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[120px] disabled:opacity-60"
+        placeholder="How can we help?"></textarea>
+    </label>
+    <button
+      type="submit"
+      id="contact-form-submit"
+      class="w-full sm:w-auto inline-flex h-12 items-center justify-center rounded-2xl bg-white text-black font-semibold px-10 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      Send message
+    </button>
+  </form>
+</div>
+
+<script>
+  const root = document.getElementById("contact-form-root");
+  const form = document.getElementById("contact-form") as HTMLFormElement | null;
+  const submitBtn = document.getElementById("contact-form-submit") as HTMLButtonElement | null;
+  const errorEl = document.getElementById("contact-form-error");
+  if (!root || !form || !submitBtn || !errorEl) throw new Error("Contact form markup missing");
+
+  const successMessage = root.dataset.successMessage ?? "Thank you. We will be in touch soon.";
+
+  if (new URLSearchParams(window.location.search).get("contact") === "sent") {
+    showSuccess();
+    window.history.replaceState({}, "", "/#contact");
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    errorEl.classList.add("hidden");
+    errorEl.textContent = "";
+
+    // Capture FormData before disabling fields (disabled inputs are omitted from FormData).
+    const formData = new FormData(form);
+    const name = String(formData.get("name") ?? "").trim();
+    const email = String(formData.get("email") ?? "").trim();
+    const message = String(formData.get("message") ?? "").trim();
+    if (!name || !email || !message) {
+      errorEl.textContent = "Name, email, and message are required.";
+      errorEl.classList.remove("hidden");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Sending…";
+    form.querySelectorAll("input, textarea").forEach((el) => {
+      (el as HTMLInputElement).disabled = true;
+    });
+
+    try {
+      const res = await fetch("/api/contact", { method: "POST", body: formData });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; ok?: boolean };
+      if (!res.ok || !data.ok) {
+        throw new Error(
+          data.error ?? "We could not send your message right now. Please try again in a few minutes.",
+        );
+      }
+      showSuccess();
+      window.history.replaceState({}, "", "/#contact");
+    } catch (err) {
+      errorEl.textContent =
+        err instanceof Error
+          ? err.message
+          : "We could not send your message right now. Please try again in a few minutes.";
+      errorEl.classList.remove("hidden");
+      form.querySelectorAll("input, textarea").forEach((el) => {
+        (el as HTMLInputElement).disabled = false;
+      });
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Send message";
+    }
+  });
+
+  function showSuccess() {
+    const panel = document.createElement("div");
+    panel.tabIndex = -1;
+    panel.className =
+      "rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-8 text-center outline-none";
+    panel.setAttribute("role", "status");
+    panel.setAttribute("aria-live", "polite");
+    panel.innerHTML = `<p class="text-lg font-semibold text-emerald-300 mb-2">Thank you for reaching out</p><p class="text-zinc-400 leading-relaxed">${successMessage}</p>`;
+    root.replaceChildren(panel);
+    panel.focus();
+  }
+</script>

@@ -1,0 +1,8 @@
+name = "bakerstrategy-site"
+pages_build_output_dir = "./dist"
+compatibility_date = "2024-06-01"
+
+[vars]
+CONTACT_TO_EMAIL = "david@bakerstrategy.com"
+CONTACT_FROM_EMAIL = "contact@bakerstrategy.com"
+CONTACT_FROM_NAME = "Baker Strategy Website"

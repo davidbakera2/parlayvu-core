@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://parlayvu.ai/schemas/site.contact.json",
+  "title": "ParlayVU client site config",
+  "type": "object",
+  "required": ["client", "domain", "pagesProject", "contact"],
+  "properties": {
+    "client": { "type": "string", "description": "Folder slug under sites/" },
+    "domain": { "type": "string", "description": "Primary hostname, e.g. ramair.co" },
+    "cloudflareAccountId": { "type": "string" },
+    "zoneId": { "type": "string", "description": "Cloudflare zone ID when DNS is on your account" },
+    "pagesProject": { "type": "string", "description": "Cloudflare Pages project name" },
+    "brand": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logoLetters": { "type": "string", "maxLength": 3 },
+        "tagline": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "contact": {
+      "type": "object",
+      "required": ["to", "from", "fromName"],
+      "properties": {
+        "to": { "type": "string", "format": "email" },
+        "from": { "type": "string", "format": "email" },
+        "fromName": { "type": "string" }
+      }
+    },
+    "successMessage": { "type": "string" }
+  }
+}

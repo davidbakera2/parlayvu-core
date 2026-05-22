@@ -1,0 +1,19 @@
+{
+  "client": "CLIENT_SLUG",
+  "domain": "example.com",
+  "cloudflareAccountId": "CLOUDFLARE_ACCOUNT_ID",
+  "zoneId": "ZONE_ID",
+  "pagesProject": "PROJECT_NAME",
+  "brand": {
+    "name": "Client Name",
+    "logoLetters": "CN",
+    "tagline": "Your tagline here",
+    "description": "One sentence about what you do."
+  },
+  "contact": {
+    "to": "hello@example.com",
+    "from": "contact@example.com",
+    "fromName": "Example Website"
+  },
+  "successMessage": "Someone from our team will get back to you soon at the email you provided."
+}

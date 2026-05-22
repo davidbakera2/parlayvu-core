@@ -1,0 +1,19 @@
+{
+  "client": "scaffold-test",
+  "domain": "example.test",
+  "cloudflareAccountId": "e19918245a483360e7f4b4303c02afdf",
+  "zoneId": "ZONE_ID",
+  "pagesProject": "scaffold-test-site",
+  "brand": {
+    "name": "Test Co",
+    "logoLetters": "TC",
+    "tagline": "Welcome",
+    "description": "We help you grow."
+  },
+  "contact": {
+    "to": "hello@example.test",
+    "from": "contact@example.test",
+    "fromName": "Test Co Website"
+  },
+  "successMessage": "Someone from Test Co will get back to you soon at the email you provided."
+}

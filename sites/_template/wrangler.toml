@@ -1,0 +1,8 @@
+name = "PROJECT_NAME"
+pages_build_output_dir = "./dist"
+compatibility_date = "2024-06-01"
+
+[vars]
+CONTACT_TO_EMAIL = "hello@example.com"
+CONTACT_FROM_EMAIL = "contact@example.com"
+CONTACT_FROM_NAME = "Example Website"

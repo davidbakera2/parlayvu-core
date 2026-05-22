@@ -1,0 +1,5 @@
+kpi_name,metric_column,target_value,target_period,notes
+Weekly Impressions,impressions,1000,weekly,Starter target; replace with client-approved benchmark.
+Weekly Engagement Rate,engagement_rate,0.05,weekly,Calculated in Power BI as engagements divided by impressions.
+Weekly Clicks,clicks,50,weekly,Starter target; replace after first connected export.
+Follower Growth,followers,25,monthly,Use ending followers minus beginning followers.
