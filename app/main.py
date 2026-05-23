@@ -8,12 +8,12 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("parlayvu")
 
-from .settings import build_chat_model, get_settings
+from .settings import build_agent_model_map, get_settings
 
 settings = get_settings()
 
@@ -547,14 +547,14 @@ async def _run_nathan_request(
 @app.on_event("startup")
 async def startup_event():
     try:
-        llm = build_chat_model(settings)
-        initialize_registry(llm)
+        model_map = build_agent_model_map(settings)
+        initialize_registry(model_map)
         get_graph()
 
         logger.info(
-            "ParlayVu.ai started successfully | provider=%s model=%s",
-            settings.llm_provider,
-            settings.active_model,
+            "ParlayVu.ai started | xai_key=%s anthropic_key=%s",
+            bool(settings.xai_api_key),
+            bool(settings.anthropic_api_key),
         )
         
     except Exception as e:

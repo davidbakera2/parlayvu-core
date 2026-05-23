@@ -182,18 +182,34 @@ def create_specialist_node(
     return node
 
 
-def initialize_registry(llm: BaseChatModel) -> Dict[str, Callable]:
+def initialize_registry(llm_or_map) -> Dict[str, Callable]:
+    """Initialize the agent registry.
+
+    Accepts either a single BaseChatModel (all agents share it) or a dict
+    mapping agent names to individual models.  The Nathan entry in the map
+    is stored as _bound_llm so graph.py's get_bound_llm() returns the right
+    model for routing.
+    """
     global _registry, _bound_llm
-    if _registry and _bound_llm is llm:
+
+    if isinstance(llm_or_map, dict):
+        model_map = llm_or_map
+        nathan_llm = model_map.get("nathan") or next(iter(model_map.values()))
+    else:
+        nathan_llm = llm_or_map
+        model_map = {"default": llm_or_map}
+
+    if _registry and _bound_llm is nathan_llm:
         return _registry
-    
-    _bound_llm = llm
+
+    _bound_llm = nathan_llm
     _registry = {}
 
-    # Nathan (simple pass-through for now)
     _registry["nathan"] = lambda state: state
 
     for name, prompt in SPECIALIST_PROMPTS.items():
+        agent_llm = model_map.get(name) or model_map.get("default") or nathan_llm
+
         if name == "dylan":
             try:
                 from app.agents.tools.dylan_tools import (
@@ -208,8 +224,8 @@ def initialize_registry(llm: BaseChatModel) -> Dict[str, Callable]:
                 continue
             except Exception as e:
                 logger.warning("Dylan tools load failed: %s", e)
-        
-        _registry[name] = create_specialist_node(name, prompt, llm)
+
+        _registry[name] = create_specialist_node(name, prompt, agent_llm)
 
     logger.info("Registry initialized with %s agents", len(_registry))
     return _registry
