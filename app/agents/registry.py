@@ -24,10 +24,16 @@ SPECIALIST_PROMPTS: Dict[str, str] = {
 
 _registry: Dict[str, Callable] = {}
 _bound_llm: Optional[BaseChatModel] = None
+_model_map: Dict[str, BaseChatModel] = {}
 
 
 def get_bound_llm() -> Optional[BaseChatModel]:
     return _bound_llm
+
+
+def get_agent_llm(name: str) -> Optional[BaseChatModel]:
+    """Return the LLM assigned to a specific agent, falling back to default then bound LLM."""
+    return _model_map.get(name) or _model_map.get("default") or _bound_llm
 
 
 def _payload_from_decision(decision: Any) -> Dict[str, Any]:
@@ -190,7 +196,7 @@ def initialize_registry(llm_or_map) -> Dict[str, Callable]:
     is stored as _bound_llm so graph.py's get_bound_llm() returns the right
     model for routing.
     """
-    global _registry, _bound_llm
+    global _registry, _bound_llm, _model_map
 
     if isinstance(llm_or_map, dict):
         model_map = llm_or_map
@@ -198,6 +204,8 @@ def initialize_registry(llm_or_map) -> Dict[str, Callable]:
     else:
         nathan_llm = llm_or_map
         model_map = {"default": llm_or_map}
+
+    _model_map = model_map
 
     if _registry and _bound_llm is nathan_llm:
         return _registry

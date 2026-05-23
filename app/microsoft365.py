@@ -216,6 +216,128 @@ def build_meeting_notes_docx(
     return buffer.getvalue()
 
 
+def build_strategy_docx(
+    *,
+    meeting_title: str,
+    blake_analysis: dict,
+    nathan_strategy: str,
+    client_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+) -> bytes:
+    """Build a rich strategy .docx from Blake's analysis and Nathan's strategy text."""
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.oxml.ns import qn
+
+    doc = Document()
+    now = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
+
+    # --- Title ---
+    doc.add_heading(f"{meeting_title} — Strategy & Next Steps", 0)
+
+    # --- Metadata ---
+    meta = doc.add_paragraph()
+    meta.add_run(f"Date: {now}\n")
+    if client_id:
+        meta.add_run(f"Client: {client_id}\n")
+    if project_id:
+        meta.add_run(f"Project: {project_id}\n")
+    meta.add_run("Prepared by: Nathan Ellis, ParlayVU.ai")
+
+    doc.add_paragraph()  # spacer
+
+    # --- Meeting Summary ---
+    summary = blake_analysis.get("meeting_summary", "").strip()
+    if summary:
+        doc.add_heading("Meeting Summary", 1)
+        for para in summary.splitlines():
+            if para.strip():
+                doc.add_paragraph(para.strip())
+
+    # --- Key Themes ---
+    themes = blake_analysis.get("key_themes", [])
+    if themes:
+        doc.add_heading("Key Themes", 1)
+        for theme in themes:
+            doc.add_paragraph(str(theme).strip(), style="List Bullet")
+
+    # --- Decisions Made ---
+    decisions = blake_analysis.get("decisions_made", [])
+    if decisions:
+        doc.add_heading("Decisions Made", 1)
+        for d in decisions:
+            doc.add_paragraph(str(d).strip(), style="List Bullet")
+
+    # --- Action Items table ---
+    action_items = blake_analysis.get("action_items", [])
+    if action_items:
+        doc.add_heading("Action Items", 1)
+        table = doc.add_table(rows=1, cols=3)
+        table.style = "Table Grid"
+        hdr_cells = table.rows[0].cells
+        for cell, label in zip(hdr_cells, ["Action Item", "Owner", "Priority"]):
+            cell.text = label
+            run = cell.paragraphs[0].runs[0]
+            run.bold = True
+        for item in action_items:
+            row = table.add_row().cells
+            row[0].text = str(item.get("item", ""))
+            row[1].text = str(item.get("owner", ""))
+            row[2].text = str(item.get("priority", "")).capitalize()
+
+    # --- Open Questions ---
+    questions = blake_analysis.get("open_questions", [])
+    if questions:
+        doc.add_heading("Open Questions", 1)
+        for q in questions:
+            doc.add_paragraph(str(q).strip(), style="List Bullet")
+
+    # --- Strategic Opportunities ---
+    opportunities = blake_analysis.get("strategic_opportunities", [])
+    if opportunities:
+        doc.add_heading("Strategic Opportunities", 1)
+        for o in opportunities:
+            doc.add_paragraph(str(o).strip(), style="List Bullet")
+
+    # --- Nathan's Strategy (parse markdown sections) ---
+    if nathan_strategy:
+        doc.add_heading("Nathan's Strategic Assessment", 1)
+        _render_strategy_markdown(doc, nathan_strategy)
+
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _render_strategy_markdown(doc, text: str) -> None:
+    """Render Nathan's markdown strategy text into Word paragraphs."""
+    pending: list[str] = []
+
+    def flush():
+        for line in pending:
+            if line.strip():
+                doc.add_paragraph(line.strip())
+        pending.clear()
+
+    for line in text.splitlines():
+        if line.startswith("## "):
+            flush()
+            doc.add_heading(line[3:].strip(), 2)
+        elif line.startswith("### "):
+            flush()
+            doc.add_heading(line[4:].strip(), 3)
+        elif line.startswith(("- ", "* ")):
+            flush()
+            doc.add_paragraph(line[2:].strip(), style="List Bullet")
+        elif line and line[0].isdigit() and ". " in line[:5]:
+            flush()
+            doc.add_paragraph(line.split(". ", 1)[1].strip(), style="List Number")
+        else:
+            pending.append(line)
+
+    flush()
+
+
 def _summary_sections(summary: str) -> dict[str, str]:
     sections: dict[str, list[str]] = {}
     current = "summary"

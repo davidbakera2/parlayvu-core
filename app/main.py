@@ -171,6 +171,17 @@ class TeamsApprovalDecisionRequest(BaseModel):
     channel_id: Optional[str] = None
 
 
+class MeetingStrategyRequest(BaseModel):
+    transcript: str
+    meeting_title: Optional[str] = "Meeting"
+    client_id: Optional[str] = "default-client"
+    project_id: Optional[str] = None
+    session_id: Optional[str] = None
+    team_id: Optional[str] = None
+    channel_id: Optional[str] = None
+    folder_path: Optional[str] = None
+
+
 # ========================= IMPORTS =========================
 from .approvals import decide_approval, list_approvals, request_approval, require_approved_approval
 from .agents.registry import initialize_registry
@@ -1364,6 +1375,97 @@ async def dylan_deploy_site_endpoint(request: DylanDeploySiteRequest):
     except Exception as e:
         logger.error(f"Error in /dylan/deploy-site: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/meetings/strategy")
+async def meetings_strategy_endpoint(request: MeetingStrategyRequest):
+    """Process a meeting transcript through Blake + Nathan to produce a strategy .docx."""
+    if not request.transcript.strip():
+        raise HTTPException(status_code=400, detail="Transcript is required")
+
+    project_context = None
+    if request.project_id:
+        try:
+            project_context = get_project_context(request.project_id)
+        except Exception as exc:
+            logger.warning("Could not load project context for strategy: %s", exc)
+
+    from app.agents.workflows.meeting_strategy import run_meeting_strategy
+    result = await run_meeting_strategy(
+        transcript=request.transcript,
+        project_id=request.project_id,
+        client_id=request.client_id,
+        meeting_title=request.meeting_title or "Meeting",
+        project_context=project_context,
+    )
+
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    blake_analysis = result.get("blake_analysis") or {}
+    nathan_strategy = result.get("nathan_strategy") or ""
+
+    from app.microsoft365 import build_strategy_docx
+    docx_bytes = build_strategy_docx(
+        meeting_title=request.meeting_title or "Meeting",
+        client_id=request.client_id,
+        project_id=request.project_id,
+        blake_analysis=blake_analysis,
+        nathan_strategy=nathan_strategy,
+    )
+
+    teams_file = None
+    stem = sanitize_file_stem(f"{request.meeting_title or 'meeting'}-strategy")
+    try:
+        teams_file = await MicrosoftGraphClient().upload_teams_channel_file(
+            filename=f"{stem}.docx",
+            content=docx_bytes,
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            team_id=request.team_id,
+            channel_id=request.channel_id,
+            folder_path=request.folder_path or "03_Deliverables/Strategy Docs",
+        )
+        logger.info("Strategy doc filed in Teams | url=%s", teams_file.get("webUrl"))
+    except Exception as exc:
+        logger.warning("Teams upload skipped: %s", exc)
+
+    memory_output_id = record_generated_output(
+        client_id=request.client_id or "default-client",
+        project_id=request.project_id,
+        agent_name="nathan",
+        output_type="meeting_strategy",
+        title=f"{request.meeting_title} — Strategy",
+        content=nathan_strategy,
+        uri=teams_file.get("webUrl") if teams_file else None,
+        status="published" if teams_file else "generated",
+    )
+    record_agent_event(
+        client_id=request.client_id,
+        project_id=request.project_id,
+        agent_name="nathan",
+        event_type="meeting_strategy_generated",
+        channel="api",
+        summary=f"Strategy doc generated: {request.meeting_title}",
+        payload={
+            "session_id": request.session_id,
+            "themes_count": len(blake_analysis.get("key_themes", [])),
+            "action_items_count": len(blake_analysis.get("action_items", [])),
+            "memory_output_id": memory_output_id,
+            "teams_file": teams_file,
+        },
+    )
+
+    return {
+        "status": "published" if teams_file else "generated",
+        "meeting_title": request.meeting_title,
+        "blake_analysis": blake_analysis,
+        "nathan_strategy": nathan_strategy,
+        "docx": {
+            "filed_in_teams": bool(teams_file),
+            "url": teams_file.get("webUrl") if teams_file else None,
+        },
+        "memory_output_id": memory_output_id,
+    }
 
 
 if __name__ == "__main__":
