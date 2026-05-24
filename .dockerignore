@@ -15,7 +15,11 @@ node_modules/
 dist/
 .wrangler/
 generated_sites/
-client_artifacts/
+# client_artifacts/ is INCLUDED in the image - it's the flat-file fallback
+# source for Nathan's get_project_context tool. See app/tools/project_tools.py
+# and the COPY instruction in Dockerfile. If you ever store sensitive client
+# data here, switch to selective inclusion (e.g. allow ramair/, exclude
+# private/) rather than ignoring the whole tree.
 docs/
 infra/
 tests/
