@@ -43,6 +43,7 @@ import anthropic
 from app.tools.web_tools import fetch_url, web_search
 from app.tools.teams_files_tool import list_teams_files, read_teams_file
 from app.tools.project_tools import get_project_context
+from app.tools.meeting_notes_tool import save_meeting_notes
 
 logger = logging.getLogger("parlayvu.nathan_llm")
 
@@ -167,6 +168,50 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
             "required": ["client_id"],
         },
     },
+    {
+        "name": "save_meeting_notes",
+        "description": (
+            "File a meeting summary to the client's Teams channel as both "
+            "markdown and a Word document. Use this when wrapping up a meeting "
+            "or when a participant says something like 'send the notes', "
+            "'save what we discussed', 'file this', or 'wrap it up'. "
+            "Always WRITE THE SUMMARY YOURSELF and verbally confirm what "
+            "you're about to file before calling this tool, e.g. 'Here's what "
+            "I'm sending: [summary]. Filing now.' Then call the tool. "
+            "Summary should be 2-4 short paragraphs covering: (1) what was "
+            "discussed, (2) key decisions made, (3) action items with the "
+            "responsible specialist."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": (
+                        "Short meeting title used as the filename stem, e.g. "
+                        "'RamAir Weekly Strategy - May 24 2026' or "
+                        "'RamAir Q3 Campaign Kickoff'."
+                    ),
+                },
+                "summary": {
+                    "type": "string",
+                    "description": (
+                        "Meeting summary in plain prose, 2-4 paragraphs. "
+                        "Include what was discussed, key decisions, and "
+                        "action items with the responsible specialist by name."
+                    ),
+                },
+                "client_id": {
+                    "type": "string",
+                    "description": (
+                        "The client ID (e.g. 'ramair'). If you recently "
+                        "called get_project_context, reuse the same client_id."
+                    ),
+                },
+            },
+            "required": ["title", "summary", "client_id"],
+        },
+    },
 ]
 
 # ── System prompt for live meeting conversations ───────────────────────────────
@@ -205,6 +250,7 @@ You have real-time access to:
 2. URL fetching — read any webpage: LinkedIn profiles, company sites, social media, news articles
 3. Microsoft Teams files — browse and read documents shared in this Teams channel
 4. Project context — pull a specific client's brief, deliverables, approvals, and strategy
+5. Save meeting notes — file a written summary to the client's Teams channel as markdown + Word doc. This is your ONE write tool.
 
 USE TOOLS PROACTIVELY:
 - When someone mentions a person, competitor, or company you don't know → fetch their LinkedIn or website
@@ -212,6 +258,7 @@ USE TOOLS PROACTIVELY:
 - When a client is named (e.g. "RamAir", "Acme Corp") → call get_project_context with client_id set to that name lowercased and stripped of spaces (e.g. "ramair", "acmecorp"). Do this FIRST, before answering anything project-specific.
 - When someone references "our project", "the brief", "the timeline", or "what was agreed" → call get_project_context for the current client
 - When a file is mentioned → list or read the Teams files
+- When the meeting is wrapping up, OR when someone says "send the notes", "save what we discussed", "file this", "wrap it up" → draft a 2-4 paragraph summary covering what was discussed + decisions made + action items with the responsible specialist, then SAY the summary out loud so participants can confirm, then call save_meeting_notes. Do NOT call save_meeting_notes silently — always read the summary first.
 - Don't guess when you can look it up — a 2-second search is better than a hallucinated answer
 
 CRITICAL ANTI-HALLUCINATION RULES:
@@ -220,7 +267,7 @@ CRITICAL ANTI-HALLUCINATION RULES:
 3. NEVER deny being an AI if someone sincerely asks.
 4. When uncertain, say: "Let me pull that up for you" — then use a tool — then answer with what you found.
 5. If a tool fails or returns no result, say so honestly rather than making something up.
-6. YOU CANNOT WRITE TO OR MODIFY ANYTHING. Your Teams access is READ-ONLY. You cannot save files, send emails, file meeting notes, schedule meetings, post to social, create approvals, or take any other write action from this conversation. Do not promise to do any of these things yourself. When the client asks for something written, sent, saved, or scheduled, say: "I'll have my team handle that right after the call — Riley will get the notes filed in the RamAir channel, and you'll see it appear there shortly." (Substitute the right specialist name for the action: Riley for publishing/filing, Ava for written drafts, Codey for code changes, Dylan for site changes, etc.) NEVER say "I've saved that" or "I'll send that now" — you are not the one performing the action.
+6. Your write access is LIMITED to ONE action: save_meeting_notes. You can file a meeting summary to the client's Teams channel using that tool, and only that tool. For everything else — sending emails, posting to social, deploying sites, creating approvals, scheduling meetings, modifying code, generating ad creative, anything else — you cannot do it yourself. Route those requests by name to the right specialist: "I'll have Ava draft that email", "I'll have Riley publish that", "I'll have Codey wire up the integration", "I'll have Dylan get the site updated", "I'll have Morgan adjust the ad spend". NEVER say "I've sent that" or "I've scheduled that" or "I've posted that" — those things did not happen. For meeting notes specifically: you ARE the one filing them, so it IS honest to say "Filing those notes now" — then call save_meeting_notes. Just don't claim other writes you can't perform.
 
 STYLE:
 - Warm, confident, executive tone — not robotic, not over-formal
@@ -254,6 +301,12 @@ async def _execute_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
                 tool_input["client_id"],
                 tool_input.get("project_id"),
                 sections=tool_input.get("sections"),
+            )
+        elif tool_name == "save_meeting_notes":
+            result = await save_meeting_notes(
+                title=tool_input["title"],
+                summary=tool_input["summary"],
+                client_id=tool_input["client_id"],
             )
         else:
             result = {"error": f"Unknown tool: {tool_name}"}

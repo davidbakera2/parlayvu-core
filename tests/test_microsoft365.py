@@ -509,10 +509,10 @@ class Microsoft365Tests(unittest.TestCase):
         ]
 
         project_context = {"client": {"id": "ramair", "name": "RamAir International"}}
-        with patch("app.main.MicrosoftGraphClient", return_value=graph_client):
+        with patch("app.services.meeting_notes_service.MicrosoftGraphClient", return_value=graph_client):
             with patch("app.main.get_project_context", return_value=project_context):
-                with patch("app.main.record_generated_output", return_value="output-1") as generated_output:
-                    with patch("app.main.record_agent_event", return_value="event-1") as event:
+                with patch("app.services.meeting_notes_service.record_generated_output", return_value="output-1") as generated_output:
+                    with patch("app.services.meeting_notes_service.record_agent_event", return_value="event-1") as event:
                         client = TestClient(app)
                         response = client.post(
                             "/m365/files/meeting-notes",
@@ -569,9 +569,9 @@ class Microsoft365Tests(unittest.TestCase):
             {"id": "docx-1", "name": "ramair-weekly.docx", "webUrl": "https://sharepoint.example/ramair-weekly.docx"},
         ]
 
-        with patch("app.main.MicrosoftGraphClient", return_value=graph_client):
-            with patch("app.main.record_generated_output", return_value="output-1"):
-                with patch("app.main.record_agent_event", return_value="event-1"):
+        with patch("app.services.meeting_notes_service.MicrosoftGraphClient", return_value=graph_client):
+            with patch("app.services.meeting_notes_service.record_generated_output", return_value="output-1"):
+                with patch("app.services.meeting_notes_service.record_agent_event", return_value="event-1"):
                     client = TestClient(app)
                     response = client.post(
                         "/m365/files/meeting-notes",

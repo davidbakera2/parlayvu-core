@@ -329,129 +329,33 @@ async def _publish_files_meeting_note(
     *,
     channel: str = "api",
 ):
-    title = request.title.strip()
-    summary = request.summary.strip()
-    if not title:
-        raise HTTPException(status_code=400, detail="Meeting note title is required")
-    if not summary:
-        raise HTTPException(status_code=400, detail="Meeting note summary is required")
+    """
+    Thin wrapper around app.services.meeting_notes_service. Translates the
+    HTTP request into kwargs and translates ValueError into 400 so the
+    HTTP contract is unchanged. The real work lives in the service so
+    Nathan's save_meeting_notes tool can reuse the same code path.
+    """
+    from app.services.meeting_notes_service import publish_meeting_notes_to_teams
 
-    markdown = build_meeting_notes_markdown(
-        title=title,
-        summary=summary,
-        client_id=request.client_id,
-        project_id=request.project_id,
-    )
-    stem = sanitize_file_stem(title)
-    graph_client = MicrosoftGraphClient()
-    template_path = graph_client.settings.files_meeting_notes_template_path
-    expected_template_location = f"Teams channel Files root/{template_path.strip('/')}"
-    docx_template = {
-        "status": "template",
-        "path": template_path,
-        "expected_location": expected_template_location,
-        "fallback_reason": None,
-    }
+    client_display = _meeting_note_client_display_name(request)
+    client_full_name = _meeting_note_client_full_name(request, fallback=client_display)
+
     try:
-        template_docx = await graph_client.download_teams_channel_file(
-            file_path=template_path,
+        return await publish_meeting_notes_to_teams(
+            title=request.title,
+            summary=request.summary,
+            client_id=request.client_id or "ramair",
+            project_id=request.project_id,
+            project_name=request.project_name,
+            client_name=client_full_name,
+            source_conversation_id=request.source_conversation_id,
             team_id=request.team_id,
             channel_id=request.channel_id,
+            folder_path=request.folder_path,
+            channel=channel,
         )
-        client_display = _meeting_note_client_display_name(request)
-        docx = render_meeting_notes_template_docx(
-            template_docx,
-            build_meeting_notes_template_placeholders(
-                title=title,
-                summary=summary,
-                client_id=request.client_id,
-                client_name=client_display,
-                client_full_name=_meeting_note_client_full_name(request, fallback=client_display),
-                project_id=request.project_id,
-            ),
-        )
-    except Exception as exc:
-        fallback_reason = _template_fallback_reason(exc)
-        logger.warning(
-            "Using generated meeting notes DOCX fallback; template_path=%s expected_location=%s reason=%s",
-            template_path,
-            expected_template_location,
-            fallback_reason,
-        )
-        docx = build_meeting_notes_docx(
-            title=title,
-            summary=summary,
-            client_id=request.client_id,
-            project_id=request.project_id,
-        )
-        docx_template = {
-            "status": "fallback",
-            "path": template_path,
-            "expected_location": expected_template_location,
-            "fallback_reason": fallback_reason,
-        }
-    markdown_file = await graph_client.upload_teams_channel_file(
-        filename=f"{stem}.md",
-        content=markdown.encode("utf-8"),
-        content_type="text/markdown; charset=utf-8",
-        team_id=request.team_id,
-        channel_id=request.channel_id,
-        folder_path=request.folder_path,
-    )
-    docx_file = await graph_client.upload_teams_channel_file(
-        filename=f"{stem}.docx",
-        content=docx,
-        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        team_id=request.team_id,
-        channel_id=request.channel_id,
-        folder_path=request.folder_path,
-    )
-    files = {"markdown": markdown_file, "docx": docx_file}
-    memory_output_id = record_generated_output(
-        client_id=request.client_id or "ramair",
-        project_id=request.project_id,
-        project_name=request.project_name,
-        agent_name="nathan",
-        output_type="teams_files_meeting_notes",
-        title=title,
-        content=markdown,
-        uri=docx_file.get("webUrl") or markdown_file.get("webUrl"),
-        status="published",
-        metadata={
-            "files": files,
-            "source_of_truth": "ParlayVU project memory",
-            "source_conversation_id": request.source_conversation_id,
-            "team_id": request.team_id,
-            "channel_id": request.channel_id,
-            "folder_path": request.folder_path,
-            "docx_template": docx_template,
-        },
-    )
-    event_id = record_agent_event(
-        client_id=request.client_id,
-        project_id=request.project_id,
-        project_name=request.project_name,
-        agent_name="nathan",
-        event_type="teams_files_meeting_notes_published",
-        channel=channel,
-        summary=f"Published Teams Files meeting notes: {title}",
-        payload={
-            "files": files,
-            "memory_output_id": memory_output_id,
-            "source_conversation_id": request.source_conversation_id,
-            "team_id": request.team_id,
-            "channel_id": request.channel_id,
-            "folder_path": request.folder_path,
-            "docx_template": docx_template,
-        },
-    )
-    return {
-        "status": "published",
-        "files": files,
-        "docx_template": docx_template,
-        "memory_output_id": memory_output_id,
-        "event_id": event_id,
-    }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 async def _run_nathan_request(
