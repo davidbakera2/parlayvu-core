@@ -1264,15 +1264,18 @@ class ChatCompletionRequest(BaseModel):
 
 
 @app.get("/v1/models")
+@app.get("/models")
 async def openai_list_models():
     """
-    OpenAI-compatible models list.
-    Tavus validates this endpoint before calling /v1/chat/completions.
+    OpenAI-compatible models list. Registered at both /v1/models and /models
+    because different custom-LLM clients vary in whether they treat the
+    configured base_url as already including /v1.
     """
     return build_models_response()
 
 
 @app.post("/v1/chat/completions")
+@app.post("/chat/completions")
 async def openai_chat_completions(request: Request, body: ChatCompletionRequest):
     """
     OpenAI-compatible chat completions endpoint powering Nathan in Tavus CVI.

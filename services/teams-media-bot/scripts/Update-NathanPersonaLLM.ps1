@@ -11,7 +11,7 @@
     This gives Nathan:
     - Claude Opus 4.7 as his brain (vs Tavus's default LLM)
     - Web search (Tavily)
-    - URL fetching (Jina — LinkedIn, company sites, social media)
+    - URL fetching (Jina - LinkedIn, company sites, social media)
     - Microsoft Teams file access
     - ParlayVU project context
 
@@ -71,23 +71,21 @@ $ErrorActionPreference = "Stop"
 
 $baseUrl = $ParlayVuApiUrl.TrimEnd("/")
 
-# ── Verify the /v1/models endpoint is reachable ───────────────────────────────
+# -- Verify the /v1/models endpoint is reachable -------------------------------
 if (-not $DryRun) {
     Write-Host "Verifying ParlayVU /v1/models endpoint..." -ForegroundColor Cyan
     try {
         $modelsResp = Invoke-RestMethod -Method Get -Uri "$baseUrl/v1/models" -TimeoutSec 15
-        Write-Host "  OK — models endpoint reachable. Models: $($modelsResp.data.Count)" -ForegroundColor Green
+        Write-Host "  OK - models endpoint reachable. Models: $($modelsResp.data.Count)" -ForegroundColor Green
     } catch {
-        Write-Warning "Could not reach $baseUrl/v1/models — $_"
+        Write-Warning "Could not reach $baseUrl/v1/models - $_"
         Write-Warning "Make sure the API is deployed and the URL is correct before updating the persona."
-        if (-not ($DryRun)) {
-            $confirm = Read-Host "Continue anyway? (y/N)"
-            if ($confirm -ne "y") { exit 1 }
-        }
+        $confirm = Read-Host "Continue anyway? (y/N)"
+        if ($confirm -ne "y") { exit 1 }
     }
 }
 
-# ── Check Nathan's LLM status ─────────────────────────────────────────────────
+# -- Check Nathan's LLM status -------------------------------------------------
 if (-not $DryRun) {
     Write-Host "Checking Nathan LLM status..." -ForegroundColor Cyan
     try {
@@ -95,40 +93,55 @@ if (-not $DryRun) {
         Write-Host "  Status: $($statusResp.status)" -ForegroundColor $(if ($statusResp.status -eq "ready") { "Green" } else { "Yellow" })
         Write-Host "  Tools:"
         $statusResp.tools.PSObject.Properties | ForEach-Object {
-            $icon = if ($_.Value.configured) { "✓" } else { "⚠" }
+            $icon = if ($_.Value.configured) { "[OK]" } else { "[!] " }
             Write-Host "    $icon $($_.Name): $($_.Value.note)" -ForegroundColor $(if ($_.Value.configured) { "Green" } else { "Yellow" })
         }
         if ($statusResp.status -ne "ready") {
             Write-Warning "Nathan LLM is not fully ready. Check ANTHROPIC_API_KEY and TAVILY_API_KEY in Azure."
         }
     } catch {
-        Write-Warning "Could not reach $baseUrl/nathan/llm/status — $_"
+        Write-Warning "Could not reach $baseUrl/nathan/llm/status - $_"
     }
     Write-Host ""
 }
 
-# ── Build the JSON Patch payload ──────────────────────────────────────────────
-$customLlmValue = @{
-    model_name = "nathan-opus"
-    base_url   = $baseUrl
-    api_key    = if ($NathanLlmApiKey) { $NathanLlmApiKey } else { "" }
+# -- Build the JSON Patch payload ----------------------------------------------
+# Tavus persona schema (as of 2025) uses a `layers` object with `llm`,
+# `tts`, and `conversational_flow` children. Custom LLM config lives at
+# /layers/llm with fields `model`, `base_url`, `api_key`. The legacy
+# top-level `custom_llm` field is not part of the current schema.
+#
+# RFC 6902 JSON Patch requires a top-level ARRAY of operations. Windows
+# PowerShell 5.1's ConvertTo-Json unwraps single-element arrays into objects,
+# which Tavus rejects. Build the operation as an object, serialize it, then
+# wrap with square brackets so the wire format is always [{...}].
+
+$llmLayerValue = [ordered]@{
+    model    = "nathan-opus"
+    # Tavus's custom LLM client follows the OpenAI convention: it appends
+    # /chat/completions to the configured base_url. We host our routes under
+    # /v1/, so the base_url must include that prefix or Tavus hits a 404.
+    base_url = "$baseUrl/v1"
+    api_key  = if ($NathanLlmApiKey) { $NathanLlmApiKey } else { "" }
 }
 
-$patch = @(
-    @{
-        op    = "replace"
-        path  = "/custom_llm"
-        value = $customLlmValue
-    }
-)
+$operation = [ordered]@{
+    # "add" is idempotent on object properties: creates if missing, replaces
+    # if present. Required for first-time setup where /layers/llm doesn't exist.
+    op    = "add"
+    path  = "/layers/llm"
+    value = $llmLayerValue
+}
 
-$patchJson = $patch | ConvertTo-Json -Depth 10 -Compress
+$operationJson = $operation | ConvertTo-Json -Depth 10 -Compress
+$patchJson = "[$operationJson]"
 
 Write-Host ""
 Write-Host "=== Tavus Persona Patch ===" -ForegroundColor Cyan
 Write-Host "Persona ID  : $PersonaId"
+Write-Host "path        : /layers/llm"
+Write-Host "model       : nathan-opus"
 Write-Host "base_url    : $baseUrl"
-Write-Host "model_name  : nathan-opus"
 Write-Host "api_key set : $($NathanLlmApiKey -ne '')"
 Write-Host ""
 Write-Host "Patch payload:"
@@ -142,7 +155,7 @@ if ($DryRun) {
     exit 0
 }
 
-# ── Apply the patch ───────────────────────────────────────────────────────────
+# -- Apply the patch -----------------------------------------------------------
 $headers = @{
     "x-api-key"    = $TavusApiKey
     "Content-Type" = "application/json"
@@ -158,7 +171,7 @@ try {
         -Body $patchJson `
         -ContentType "application/json"
 
-    Write-Host "SUCCESS — Persona updated." -ForegroundColor Green
+    Write-Host "SUCCESS - Persona updated." -ForegroundColor Green
     Write-Host "Updated at: $($response.updated_at)"
     Write-Host ""
     Write-Host "Nathan's next Tavus conversation will use:" -ForegroundColor Cyan
@@ -168,7 +181,7 @@ try {
 } catch {
     Write-Error "Patch failed: $_"
     Write-Host ""
-    Write-Host "If the error is 'path not found' or similar, Tavus may not support" -ForegroundColor Yellow
+    Write-Host "If the error mentions path not found, Tavus may not support" -ForegroundColor Yellow
     Write-Host "/custom_llm at the root level. Try the /llm path instead:" -ForegroundColor Yellow
     Write-Host ""
 
