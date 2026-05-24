@@ -33,9 +33,28 @@ _token_cache: dict[str, Any] = {}
 
 
 def _graph_creds() -> tuple[str, str, str]:
-    tenant = os.getenv("TEAMS_TENANT_ID", "") or os.getenv("TEAMS_MEDIA_BOT_TENANT_ID", "")
-    client_id = os.getenv("TEAMS_CLIENT_ID", "") or os.getenv("TEAMS_MEDIA_BOT_APP_ID", "")
-    secret = os.getenv("TEAMS_CLIENT_SECRET", "") or os.getenv("TEAMS_MEDIA_BOT_APP_SECRET", "")
+    # Check all naming conventions used across ParlayVU env vars
+    tenant = (
+        os.getenv("TEAMS_TENANT_ID")
+        or os.getenv("MICROSOFT_TENANT_ID")
+        or os.getenv("M365_TENANT_ID")
+        or os.getenv("TEAMS_MEDIA_BOT_TENANT_ID")
+        or ""
+    )
+    client_id = (
+        os.getenv("TEAMS_CLIENT_ID")
+        or os.getenv("MICROSOFT_CLIENT_ID")
+        or os.getenv("M365_CLIENT_ID")
+        or os.getenv("TEAMS_MEDIA_BOT_APP_ID")
+        or ""
+    )
+    secret = (
+        os.getenv("TEAMS_CLIENT_SECRET")
+        or os.getenv("MICROSOFT_CLIENT_SECRET")
+        or os.getenv("M365_CLIENT_SECRET")
+        or os.getenv("TEAMS_MEDIA_BOT_APP_SECRET")
+        or ""
+    )
     return tenant, client_id, secret
 
 
