@@ -20,6 +20,7 @@ def test_settings(**overrides):
         "openai_model": "gpt-4o-mini",
         "groq_api_key": "",
         "groq_model": "llama-3.3-70b-versatile",
+        "anthropic_api_key": "",
         "allowed_origins": ["http://localhost:4321"],
     }
     values.update(overrides)

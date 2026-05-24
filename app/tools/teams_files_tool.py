@@ -5,94 +5,32 @@ Microsoft Teams file access for Nathan's live meeting tool set.
 Nathan can list and read files shared in any Teams channel he has access to,
 including project documents, briefs, strategy decks, and client materials.
 
-Uses the same Microsoft Graph app registration as the rest of ParlayVU.
-Requires Graph application permissions:
-  - Files.Read.All   (to read files across all teams)
-  - Sites.Read.All   (to read SharePoint sites backing Teams channels)
+This module borrows authentication from `app.microsoft365.MicrosoftGraphClient`,
+which is the single source of truth for Graph credentials. There are no env var
+lookups here — if you need to change which credentials are used, change them in
+`app/microsoft365.py` and the change flows here automatically.
 
-Environment variables (already set in Azure for the parlayvu-api Container App):
-    TEAMS_TENANT_ID       — Azure AD tenant ID
-    TEAMS_CLIENT_ID       — App registration client ID
-    TEAMS_CLIENT_SECRET   — App registration client secret
+Graph permissions required on the Microsoft 365 app registration:
+  - Files.Read.All   (read files across all teams)
+  - Sites.Read.All   (read SharePoint sites backing Teams channels)
 """
 
 import logging
-import os
 from typing import Any
 
 import httpx
 
+from app.microsoft365 import MicrosoftGraphClient
+
 logger = logging.getLogger("parlayvu.tools.teams_files")
 
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
-_LOGIN_BASE = "https://login.microsoftonline.com"
 _MAX_FILE_CHARS = 10_000  # spoken context cap
-
-# Simple in-process token cache — tokens live ~3600 s
-_token_cache: dict[str, Any] = {}
-
-
-def _graph_creds() -> tuple[str, str, str]:
-    # Check all naming conventions used across ParlayVU env vars
-    tenant = (
-        os.getenv("TEAMS_TENANT_ID")
-        or os.getenv("MICROSOFT_TENANT_ID")
-        or os.getenv("M365_TENANT_ID")
-        or os.getenv("TEAMS_MEDIA_BOT_TENANT_ID")
-        or ""
-    )
-    client_id = (
-        os.getenv("TEAMS_CLIENT_ID")
-        or os.getenv("MICROSOFT_CLIENT_ID")
-        or os.getenv("M365_CLIENT_ID")
-        or os.getenv("TEAMS_MEDIA_BOT_APP_ID")
-        or ""
-    )
-    secret = (
-        os.getenv("TEAMS_CLIENT_SECRET")
-        or os.getenv("MICROSOFT_CLIENT_SECRET")
-        or os.getenv("M365_CLIENT_SECRET")
-        or os.getenv("TEAMS_MEDIA_BOT_APP_SECRET")
-        or ""
-    )
-    return tenant, client_id, secret
 
 
 async def _get_graph_token() -> str:
-    """Obtain a Microsoft Graph application token (cached)."""
-    import time
-
-    cached = _token_cache.get("token")
-    expires_at = _token_cache.get("expires_at", 0)
-    if cached and time.time() < expires_at - 60:
-        return cached
-
-    tenant, client_id, secret = _graph_creds()
-    if not all([tenant, client_id, secret]):
-        raise RuntimeError(
-            "Teams Graph credentials not configured. "
-            "Set TEAMS_TENANT_ID, TEAMS_CLIENT_ID, TEAMS_CLIENT_SECRET in Azure."
-        )
-
-    token_url = f"{_LOGIN_BASE}/{tenant}/oauth2/v2.0/token"
-    data = {
-        "client_id": client_id,
-        "client_secret": secret,
-        "grant_type": "client_credentials",
-        "scope": "https://graph.microsoft.com/.default",
-    }
-
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(token_url, data=data)
-        resp.raise_for_status()
-        payload = resp.json()
-
-    token = payload["access_token"]
-    expires_in = payload.get("expires_in", 3600)
-    import time as _time
-    _token_cache["token"] = token
-    _token_cache["expires_at"] = _time.time() + expires_in
-    return token
+    """Borrow auth from the canonical MicrosoftGraphClient. No env vars here."""
+    return await MicrosoftGraphClient().get_access_token()
 
 
 async def list_teams_files(
@@ -118,13 +56,11 @@ async def list_teams_files(
     except RuntimeError as exc:
         return {"error": str(exc), "files": []}
 
-    # Get the channel's SharePoint folder
     url = f"{_GRAPH_BASE}/teams/{team_id}/channels/{channel_id}/filesFolder"
     headers = {"Authorization": f"Bearer {token}"}
 
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
-            # Get the folder info first
             resp = await client.get(url, headers=headers)
             if resp.status_code == 403:
                 return {
@@ -135,7 +71,6 @@ async def list_teams_files(
             resp.raise_for_status()
             folder = resp.json()
 
-            # Get children of the folder
             drive_id = folder.get("parentReference", {}).get("driveId")
             item_id = folder.get("id")
             if not drive_id or not item_id:
@@ -205,7 +140,6 @@ async def read_teams_file(
 
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Build the item URL
     if drive_id:
         item_url = f"{_GRAPH_BASE}/drives/{drive_id}/items/{drive_item_id}"
     else:
@@ -213,7 +147,6 @@ async def read_teams_file(
 
     try:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            # Get item metadata to check file type
             meta_resp = await client.get(
                 item_url,
                 headers=headers,
@@ -227,7 +160,6 @@ async def read_teams_file(
             name = file_name or meta.get("name", "unknown")
             mime = meta.get("file", {}).get("mimeType", "")
 
-            # For Office documents, use Graph's text-conversion endpoint
             is_office = any(
                 t in mime for t in [
                     "officedocument", "wordprocessingml", "presentationml",
@@ -236,23 +168,19 @@ async def read_teams_file(
             ) or name.lower().endswith((".docx", ".pptx", ".xlsx", ".doc", ".ppt", ".xls"))
 
             if is_office:
-                # Export as plain text
                 convert_url = f"{item_url}/content?format=txt"
                 content_resp = await client.get(convert_url, headers=headers)
                 if content_resp.status_code == 200:
                     raw = content_resp.text
                 else:
-                    # Fall back to direct download
                     download_url = meta.get("@microsoft.graph.downloadUrl")
                     if not download_url:
                         return {"error": "Could not get download URL for Office file.", "content": "", "name": name}
                     content_resp = await client.get(download_url)
                     raw = content_resp.text
             else:
-                # Plain text / PDF / other — direct download
                 download_url = meta.get("@microsoft.graph.downloadUrl")
                 if not download_url:
-                    # Try content endpoint
                     content_resp = await client.get(f"{item_url}/content", headers=headers)
                     content_resp.raise_for_status()
                     raw = content_resp.text
