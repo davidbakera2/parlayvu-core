@@ -16,6 +16,7 @@ MapEnvironment("TEAMS_MEDIA_BOT_CALLING_WEBHOOK_PATH", "GraphBot:CallingWebhookP
 MapEnvironment("TEAMS_MEDIA_BOT_GRAPH_BASE_URL", "GraphBot:GraphBaseUrl");
 MapEnvironment("TEAMS_MEDIA_BOT_LOGIN_BASE_URL", "GraphBot:LoginBaseUrl");
 MapEnvironment("TEAMS_MEDIA_BOT_GRAPH_JOIN_ENABLED", "GraphBot:JoinEnabled");
+MapEnvironment("TEAMS_MEDIA_BOT_MEDIA_WORKER_URL", "GraphBot:MediaWorkerUrl");
 MapEnvironment("TAVUS_API_KEY", "AvatarProviders:Tavus:ApiKey");
 MapEnvironment("TAVUS_BASE_URL", "AvatarProviders:Tavus:BaseUrl");
 MapEnvironment("TAVUS_REPLICA_ID", "AvatarProviders:Tavus:ReplicaId");
@@ -36,6 +37,7 @@ builder.Services.Configure<AvatarProviderOptions>(builder.Configuration.GetSecti
 builder.Services.AddHttpClient<ParlayVuClient>();
 builder.Services.AddHttpClient<GraphCommunicationsClient>();
 builder.Services.AddHttpClient<TavusClient>();
+builder.Services.AddHttpClient<MediaWorkerClient>();
 
 var app = builder.Build();
 
@@ -44,6 +46,7 @@ app.MapGet("/health", (
     IOptions<GraphBotOptions> graphBot,
     IOptions<AvatarProviderOptions> avatarProviders) =>
 {
+    var mediaWorkerUrl = graphBot.Value.MediaWorkerUrl;
     return Results.Ok(new
     {
         status = "ok",
@@ -54,6 +57,12 @@ app.MapGet("/health", (
         graphCallingWebhook = graphBot.Value.CallingWebhookUri,
         graphJoinRequestImplemented = true,
         mediaJoinImplemented = false,
+        mediaWorkerConfigured = !string.IsNullOrWhiteSpace(mediaWorkerUrl),
+        mediaWorkerUrl = string.IsNullOrWhiteSpace(mediaWorkerUrl) ? null : mediaWorkerUrl,
+        mediaWorkerNote = string.IsNullOrWhiteSpace(mediaWorkerUrl)
+            ? "Set TEAMS_MEDIA_BOT_MEDIA_WORKER_URL to enable native Teams video (Windows VM required). " +
+              "See services/teams-media-bot-media-worker/docs/media-bridge-architecture.md."
+            : "Media worker configured — POST /meetings/join with attemptMediaJoin=true will delegate to it.",
         notesPath = "teams-native-transcript-or-approved-upload",
         avatarProviders = avatarProviders.Value.ToStatus()
     });
@@ -93,7 +102,10 @@ app.MapPost("/meetings/join", async (
     JoinMeetingRequest request,
     ParlayVuClient parlayVu,
     GraphCommunicationsClient graph,
+    TavusClient tavus,
+    MediaWorkerClient mediaWorker,
     IOptions<GraphBotOptions> graphBot,
+    IOptions<AvatarProviderOptions> avatarProviders,
     CancellationToken cancellationToken) =>
 {
     if (string.IsNullOrWhiteSpace(request.MeetingJoinUrl) && string.IsNullOrWhiteSpace(request.TeamsMeetingId))
@@ -124,19 +136,31 @@ app.MapPost("/meetings/join", async (
         parlayVuRegistration = new { status = "skipped", reason = "registerWithParlayVu=false" };
     }
 
+    // App-hosted media join — start Tavus, then delegate to Windows media worker
+    object mediaJoin = new { status = "not_attempted", reason = "attemptMediaJoin=false" };
+    if (request.AttemptMediaJoin)
+    {
+        mediaJoin = await TryMediaJoinAsync(
+            request, tavus, mediaWorker, avatarProviders.Value, cancellationToken);
+    }
+
     var graphJoin = await TryJoinGraphCallAsync(request, graph, graphBot.Value, cancellationToken);
 
     return Results.Ok(new
     {
-        status = request.AttemptGraphJoin ? "join_request_processed" : "registered_with_parlayvu",
+        status = request.AttemptMediaJoin ? "media_join_requested"
+               : request.AttemptGraphJoin  ? "join_request_processed"
+               :                             "registered_with_parlayvu",
         parlayVuRegistration,
         graphJoin,
-        nextSteps = new[]
+        mediaJoin,
+        nextSteps = request.AttemptMediaJoin ? null : new[]
         {
             "Deploy this service to supported Azure compute with a public HTTPS callback URL.",
             "Configure the Azure Bot Teams calling webhook to POST /teams/calling/notifications.",
             "Grant admin consent for Calls.JoinGroupCall.All and Calls.AccessMedia.All before application-hosted media work.",
-            "Provide scheduled meeting chatInfo and organizer meetingInfo before setting attemptGraphJoin=true."
+            "Provision the Windows media worker VM: see services/teams-media-bot-media-worker/docs/media-bridge-architecture.md.",
+            "Set TEAMS_MEDIA_BOT_MEDIA_WORKER_URL, then retry with attemptMediaJoin=true."
         }
     });
 });
@@ -240,6 +264,33 @@ app.MapDelete("/avatar/tavus/{conversationId}", async (
     }
 });
 
+// ── Media worker status proxy ────────────────────────────────────────────────
+
+app.MapGet("/media-worker/health", async (
+    MediaWorkerClient mediaWorker,
+    CancellationToken cancellationToken) =>
+{
+    if (!mediaWorker.IsConfigured)
+    {
+        return Results.Ok(new
+        {
+            status = "not_configured",
+            note = "Set TEAMS_MEDIA_BOT_MEDIA_WORKER_URL to point to the Windows media worker VM. " +
+                   "See services/teams-media-bot-media-worker/docs/media-bridge-architecture.md."
+        });
+    }
+
+    try
+    {
+        var health = await mediaWorker.GetHealthAsync(cancellationToken);
+        return Results.Ok(health);
+    }
+    catch (HttpRequestException ex)
+    {
+        return Results.Ok(new { status = "unreachable", error = ex.Message });
+    }
+});
+
 // ── Meeting question/notes endpoints ────────────────────────────────────────
 
 app.MapPost("/meetings/{sessionId}/question", async (
@@ -273,6 +324,93 @@ app.MapPost("/meetings/{sessionId}/notes", async (
 });
 
 app.Run();
+
+async Task<object> TryMediaJoinAsync(
+    JoinMeetingRequest request,
+    TavusClient tavus,
+    MediaWorkerClient mediaWorker,
+    AvatarProviderOptions avatarProviders,
+    CancellationToken cancellationToken)
+{
+    if (!mediaWorker.IsConfigured)
+    {
+        return new
+        {
+            status = "blocked_no_media_worker",
+            reason = "TEAMS_MEDIA_BOT_MEDIA_WORKER_URL is not set. " +
+                     "Provision the Windows VM and deploy the media worker first. " +
+                     "See services/teams-media-bot-media-worker/docs/media-bridge-architecture.md."
+        };
+    }
+
+    if (string.IsNullOrWhiteSpace(request.ChatThreadId) || string.IsNullOrWhiteSpace(request.OrganizerUserId))
+    {
+        return new
+        {
+            status = "missing_required_fields",
+            missing = new[] { "chatThreadId", "organizerUserId" },
+            reason = "Both chatThreadId and organizerUserId are required for app-hosted media join."
+        };
+    }
+
+    // Step 1: Start a Tavus conversation to get Nathan's Daily room URL
+    var tavusConfig = avatarProviders.Tavus;
+    if (!tavusConfig.Configured)
+    {
+        return new
+        {
+            status = "tavus_not_configured",
+            reason = "Tavus is not configured. Set TAVUS_API_KEY, TAVUS_REPLICA_ID_NATHAN, TAVUS_PERSONA_ID."
+        };
+    }
+
+    TavusConversationSession tavusSession;
+    try
+    {
+        tavusSession = await tavus.StartConversationAsync(
+            replicaId: tavusConfig.ReplicaId!,
+            personaId: tavusConfig.PersonaId!,
+            conversationName: $"Nathan Ellis — {request.MeetingTitle} — {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC",
+            context: null,
+            cancellationToken: cancellationToken);
+    }
+    catch (HttpRequestException ex)
+    {
+        return new { status = "tavus_start_failed", error = ex.Message };
+    }
+
+    // Step 2: Delegate the app-hosted media join to the Windows media worker
+    try
+    {
+        var workerResponse = await mediaWorker.RequestMediaJoinAsync(
+            joinRequest: request,
+            dailyRoomUrl: tavusSession.ConversationUrl,
+            dailyMeetingToken: null,
+            cancellationToken: cancellationToken);
+
+        return new
+        {
+            status = "media_join_delegated",
+            tavusConversationId = tavusSession.ConversationId,
+            tavusConversationUrl = tavusSession.ConversationUrl,
+            mediaWorkerResponse = workerResponse,
+            note = "The media worker is connecting to the Daily room and will inject " +
+                   "Nathan's audio+video into Teams once the Graph call is established."
+        };
+    }
+    catch (HttpRequestException ex)
+    {
+        return new
+        {
+            status = "media_worker_failed",
+            error = ex.Message,
+            tavusConversationId = tavusSession.ConversationId,
+            tavusConversationUrl = tavusSession.ConversationUrl,
+            note = "Tavus conversation started but media worker join failed. " +
+                   $"You can still screen-share {tavusSession.ConversationUrl} as a fallback."
+        };
+    }
+}
 
 async Task<object> TryJoinGraphCallAsync(
     JoinMeetingRequest request,
@@ -498,6 +636,14 @@ internal sealed record GraphBotOptions
     public string GraphBaseUrl { get; init; } = "https://graph.microsoft.com";
     public string LoginBaseUrl { get; init; } = "https://login.microsoftonline.com";
     public bool JoinEnabled { get; init; }
+
+    /// <summary>
+    /// URL of the Windows media worker (parlayvu-teams-media-bot-media-worker).
+    /// When set, POST /meetings/join with attemptMediaJoin=true delegates the
+    /// app-hosted media join to this URL instead of attempting it here.
+    /// Set via TEAMS_MEDIA_BOT_MEDIA_WORKER_URL environment variable.
+    /// </summary>
+    public string? MediaWorkerUrl { get; init; }
 
     public string? CallingWebhookUri =>
         string.IsNullOrWhiteSpace(CallbackBaseUrl)
@@ -735,6 +881,10 @@ internal sealed record JoinMeetingRequest(
     string? OperatorNotes = null,
     bool RegisterWithParlayVu = true,
     bool AttemptGraphJoin = false,
+    // When true, starts a Tavus conversation and delegates an app-hosted media join
+    // to the Windows media worker at TEAMS_MEDIA_BOT_MEDIA_WORKER_URL.
+    // Requires: media worker configured, Calls.AccessMedia.All, chatThreadId, organizerUserId.
+    bool AttemptMediaJoin = false,
     string? CallbackUri = null,
     string? ChatThreadId = null,
     string? ChatMessageId = "0",
@@ -875,5 +1025,72 @@ internal sealed class TavusClient(HttpClient httpClient, IOptions<AvatarProvider
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             throw new HttpRequestException($"Tavus end conversation returned {(int)response.StatusCode}: {body}");
         }
+    }
+}
+
+// ── MediaWorkerClient ─────────────────────────────────────────────────────────
+// Delegates app-hosted media join requests to the Windows media worker VM.
+// The management service (this Linux Container App) handles signaling and Tavus;
+// the Windows media worker handles the Graph Communications Media SDK and the
+// Daily→Teams audio/video bridge.
+
+internal sealed class MediaWorkerClient(HttpClient httpClient, IOptions<GraphBotOptions> options)
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly string? _mediaWorkerUrl = options.Value.MediaWorkerUrl;
+
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(_mediaWorkerUrl);
+
+    public async Task<JsonElement> RequestMediaJoinAsync(
+        JoinMeetingRequest joinRequest,
+        string dailyRoomUrl,
+        string? dailyMeetingToken,
+        CancellationToken cancellationToken)
+    {
+        if (!IsConfigured)
+            throw new InvalidOperationException(
+                "TEAMS_MEDIA_BOT_MEDIA_WORKER_URL is not set. " +
+                "Provision the Windows media worker VM and set that variable. " +
+                "See services/teams-media-bot-media-worker/docs/media-bridge-architecture.md.");
+
+        var payload = new
+        {
+            chatThreadId = joinRequest.ChatThreadId,
+            chatMessageId = joinRequest.ChatMessageId ?? "0",
+            organizerUserId = joinRequest.OrganizerUserId,
+            organizerDisplayName = joinRequest.OrganizerDisplayName,
+            organizerTenantId = joinRequest.OrganizerTenantId,
+            tenantId = joinRequest.TenantId,
+            callbackUri = joinRequest.CallbackUri,
+            dailyRoomUrl,
+            dailyMeetingToken,
+            allowConversationWithoutHost = joinRequest.AllowConversationWithoutHost
+        };
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{_mediaWorkerUrl!.TrimEnd('/')}/media/join")
+        {
+            Content = JsonContent.Create(payload, options: JsonOptions)
+        };
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"Media worker returned {(int)response.StatusCode}: {body}");
+
+        return JsonSerializer.Deserialize<JsonElement>(body, JsonOptions);
+    }
+
+    public async Task<JsonElement> GetHealthAsync(CancellationToken cancellationToken)
+    {
+        if (!IsConfigured)
+            throw new InvalidOperationException("TEAMS_MEDIA_BOT_MEDIA_WORKER_URL is not set.");
+
+        using var response = await httpClient.GetAsync(
+            $"{_mediaWorkerUrl!.TrimEnd('/')}/health", cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize<JsonElement>(body, JsonOptions);
     }
 }

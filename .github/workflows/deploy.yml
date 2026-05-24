@@ -78,3 +78,37 @@ jobs:
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --image ${{ env.REGISTRY }}/parlayvu-teams-media-bot:${{ github.sha }} \
           2>/dev/null || echo "Container App not yet created — run infra setup first"
+
+  build-teams-media-worker:
+    # Windows Server 2022 runner — required because the Graph Communications
+    # Media SDK ships Windows-native DLLs that cannot be restored or built on Linux.
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore NuGet packages
+        working-directory: services/teams-media-bot-media-worker
+        run: dotnet restore src/ParlayVu.TeamsMediaWorker/ParlayVu.TeamsMediaWorker.csproj
+
+      - name: Build media worker
+        working-directory: services/teams-media-bot-media-worker
+        run: |
+          dotnet publish src/ParlayVu.TeamsMediaWorker/ParlayVu.TeamsMediaWorker.csproj `
+            -c Release -r win-x64 --no-restore -o publish
+
+      # Note: Docker Windows containers cannot be built on GitHub-hosted runners
+      # because they require Docker Desktop in Windows container mode (not available
+      # in GitHub Actions). The publish artifact is uploaded below.
+      # To deploy to the Windows VM, download the artifact and xcopy to the VM.
+      - name: Upload media worker publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: parlayvu-teams-media-worker-${{ github.sha }}
+          path: services/teams-media-bot-media-worker/publish/
+          retention-days: 14

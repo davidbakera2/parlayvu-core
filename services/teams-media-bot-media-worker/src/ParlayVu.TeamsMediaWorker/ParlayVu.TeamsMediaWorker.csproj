@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!--
+      net8.0-windows: The Microsoft Graph Communications Media SDK ships Windows-native DLLs
+      for real-time audio/video processing (Microsoft.Skype.Bots.Media). This TFM enforces
+      that the project can only build and run on Windows Server 2019 or later.
+      Do NOT change this to a non-Windows TFM — the native media DLLs will not load.
+    -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AssemblyName>ParlayVu.TeamsMediaWorker</AssemblyName>
+    <RootNamespace>ParlayVu.TeamsMediaWorker</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Graph Communications SDK — Windows-only.
+      Verify latest versions at https://www.nuget.org/packages/Microsoft.Graph.Communications.Calls.Media
+      These packages pull in Microsoft.Skype.Bots.Media native DLLs automatically.
+    -->
+    <PackageReference Include="Microsoft.Graph.Communications.Common" Version="1.2.0.9" />
+    <PackageReference Include="Microsoft.Graph.Communications.Core" Version="1.2.0.9" />
+    <PackageReference Include="Microsoft.Graph.Communications.Calls" Version="1.2.0.9" />
+    <PackageReference Include="Microsoft.Graph.Communications.Calls.Media" Version="1.2.0.9" />
+
+    <!-- HTTP and JSON -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

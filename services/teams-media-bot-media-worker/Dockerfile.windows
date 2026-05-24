@@ -1,0 +1,50 @@
+# ── ParlayVU Teams Media Worker — Windows Container ───────────────────────────
+#
+# This Dockerfile produces a Windows Server Core container image.
+# The Microsoft Graph Communications Media SDK requires Windows.
+#
+# Build target:
+#   Azure Container Instances (Windows) or Azure VM with Windows containers.
+#   Do NOT deploy to Azure Container Apps or Linux-based ACI — the native
+#   media DLLs will fail to load.
+#
+# Media port requirements (must be open on the host/NIC):
+#   TCP 443    — HTTPS (TLS termination, Graph callbacks)
+#   UDP 49152–65535 — Graph media transport (must be open inbound + outbound)
+#
+# Build:
+#   docker build -f Dockerfile.windows -t parlayvu-teams-media-worker .
+#
+# Run:
+#   docker run -p 443:8080 \
+#     -e TEAMS_MEDIA_BOT_TENANT_ID=... \
+#     -e TEAMS_MEDIA_BOT_APP_ID=... \
+#     -e TEAMS_MEDIA_BOT_APP_SECRET=... \
+#     -e TEAMS_MEDIA_BOT_CALLBACK_BASE_URL=https://<public-host> \
+#     -e TAVUS_API_KEY=... \
+#     parlayvu-teams-media-worker
+
+# ── Build stage ───────────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:8.0-windowsservercore-ltsc2022 AS build
+WORKDIR /src
+
+COPY src/ParlayVu.TeamsMediaWorker/ParlayVu.TeamsMediaWorker.csproj ParlayVu.TeamsMediaWorker/
+RUN dotnet restore ParlayVu.TeamsMediaWorker/ParlayVu.TeamsMediaWorker.csproj
+
+COPY src/ParlayVu.TeamsMediaWorker/ ParlayVu.TeamsMediaWorker/
+RUN dotnet publish ParlayVu.TeamsMediaWorker/ParlayVu.TeamsMediaWorker.csproj ^
+    -c Release ^
+    -r win-x64 ^
+    --no-restore ^
+    -o /app/publish
+
+# ── Runtime stage ─────────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-windowsservercore-ltsc2022 AS final
+WORKDIR /app
+
+EXPOSE 8080
+ENV ASPNETCORE_URLS=http://+:8080
+
+COPY --from=build /app/publish .
+
+ENTRYPOINT ["dotnet", "ParlayVu.TeamsMediaWorker.dll"]
