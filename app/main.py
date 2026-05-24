@@ -1605,9 +1605,9 @@ async def nathan_llm_status():
     tavily_configured = bool(os.getenv("TAVILY_API_KEY"))
     anthropic_configured = bool(os.getenv("ANTHROPIC_API_KEY"))
     teams_configured = bool(
-        (os.getenv("TEAMS_TENANT_ID") or os.getenv("TEAMS_MEDIA_BOT_TENANT_ID")) and
-        (os.getenv("TEAMS_CLIENT_ID") or os.getenv("TEAMS_MEDIA_BOT_APP_ID")) and
-        (os.getenv("TEAMS_CLIENT_SECRET") or os.getenv("TEAMS_MEDIA_BOT_APP_SECRET"))
+        (os.getenv("TEAMS_TENANT_ID") or os.getenv("MICROSOFT_TENANT_ID") or os.getenv("M365_TENANT_ID") or os.getenv("TEAMS_MEDIA_BOT_TENANT_ID")) and
+        (os.getenv("TEAMS_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID") or os.getenv("M365_CLIENT_ID") or os.getenv("TEAMS_MEDIA_BOT_APP_ID")) and
+        (os.getenv("TEAMS_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET") or os.getenv("M365_CLIENT_SECRET") or os.getenv("TEAMS_MEDIA_BOT_APP_SECRET"))
     )
     auth_required = bool(os.getenv("NATHAN_LLM_API_KEY"))
 
