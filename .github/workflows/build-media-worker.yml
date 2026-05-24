@@ -1,0 +1,42 @@
+name: Build Teams Media Worker (Windows)
+
+# Manual-only. Builds the Windows-native .NET media worker that hosts the
+# Graph Communications Media SDK. Not auto-deployed — produces a publish
+# artifact that gets xcopy'd to the Windows VM out of band.
+#
+# Run from the Actions tab when you've made changes under
+# services/teams-media-bot-media-worker/** and need a fresh artifact.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore NuGet packages
+        working-directory: services/teams-media-bot-media-worker
+        run: dotnet restore src/ParlayVu.TeamsMediaWorker/ParlayVu.TeamsMediaWorker.csproj
+
+      - name: Build media worker
+        working-directory: services/teams-media-bot-media-worker
+        run: |
+          dotnet publish src/ParlayVu.TeamsMediaWorker/ParlayVu.TeamsMediaWorker.csproj `
+            -c Release -r win-x64 --no-restore -o publish
+
+      # Windows Docker containers can't be built on GitHub-hosted runners.
+      # The publish artifact below is what you xcopy to the Windows VM.
+      - name: Upload publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: parlayvu-teams-media-worker-${{ github.sha }}
+          path: services/teams-media-bot-media-worker/publish/
+          retention-days: 14

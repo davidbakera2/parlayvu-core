@@ -1,0 +1,54 @@
+name: Deploy Teams Media Bot
+
+# Manual-only. The Teams Media Bot is a future service (Bot Framework wrapper
+# for native Teams meeting join). Not deployed today. Run from the Actions
+# tab when you actually need to ship a build.
+#
+# When this workflow goes live regularly, change `on:` to include push paths
+# under services/teams-media-bot/**.
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: parlayvucore.azurecr.io
+  RESOURCE_GROUP: rg-parlayvu-demo
+  CONTAINER_APP: parlayvu-teams-media-bot
+  IMAGE_NAME: parlayvu-teams-media-bot
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: az acr login --name parlayvucore
+
+      - name: Build and push Teams Media Bot image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/teams-media-bot
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Deploy to Container App (skips if app not yet provisioned)
+        run: |
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          || echo "Container App ${{ env.CONTAINER_APP }} not provisioned yet — image is in ACR and ready"

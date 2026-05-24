@@ -1,0 +1,58 @@
+name: Deploy API
+
+# parlayvu-api is the only service that ships on every push to main.
+# The Teams Media Bot and Teams Media Worker have their own dispatch-only
+# workflows (deploy-media-bot.yml, deploy-media-worker.yml) so failures or
+# slow builds there can never block the API.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "requirements.txt"
+      - "Dockerfile"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: parlayvucore.azurecr.io
+  RESOURCE_GROUP: rg-parlayvu-demo
+  CONTAINER_APP: parlayvu-api
+  IMAGE_NAME: parlayvu-api
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure (OIDC, federated credential)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: az acr login --name parlayvucore
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Deploy to Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
