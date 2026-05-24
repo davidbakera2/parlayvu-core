@@ -38,7 +38,7 @@
         { "name": "MICROSOFT_CLIENT_SECRET", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:/parlayvu/prod/MICROSOFT_CLIENT_SECRET" },
         { "name": "TEAMS_APP_ID", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:/parlayvu/prod/TEAMS_APP_ID" },
         { "name": "TEAMS_APP_PASSWORD", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:/parlayvu/prod/TEAMS_APP_PASSWORD" },
-        { "name": "HEYGEN_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:/parlayvu/prod/HEYGEN_API_KEY" }
+        { "name": "TAVUS_API_KEY", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:/parlayvu/prod/TAVUS_API_KEY" }
       ],
       "healthCheck": {
         "command": ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/health || exit 1"],

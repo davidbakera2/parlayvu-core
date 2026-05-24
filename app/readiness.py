@@ -1,7 +1,7 @@
 import os
 from typing import Any
 
-from app.heygen import heygen_status
+from app.avatar import tavus_status
 from app.microsoft365 import mailbox_status
 from app.project_memory import project_memory_enabled
 from app.settings import Settings, get_settings
@@ -53,7 +53,7 @@ def readiness_report(settings: Settings | None = None) -> dict[str, Any]:
         "llm": llm_readiness(settings),
         "database": database_readiness(),
         "m365": mailbox_status(),
-        "heygen": heygen_status(),
+        "avatar": tavus_status(),
         "teams": teams_status(),
         "approvals": approval_readiness(),
     }

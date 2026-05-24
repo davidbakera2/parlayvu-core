@@ -125,18 +125,17 @@ def build_demo_steps(base_url: str = DEFAULT_BASE_URL) -> list[dict[str, str]]:
             ),
         },
         {
-            "title": "Ask the LiveAvatar a Project Question",
-            "purpose": "Show a HeyGen-bound answer grounded in project memory with approval safeguards.",
+            "title": "Ask Nathan a Project Question (custom LLM endpoint)",
+            "purpose": "Show Claude Opus 4.7 with project context + live tools (web, URL fetch, Teams files).",
             "command": powershell_post(
-                f"{base_url}/heygen/live-question",
+                f"{base_url}/v1/chat/completions",
                 dedent(
                     f"""\
                     {{
-                      "agent_name": "nathan",
-                      "project_id": "{RAMAIR_PROJECT_ID}",
-                      "question": "What can we safely say about the RamAir campaign status?",
-                      "session_id": "demo-heygen-session",
-                      "meeting_id": "demo-teams-meeting"
+                      "model": "nathan-opus",
+                      "messages": [
+                        {{"role": "user", "content": "What can we safely say about the RamAir campaign status?"}}
+                      ]
                     }}
                     """
                 ).strip(),

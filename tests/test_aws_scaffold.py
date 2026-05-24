@@ -20,7 +20,7 @@ class AwsScaffoldTests(unittest.TestCase):
         self.assertIn("DATABASE_URL", secret_names)
         self.assertIn("XAI_API_KEY", secret_names)
         self.assertIn("MICROSOFT_CLIENT_SECRET", secret_names)
-        self.assertIn("HEYGEN_API_KEY", secret_names)
+        self.assertIn("TAVUS_API_KEY", secret_names)
 
     def test_aws_checklist_includes_core_deployment_steps(self):
         titles = [step["title"] for step in build_aws_steps()]

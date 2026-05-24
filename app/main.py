@@ -92,49 +92,6 @@ class FilesMeetingNoteRequest(BaseModel):
     folder_path: Optional[str] = None
 
 
-class HeyGenLiveQuestionRequest(BaseModel):
-    agent_name: str = "nathan"
-    project_id: str
-    question: str
-    session_id: Optional[str] = None
-    meeting_id: Optional[str] = None
-
-
-class HeyGenLiveMeetingStartRequest(BaseModel):
-    agent_name: str = "nathan"
-    client_id: str = "ramair"
-    project_id: str = "ramair-straight-from-the-hart"
-    meeting_title: str = "RamAir Teams call"
-    expected_attendees: list[str] = Field(default_factory=list)
-    heygen_session_id: Optional[str] = None
-    teams_meeting_id: Optional[str] = None
-    teams_meeting_link: Optional[str] = None
-    operator_notes: Optional[str] = None
-
-
-class HeyGenLiveMeetingQuestionRequest(BaseModel):
-    agent_name: str = "nathan"
-    client_id: str = "ramair"
-    project_id: str = "ramair-straight-from-the-hart"
-    question: str
-    speaker_name: Optional[str] = None
-    provider_event_id: Optional[str] = None
-    meeting_id: Optional[str] = None
-
-
-class HeyGenLiveMeetingNotesRequest(BaseModel):
-    title: Optional[str] = None
-    summary: Optional[str] = None
-    transcript: Optional[str] = None
-    client_id: str = "ramair"
-    client_name: Optional[str] = "RamAir"
-    project_id: str = "ramair-straight-from-the-hart"
-    project_name: Optional[str] = None
-    team_id: Optional[str] = None
-    channel_id: Optional[str] = None
-    folder_path: Optional[str] = None
-
-
 class TeamsMessageRequest(BaseModel):
     text: str
     from_user: Optional[str] = None
@@ -189,13 +146,6 @@ from .approvals import decide_approval, list_approvals, request_approval, requir
 from .agents.registry import initialize_registry
 from .agents.tools.dylan_tools import deploy_to_cloudflare, generate_astro_site
 from .graph import get_graph, ParlayVuState
-from .heygen import (
-    RAMAIR_LIVE_MEETING_NOTES_FOLDER,
-    avatar_for_agent,
-    build_live_meeting_session,
-    build_live_project_answer,
-    heygen_status,
-)
 from .readiness import readiness_report
 from .teams import (
     approvals_to_teams_cards,
@@ -758,195 +708,6 @@ async def m365_files_meeting_note_endpoint(request: FilesMeetingNoteRequest):
     except Exception as e:
         logger.error(f"Error in /m365/files/meeting-notes: {e}")
         raise HTTPException(status_code=502, detail=str(e))
-
-
-@app.get("/heygen/status")
-async def heygen_status_endpoint():
-    return heygen_status()
-
-
-def _load_live_project_context(project_id: str) -> dict:
-    try:
-        project_context = get_project_context(project_id)
-    except Exception as e:
-        raise _memory_error(e)
-    if project_context is None:
-        raise HTTPException(status_code=404, detail=f"Project not found: {project_id}")
-    return project_context
-
-
-def _live_avatar_provider_response(answer: str) -> dict:
-    return {
-        "spoken_text": answer,
-        "text": answer,
-        "format": "plain_text",
-    }
-
-
-def _answer_live_avatar_question(
-    *,
-    agent_name: str,
-    project_id: str,
-    question: str,
-    session_id: Optional[str],
-    meeting_id: Optional[str] = None,
-    speaker_name: Optional[str] = None,
-    provider_event_id: Optional[str] = None,
-):
-    if not question.strip():
-        raise HTTPException(status_code=400, detail="LiveAvatar question is required")
-
-    project_context = _load_live_project_context(project_id)
-    try:
-        avatar_id = avatar_for_agent(agent_name)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    response = build_live_project_answer(
-        agent_name=agent_name,
-        question=question.strip(),
-        project_context=project_context,
-    )
-    event_id = record_agent_event(
-        client_id=project_context.get("client_id"),
-        project_id=project_id,
-        project_name=project_context.get("name"),
-        agent_name=agent_name,
-        event_type="live_avatar_question",
-        channel="heygen",
-        summary=question.strip(),
-        payload={
-            "session_id": session_id,
-            "meeting_id": meeting_id,
-            "speaker_name": speaker_name,
-            "provider_event_id": provider_event_id,
-            "avatar_id": avatar_id,
-            "needs_human_review": response["needs_human_review"],
-            "grounding": response["grounding"],
-        },
-    )
-    return {
-        "agent_name": agent_name,
-        "avatar_id": avatar_id,
-        "project_id": project_id,
-        "session_id": session_id,
-        "event_id": event_id,
-        "provider_response": _live_avatar_provider_response(response["answer"]),
-        **response,
-    }
-
-
-@app.post("/heygen/live-question")
-async def heygen_live_question_endpoint(request: HeyGenLiveQuestionRequest):
-    return _answer_live_avatar_question(
-        agent_name=request.agent_name,
-        project_id=request.project_id,
-        question=request.question,
-        session_id=request.session_id,
-        meeting_id=request.meeting_id,
-    )
-
-
-@app.post("/heygen/live-meetings/start")
-async def heygen_live_meeting_start_endpoint(request: HeyGenLiveMeetingStartRequest):
-    project_context = _load_live_project_context(request.project_id)
-    try:
-        avatar_id = avatar_for_agent(request.agent_name)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    session = build_live_meeting_session(
-        agent_name=request.agent_name,
-        avatar_id=avatar_id,
-        project_context=project_context,
-        meeting_title=request.meeting_title,
-        client_id=request.client_id,
-        heygen_session_id=request.heygen_session_id,
-        teams_meeting_id=request.teams_meeting_id,
-        teams_meeting_link=request.teams_meeting_link,
-        expected_attendees=request.expected_attendees,
-        operator_notes=request.operator_notes,
-    )
-    event_id = record_agent_event(
-        client_id=session["client_id"],
-        project_id=session["project_id"],
-        project_name=session["project_name"],
-        agent_name=session["agent_name"],
-        event_type="live_avatar_meeting_started",
-        channel="heygen",
-        summary=session["meeting_title"],
-        payload={"session": session},
-    )
-    return {
-        "status": "started",
-        "session": session,
-        "event_id": event_id,
-        "operator_next_steps": [
-            "Open the HeyGen LiveAvatar controller for Nathan.",
-            "Join the Teams meeting as the operator and share Nathan's LiveAvatar window if needed.",
-            f"Send live questions to /heygen/live-meetings/{session['session_id']}/question.",
-            f"After the call, post notes to /heygen/live-meetings/{session['session_id']}/notes.",
-        ],
-    }
-
-
-@app.post("/heygen/live-meetings/{session_id}/question")
-async def heygen_live_meeting_question_endpoint(session_id: str, request: HeyGenLiveMeetingQuestionRequest):
-    return _answer_live_avatar_question(
-        agent_name=request.agent_name,
-        project_id=request.project_id,
-        question=request.question,
-        session_id=session_id,
-        meeting_id=request.meeting_id,
-        speaker_name=request.speaker_name,
-        provider_event_id=request.provider_event_id,
-    )
-
-
-@app.post("/heygen/live-meetings/{session_id}/notes")
-async def heygen_live_meeting_notes_endpoint(session_id: str, request: HeyGenLiveMeetingNotesRequest):
-    summary = (request.summary or "").strip()
-    transcript = (request.transcript or "").strip()
-    if not summary and not transcript:
-        raise HTTPException(status_code=400, detail="Meeting notes require summary or transcript")
-
-    title = (request.title or "RamAir LiveAvatar Meeting Notes").strip()
-    note_summary = summary or transcript
-    record_agent_event(
-        client_id=request.client_id,
-        project_id=request.project_id,
-        project_name=request.project_name,
-        agent_name="nathan",
-        event_type="live_avatar_meeting_notes_requested",
-        channel="heygen",
-        summary=title,
-        payload={
-            "session_id": session_id,
-            "has_summary": bool(summary),
-            "has_transcript": bool(transcript),
-            "folder_path": request.folder_path or RAMAIR_LIVE_MEETING_NOTES_FOLDER,
-        },
-    )
-    publish_result = await _publish_files_meeting_note(
-        FilesMeetingNoteRequest(
-            title=title,
-            summary=note_summary,
-            client_id=request.client_id,
-            client_name=request.client_name,
-            project_id=request.project_id,
-            project_name=request.project_name,
-            source_conversation_id=session_id,
-            team_id=request.team_id,
-            channel_id=request.channel_id,
-            folder_path=request.folder_path or RAMAIR_LIVE_MEETING_NOTES_FOLDER,
-        ),
-        channel="heygen",
-    )
-    return {
-        "status": "published_files",
-        "session_id": session_id,
-        "notes": publish_result,
-    }
 
 
 @app.get("/teams/status")
@@ -1605,9 +1366,9 @@ async def nathan_llm_status():
     tavily_configured = bool(os.getenv("TAVILY_API_KEY"))
     anthropic_configured = bool(os.getenv("ANTHROPIC_API_KEY"))
     teams_configured = bool(
-        (os.getenv("TEAMS_TENANT_ID") or os.getenv("MICROSOFT_TENANT_ID") or os.getenv("M365_TENANT_ID") or os.getenv("TEAMS_MEDIA_BOT_TENANT_ID")) and
-        (os.getenv("TEAMS_CLIENT_ID") or os.getenv("MICROSOFT_CLIENT_ID") or os.getenv("M365_CLIENT_ID") or os.getenv("TEAMS_MEDIA_BOT_APP_ID")) and
-        (os.getenv("TEAMS_CLIENT_SECRET") or os.getenv("MICROSOFT_CLIENT_SECRET") or os.getenv("M365_CLIENT_SECRET") or os.getenv("TEAMS_MEDIA_BOT_APP_SECRET"))
+        os.getenv("MICROSOFT_TENANT_ID")
+        and os.getenv("MICROSOFT_CLIENT_ID")
+        and os.getenv("MICROSOFT_CLIENT_SECRET")
     )
     auth_required = bool(os.getenv("NATHAN_LLM_API_KEY"))
 
@@ -1628,7 +1389,7 @@ async def nathan_llm_status():
             },
             "teams_files": {
                 "configured": teams_configured,
-                "note": "Requires TEAMS_TENANT_ID, TEAMS_CLIENT_ID, TEAMS_CLIENT_SECRET "
+                "note": "Requires MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET "
                         "and Files.Read.All + Sites.Read.All Graph permissions.",
             },
             "project_context": {

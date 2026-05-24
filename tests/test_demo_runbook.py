@@ -14,7 +14,7 @@ class DemoRunbookTests(unittest.TestCase):
         self.assertIn("Show Teams Front Door", titles)
         self.assertIn("Request Deployment Approval", titles)
         self.assertIn("Show Teams Approval Cards", titles)
-        self.assertIn("Ask the LiveAvatar a Project Question", titles)
+        self.assertIn("Ask Nathan a Project Question (custom LLM endpoint)", titles)
 
     def test_render_demo_runbook_contains_safe_commands(self):
         runbook = render_demo_runbook()
@@ -26,7 +26,7 @@ class DemoRunbookTests(unittest.TestCase):
         self.assertIn("/dylan/deploy-site", runbook)
         self.assertIn("/teams/approval-cards", runbook)
         self.assertIn("/m365/email-drafts", runbook)
-        self.assertIn("/heygen/live-question", runbook)
+        self.assertIn("/v1/chat/completions", runbook)
         self.assertIn('"request_approval": true', runbook)
 
 

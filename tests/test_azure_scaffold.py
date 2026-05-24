@@ -16,7 +16,7 @@ class AzureScaffoldTests(unittest.TestCase):
         self.assertIn("PROJECT_MEMORY_ENABLED=true", payload)
         self.assertIn("MICROSOFT_CLIENT_SECRET=", payload)
         self.assertIn("TEAMS_WEBHOOK_SECRET=", payload)
-        self.assertIn("HEYGEN_API_KEY=", payload)
+        self.assertIn("TAVUS_API_KEY=", payload)
 
     def test_azure_checklist_includes_core_deployment_steps(self):
         titles = [step["title"] for step in build_azure_steps()]
