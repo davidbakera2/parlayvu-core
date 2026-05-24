@@ -1,11 +1,13 @@
 # parlayvu-core/app/main.py
 import logging
+import os
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
+from uuid import uuid4
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -1465,6 +1467,185 @@ async def meetings_strategy_endpoint(request: MeetingStrategyRequest):
             "url": teams_file.get("webUrl") if teams_file else None,
         },
         "memory_output_id": memory_output_id,
+    }
+
+
+# ── Nathan Custom LLM — OpenAI-Compatible Endpoint ───────────────────────────
+#
+# Tavus CVI supports pointing a persona at a custom LLM endpoint that follows
+# the OpenAI Chat Completions API format. When configured, Tavus calls
+# POST /v1/chat/completions with the conversation history instead of using their
+# built-in model. Nathan's responses are then powered by Claude Opus 4.7 with
+# full tool access: web search, URL fetch, Teams files, and project context.
+#
+# To configure:
+#   1. Set TAVILY_API_KEY in Azure (get free key at https://tavily.com)
+#   2. Run scripts/Update-NathanPersonaLLM.ps1 to update the Tavus persona
+#   3. The persona will call POST https://<your-api-host>/v1/chat/completions
+#
+# Authentication: set NATHAN_LLM_API_KEY to require a bearer token.
+# Leave it empty to allow unauthenticated access (Tavus can't always send auth).
+
+
+from .nathan_llm import (
+    build_chat_completion_response,
+    build_models_response,
+    run_nathan_conversation,
+)
+
+
+class ChatCompletionRequest(BaseModel):
+    model: str = "nathan-opus"
+    messages: list[dict] = Field(default_factory=list)
+    stream: bool = False
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+
+
+@app.get("/v1/models")
+async def openai_list_models():
+    """
+    OpenAI-compatible models list.
+    Tavus validates this endpoint before calling /v1/chat/completions.
+    """
+    return build_models_response()
+
+
+@app.post("/v1/chat/completions")
+async def openai_chat_completions(request: Request, body: ChatCompletionRequest):
+    """
+    OpenAI-compatible chat completions endpoint powering Nathan in Tavus CVI.
+
+    Tavus calls this endpoint with the live conversation history.
+    Claude Opus 4.7 processes the messages, calls tools as needed
+    (web search, URL fetch, Teams files, project context), and returns
+    Nathan's spoken response.
+
+    Authentication: if NATHAN_LLM_API_KEY is set, Bearer token is required.
+    """
+    # Optional bearer token auth
+    expected_key = os.getenv("NATHAN_LLM_API_KEY", "")
+    if expected_key:
+        auth_header = request.headers.get("Authorization", "")
+        provided_key = auth_header.removeprefix("Bearer ").strip()
+        if provided_key != expected_key:
+            raise HTTPException(status_code=401, detail="Invalid API key.")
+
+    if not body.messages:
+        raise HTTPException(status_code=400, detail="messages array is required.")
+
+    if body.stream:
+        # Streaming: run Nathan and stream the response character by character
+        from fastapi.responses import StreamingResponse
+        import json as _json
+
+        async def stream_response():
+            try:
+                text = await run_nathan_conversation(body.messages)
+            except Exception as exc:
+                logger.exception("Nathan LLM stream error")
+                text = "I'm having trouble right now. Give me a moment."
+
+            request_id = f"{uuid4().hex[:12]}"
+            created = int(__import__("time").time())
+
+            # Stream in chunks
+            chunk_size = 20
+            for i in range(0, len(text), chunk_size):
+                chunk_text = text[i:i + chunk_size]
+                chunk = {
+                    "id": f"chatcmpl-{request_id}",
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": body.model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": chunk_text},
+                        "finish_reason": None,
+                    }],
+                }
+                yield f"data: {_json.dumps(chunk)}\n\n"
+
+            # Final chunk with finish_reason
+            final_chunk = {
+                "id": f"chatcmpl-{request_id}",
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": body.model,
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            }
+            yield f"data: {_json.dumps(final_chunk)}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            stream_response(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    # Non-streaming
+    try:
+        text = await run_nathan_conversation(body.messages)
+    except Exception as exc:
+        logger.exception("Nathan LLM error")
+        text = "I'm having a bit of trouble right now. Can you repeat the question?"
+
+    return build_chat_completion_response(text, model=body.model, request_id=uuid4().hex[:12])
+
+
+@app.get("/nathan/llm/status")
+async def nathan_llm_status():
+    """
+    Check Nathan's custom LLM configuration status.
+    Shows which tools are configured and ready.
+    """
+    tavily_configured = bool(os.getenv("TAVILY_API_KEY"))
+    anthropic_configured = bool(os.getenv("ANTHROPIC_API_KEY"))
+    teams_configured = bool(
+        (os.getenv("TEAMS_TENANT_ID") or os.getenv("TEAMS_MEDIA_BOT_TENANT_ID")) and
+        (os.getenv("TEAMS_CLIENT_ID") or os.getenv("TEAMS_MEDIA_BOT_APP_ID")) and
+        (os.getenv("TEAMS_CLIENT_SECRET") or os.getenv("TEAMS_MEDIA_BOT_APP_SECRET"))
+    )
+    auth_required = bool(os.getenv("NATHAN_LLM_API_KEY"))
+
+    return {
+        "status": "ready" if anthropic_configured else "missing_anthropic_key",
+        "endpoint": "POST /v1/chat/completions",
+        "models_endpoint": "GET /v1/models",
+        "auth_required": auth_required,
+        "tools": {
+            "web_search": {
+                "configured": tavily_configured,
+                "note": "Requires TAVILY_API_KEY — get free key at https://tavily.com",
+            },
+            "fetch_url": {
+                "configured": True,
+                "note": "Uses Jina Reader (r.jina.ai) — no API key required. "
+                        "Fetches LinkedIn profiles, websites, social media.",
+            },
+            "teams_files": {
+                "configured": teams_configured,
+                "note": "Requires TEAMS_TENANT_ID, TEAMS_CLIENT_ID, TEAMS_CLIENT_SECRET "
+                        "and Files.Read.All + Sites.Read.All Graph permissions.",
+            },
+            "project_context": {
+                "configured": True,
+                "note": "Uses ParlayVU project memory + client_artifacts/ flat files.",
+            },
+        },
+        "tavus_setup": {
+            "persona_endpoint": "PATCH https://tavusapi.com/v2/personas/{personaId}",
+            "custom_llm_field": "custom_llm",
+            "required_fields": {
+                "model_name": "nathan-opus",
+                "base_url": "<this-api-host>",
+                "api_key": "<NATHAN_LLM_API_KEY or empty>",
+            },
+            "script": "services/teams-media-bot/scripts/Update-NathanPersonaLLM.ps1",
+        },
     }
 
 
