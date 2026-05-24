@@ -19,6 +19,7 @@ MapEnvironment("TEAMS_MEDIA_BOT_GRAPH_JOIN_ENABLED", "GraphBot:JoinEnabled");
 MapEnvironment("TAVUS_API_KEY", "AvatarProviders:Tavus:ApiKey");
 MapEnvironment("TAVUS_BASE_URL", "AvatarProviders:Tavus:BaseUrl");
 MapEnvironment("TAVUS_REPLICA_ID", "AvatarProviders:Tavus:ReplicaId");
+MapEnvironment("TAVUS_REPLICA_ID_NATHAN", "AvatarProviders:Tavus:ReplicaId"); // Nathan-specific replica overrides default
 MapEnvironment("TAVUS_PERSONA_ID", "AvatarProviders:Tavus:PersonaId");
 MapEnvironment("LIVEAVATAR_API_KEY", "AvatarProviders:HeyGenLiveAvatar:ApiKey");
 MapEnvironment("LIVEAVATAR_BASE_URL", "AvatarProviders:HeyGenLiveAvatar:BaseUrl");
@@ -34,6 +35,7 @@ builder.Services.Configure<GraphBotOptions>(builder.Configuration.GetSection("Gr
 builder.Services.Configure<AvatarProviderOptions>(builder.Configuration.GetSection("AvatarProviders"));
 builder.Services.AddHttpClient<ParlayVuClient>();
 builder.Services.AddHttpClient<GraphCommunicationsClient>();
+builder.Services.AddHttpClient<TavusClient>();
 
 var app = builder.Build();
 
@@ -157,6 +159,88 @@ app.MapPost("/meetings/join/graph-request-preview", (
         payload = joinRequest.BuildCreateCallPayload()
     });
 });
+
+// ── Tavus avatar endpoints ──────────────────────────────────────────────────
+
+app.MapPost("/avatar/tavus/start", async (
+    TavusStartRequest request,
+    TavusClient tavus,
+    IOptions<AvatarProviderOptions> avatarProviders,
+    CancellationToken cancellationToken) =>
+{
+    var config = avatarProviders.Value.Tavus;
+    if (!config.Configured)
+    {
+        return Results.BadRequest(new { error = "Tavus is not configured. Set TAVUS_API_KEY, TAVUS_REPLICA_ID_NATHAN, and TAVUS_PERSONA_ID." });
+    }
+
+    try
+    {
+        var session = await tavus.StartConversationAsync(
+            replicaId: request.ReplicaId ?? config.ReplicaId!,
+            personaId: request.PersonaId ?? config.PersonaId!,
+            conversationName: request.ConversationName ?? $"Nathan Ellis — {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC",
+            context: request.Context,
+            cancellationToken: cancellationToken);
+
+        return Results.Ok(new
+        {
+            status = "started",
+            provider = "tavus",
+            mediaBridgeValidated = false,
+            session,
+            operatorNextSteps = new[]
+            {
+                $"Open {session.ConversationUrl} in a browser to see Nathan's avatar.",
+                "Share that browser tab in the Teams meeting to give Nathan a visible face.",
+                "Send questions to POST /avatar/tavus/{conversationId}/speak.",
+                "End the session with DELETE /avatar/tavus/{conversationId}."
+            }
+        });
+    }
+    catch (HttpRequestException ex)
+    {
+        return Results.Problem(ex.Message, statusCode: 502);
+    }
+});
+
+app.MapPost("/avatar/tavus/{conversationId}/speak", async (
+    string conversationId,
+    TavusSpeakRequest request,
+    TavusClient tavus,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Text))
+        return Results.BadRequest(new { error = "text is required." });
+
+    try
+    {
+        var result = await tavus.EchoAsync(conversationId, request.Text, cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (HttpRequestException ex)
+    {
+        return Results.Problem(ex.Message, statusCode: 502);
+    }
+});
+
+app.MapDelete("/avatar/tavus/{conversationId}", async (
+    string conversationId,
+    TavusClient tavus,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        await tavus.EndConversationAsync(conversationId, cancellationToken);
+        return Results.Ok(new { status = "ended", conversationId });
+    }
+    catch (HttpRequestException ex)
+    {
+        return Results.Problem(ex.Message, statusCode: 502);
+    }
+});
+
+// ── Meeting question/notes endpoints ────────────────────────────────────────
 
 app.MapPost("/meetings/{sessionId}/question", async (
     string sessionId,
@@ -692,3 +776,104 @@ internal sealed record MeetingNotesRequest(
     string? TeamId = null,
     string? ChannelId = null,
     string? FolderPath = null);
+
+// ── Tavus ────────────────────────────────────────────────────────────────────
+
+internal sealed record TavusStartRequest(
+    string? ReplicaId = null,
+    string? PersonaId = null,
+    string? ConversationName = null,
+    string? Context = null);
+
+internal sealed record TavusSpeakRequest(string Text);
+
+internal sealed record TavusConversationSession(
+    string ConversationId,
+    string ConversationUrl,
+    string Status,
+    string ReplicaId,
+    string PersonaId);
+
+internal sealed class TavusClient(HttpClient httpClient, IOptions<AvatarProviderOptions> options)
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly AvatarProviderConfiguration _config = options.Value.Tavus;
+
+    public async Task<TavusConversationSession> StartConversationAsync(
+        string replicaId,
+        string personaId,
+        string conversationName,
+        string? context,
+        CancellationToken cancellationToken)
+    {
+        var body = new Dictionary<string, object?>
+        {
+            ["replica_id"] = replicaId,
+            ["persona_id"] = personaId,
+            ["conversation_name"] = conversationName,
+            ["properties"] = new Dictionary<string, object?> { ["enable_recording"] = false }
+        };
+        if (!string.IsNullOrWhiteSpace(context))
+            body["conversational_context"] = context;
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{_config.BaseUrl!.TrimEnd('/')}/v2/conversations")
+        {
+            Content = JsonContent.Create(body, options: JsonOptions)
+        };
+        request.Headers.Add("x-api-key", _config.ApiKey);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"Tavus start conversation returned {(int)response.StatusCode}: {responseBody}");
+
+        using var doc = JsonDocument.Parse(responseBody);
+        var root = doc.RootElement;
+        return new TavusConversationSession(
+            ConversationId: root.GetProperty("conversation_id").GetString()!,
+            ConversationUrl: root.GetProperty("conversation_url").GetString()!,
+            Status: root.TryGetProperty("status", out var s) ? s.GetString() ?? "active" : "active",
+            ReplicaId: replicaId,
+            PersonaId: personaId);
+    }
+
+    public async Task<object> EchoAsync(
+        string conversationId,
+        string text,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"{_config.BaseUrl!.TrimEnd('/')}/v2/conversations/{Uri.EscapeDataString(conversationId)}/echo")
+        {
+            Content = JsonContent.Create(new { text }, options: JsonOptions)
+        };
+        request.Headers.Add("x-api-key", _config.ApiKey);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"Tavus echo returned {(int)response.StatusCode}: {responseBody}");
+
+        return new { status = "speaking", conversationId, text };
+    }
+
+    public async Task EndConversationAsync(string conversationId, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"{_config.BaseUrl!.TrimEnd('/')}/v2/conversations/{Uri.EscapeDataString(conversationId)}");
+        request.Headers.Add("x-api-key", _config.ApiKey);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException($"Tavus end conversation returned {(int)response.StatusCode}: {body}");
+        }
+    }
+}
