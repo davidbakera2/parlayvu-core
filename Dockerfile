@@ -14,6 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
+# client_artifacts is the flat-file fallback source for Nathan's
+# get_project_context tool. Must be in the image so the tool finds data
+# when the database has no row for the requested client.
+COPY client_artifacts ./client_artifacts
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
