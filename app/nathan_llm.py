@@ -171,16 +171,24 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
     {
         "name": "save_meeting_notes",
         "description": (
-            "File a meeting summary to the client's Teams channel as both "
-            "markdown and a Word document. Use this when wrapping up a meeting "
-            "or when a participant says something like 'send the notes', "
-            "'save what we discussed', 'file this', or 'wrap it up'. "
-            "Always WRITE THE SUMMARY YOURSELF and verbally confirm what "
-            "you're about to file before calling this tool, e.g. 'Here's what "
-            "I'm sending: [summary]. Filing now.' Then call the tool. "
-            "Summary should be 2-4 short paragraphs covering: (1) what was "
-            "discussed, (2) key decisions made, (3) action items with the "
-            "responsible specialist."
+            "File a structured meeting record to the client's Teams channel as "
+            "both markdown and a Word document. Use this when wrapping up a "
+            "meeting or when a participant says something like 'send the notes', "
+            "'save what we discussed', 'file this', or 'wrap it up'.\n\n"
+            "CRITICAL: Before calling this tool, do TWO things:\n"
+            "1. Extract a STRUCTURED record from the conversation: title, "
+            "summary, attendees, decisions, action_items, questions, next_steps, "
+            "source_material.\n"
+            "2. If anything is ambiguous - especially action item owners ('someone "
+            "will do X'), action item due dates ('soon' / 'next week' without a "
+            "specific date), or who was on the call - ASK FOR CLARIFICATION out "
+            "loud BEFORE calling the tool. Examples: 'Before I file these, who "
+            "owns the website refresh - Dylan?' or 'When's the target date for "
+            "the new social schedule?'\n\n"
+            "3. Then READ THE SUMMARY OUT LOUD so participants can confirm. "
+            "Once they confirm, call this tool with all the structured fields. "
+            "Action items missing an owner or due date should be flagged as "
+            "'TBD' rather than guessed."
         ),
         "input_schema": {
             "type": "object",
@@ -189,23 +197,101 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": (
                         "Short meeting title used as the filename stem, e.g. "
-                        "'RamAir Weekly Strategy - May 24 2026' or "
-                        "'RamAir Q3 Campaign Kickoff'."
+                        "'RamAir Weekly Strategy - May 24 2026'."
                     ),
                 },
                 "summary": {
                     "type": "string",
                     "description": (
-                        "Meeting summary in plain prose, 2-4 paragraphs. "
-                        "Include what was discussed, key decisions, and "
-                        "action items with the responsible specialist by name."
+                        "Plain-prose summary of the discussion, 2-4 short paragraphs. "
+                        "This is the high-level narrative; specific decisions and "
+                        "action items go in their own fields below."
                     ),
                 },
                 "client_id": {
                     "type": "string",
                     "description": (
-                        "The client ID (e.g. 'ramair'). If you recently "
-                        "called get_project_context, reuse the same client_id."
+                        "Client ID (e.g. 'ramair'). If you recently called "
+                        "get_project_context, reuse the same client_id."
+                    ),
+                },
+                "project": {
+                    "type": "string",
+                    "description": (
+                        "Project display name, e.g. 'RamAir Straight From The Hart'. "
+                        "Omit if not clear from the conversation."
+                    ),
+                },
+                "meeting_date_time": {
+                    "type": "string",
+                    "description": (
+                        "Human-readable meeting date and start time, e.g. "
+                        "'May 25, 2026 at 9:00 AM ET'. If you don't know the start "
+                        "time, omit this and the server uses the current UTC time."
+                    ),
+                },
+                "attendees": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "People who were on the meeting. Use real names where known "
+                        "('David Baker', 'Sarah from RamAir'). Include yourself "
+                        "('Nathan Ellis - ParlayVU') and the operator. If you don't "
+                        "know who else was on, ask before filing."
+                    ),
+                },
+                "decisions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Decisions made or announced on the call. Each item is a "
+                        "single sentence stating WHAT was decided. Examples: "
+                        "'Move the launch from Sept 15 to Oct 1.' / "
+                        "'Approve the budget shift to paid social.'"
+                    ),
+                },
+                "action_items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "owner":    {"type": "string", "description": "Who owns it. Specialist name (Riley, Alex, ...) or external name. Use 'TBD' if not assigned."},
+                            "action":   {"type": "string", "description": "Concrete action to take, action-verb-first."},
+                            "due_date": {"type": "string", "description": "Specific date or 'TBD'. Do not guess vague dates."},
+                        },
+                        "required": ["owner", "action", "due_date"],
+                    },
+                    "description": (
+                        "Action items with explicit owner and due date. If owner "
+                        "or due date are unclear, ASK in the call before passing. "
+                        "Don't invent owners or dates."
+                    ),
+                },
+                "questions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Open questions or concerns raised during the meeting "
+                        "that weren't resolved. One item per question."
+                    ),
+                },
+                "next_steps": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Forward-looking commitments and immediate next steps to "
+                        "move the project forward. One item per step. Different "
+                        "from action_items: these are about momentum, not "
+                        "assignments."
+                    ),
+                },
+                "source_material": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "References to key docs, sites, reports, or links cited "
+                        "or shared during the call. One item per reference. "
+                        "Include URLs when present, names when not."
                     ),
                 },
             },
@@ -258,7 +344,7 @@ USE TOOLS PROACTIVELY:
 - When a client is named (e.g. "RamAir", "Acme Corp") → call get_project_context with client_id set to that name lowercased and stripped of spaces (e.g. "ramair", "acmecorp"). Do this FIRST, before answering anything project-specific.
 - When someone references "our project", "the brief", "the timeline", or "what was agreed" → call get_project_context for the current client
 - When a file is mentioned → list or read the Teams files
-- When the meeting is wrapping up, OR when someone says "send the notes", "save what we discussed", "file this", "wrap it up" → draft a 2-4 paragraph summary covering what was discussed + decisions made + action items with the responsible specialist, then SAY the summary out loud so participants can confirm, then call save_meeting_notes. Do NOT call save_meeting_notes silently — always read the summary first.
+- When the meeting is wrapping up, OR when someone says "send the notes", "save what we discussed", "file this", "wrap it up" → build a STRUCTURED meeting record from the conversation: title, summary (2-4 paragraphs), attendees, decisions, action_items (with owner + due_date), questions, next_steps, source_material. If anything is ambiguous — especially action item owners ("someone will do X") or due dates ("soon" / "next week" without a specific date) or who was actually on the call — ASK FOR CLARIFICATION out loud BEFORE calling save_meeting_notes. Once you have a clean record, say "Here's what I'll file..." and read the summary + decisions + action items out loud so participants can confirm, then call save_meeting_notes with all the structured fields. Action items missing an owner or due date should be flagged as "TBD" rather than guessed. Do NOT call save_meeting_notes silently.
 - Don't guess when you can look it up — a 2-second search is better than a hallucinated answer
 
 CRITICAL ANTI-HALLUCINATION RULES:
@@ -307,6 +393,14 @@ async def _execute_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
                 title=tool_input["title"],
                 summary=tool_input["summary"],
                 client_id=tool_input["client_id"],
+                project=tool_input.get("project"),
+                meeting_date_time=tool_input.get("meeting_date_time"),
+                attendees=tool_input.get("attendees"),
+                decisions=tool_input.get("decisions"),
+                action_items=tool_input.get("action_items"),
+                questions=tool_input.get("questions"),
+                next_steps=tool_input.get("next_steps"),
+                source_material=tool_input.get("source_material"),
             )
         else:
             result = {"error": f"Unknown tool: {tool_name}"}

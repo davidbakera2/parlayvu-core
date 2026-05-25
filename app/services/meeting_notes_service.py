@@ -165,6 +165,15 @@ async def publish_meeting_notes_to_teams(
     folder_path: str | None = None,
     channel: str = "api",
     agent_name: str = "nathan",
+    # Structured meeting content - all optional, all extracted from the
+    # conversation by Nathan when he calls save_meeting_notes.
+    meeting_date_time: str | None = None,
+    attendees: list[str] | None = None,
+    decisions: list[str] | None = None,
+    action_items: list[dict[str, str]] | None = None,
+    questions: list[str] | None = None,
+    next_steps: list[str] | None = None,
+    source_material: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Publish a meeting summary to a Teams channel folder as markdown + DOCX.
@@ -245,20 +254,37 @@ async def publish_meeting_notes_to_teams(
             source_info.get("path"),
         )
         display = _client_display_name(client_name=client_name, client_id=client_id)
+        placeholders = build_meeting_notes_template_placeholders(
+            title=title,
+            summary=summary,
+            client_id=client_id,
+            client_name=display,
+            client_full_name=_client_full_name(
+                client_id=client_id,
+                project_id=project_id,
+                fallback=display,
+            ),
+            project_id=project_id,
+            project_name=project_name,
+            meeting_date_time=meeting_date_time,
+        )
+        # When the caller (Nathan) provides structured list/table data,
+        # route it to the renderer's duplication path so each bullet or
+        # action-item row reflects the structure of the conversation
+        # rather than getting flattened into a single placeholder.
+        list_items_arg: dict[str, list[str]] | None = None
+        if any(field is not None for field in (attendees, decisions, questions, next_steps, source_material)):
+            list_items_arg = {}
+            if attendees       is not None: list_items_arg["{{ATTENDEES}}"]       = list(attendees)
+            if decisions       is not None: list_items_arg["{{DECISIONS}}"]       = list(decisions)
+            if questions       is not None: list_items_arg["{{QUESTIONS}}"]       = list(questions)
+            if next_steps      is not None: list_items_arg["{{NEXT_STEPS}}"]      = list(next_steps)
+            if source_material is not None: list_items_arg["{{SOURCE_MATERIAL}}"] = list(source_material)
         docx = render_meeting_notes_template_docx(
             template_docx,
-            build_meeting_notes_template_placeholders(
-                title=title,
-                summary=summary,
-                client_id=client_id,
-                client_name=display,
-                client_full_name=_client_full_name(
-                    client_id=client_id,
-                    project_id=project_id,
-                    fallback=display,
-                ),
-                project_id=project_id,
-            ),
+            placeholders,
+            list_items=list_items_arg,
+            action_items=list(action_items) if action_items is not None else None,
         )
     except Exception as exc:
         fallback_reason = _template_fallback_reason(exc)

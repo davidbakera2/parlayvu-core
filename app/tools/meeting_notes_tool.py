@@ -25,44 +25,62 @@ async def save_meeting_notes(
     title: str,
     summary: str,
     client_id: str,
+    *,
+    project: str | None = None,
+    meeting_date_time: str | None = None,
+    attendees: list[str] | None = None,
+    decisions: list[str] | None = None,
+    action_items: list[dict[str, str]] | None = None,
+    questions: list[str] | None = None,
+    next_steps: list[str] | None = None,
+    source_material: list[str] | None = None,
 ) -> dict[str, Any]:
     """
-    File a meeting summary to the client's Teams channel.
+    File a structured meeting record to the client's Teams channel.
 
-    Returns a Nathan-friendly dict that Claude can use to confirm the
-    save to the participants. On failure we return a structured error
-    instead of raising - Claude needs to be able to say "I couldn't
-    save those, let me have someone follow up" without the whole turn
-    blowing up.
+    Returns a Nathan-friendly dict Claude can read to confirm the save
+    to participants. On failure we return a structured error instead of
+    raising - Claude needs to be able to say "I couldn't save those"
+    gracefully without the turn blowing up.
+
+    All structured fields are optional. When provided, the template
+    renderer populates the matching section (bulleted list, or the
+    action items table) of the meeting notes DOCX. Anything Nathan
+    leaves out is simply absent from the rendered document.
 
     Args:
         title: Short meeting title used as the filename stem.
-        summary: 2-4 paragraph summary written by Nathan.
+        summary: 2-4 paragraph plain-prose summary of the discussion.
         client_id: e.g. "ramair". Must match a client directory or DB row.
+        project: Project display name (e.g. "RamAir Straight From The Hart").
+        meeting_date_time: Free-form date/time string. Defaults to the
+            current UTC time if omitted.
+        attendees: People who participated in the meeting.
+        decisions: Key decisions made or announced during the call.
+        action_items: List of {owner, action, due_date} dicts.
+        questions: Open questions or concerns raised during the meeting.
+        next_steps: Agreed next steps to move the project forward.
+        source_material: References to key docs, sites, reports cited.
 
     Returns:
-        On success:
-            {
-                "status": "saved",
-                "title": str,
-                "client_id": str,
-                "markdown_url": str | None,
-                "docx_url": str | None,
-                "memory_output_id": str | None,
-                "message": "Meeting notes filed in the {client_id} Teams channel.",
-            }
-        On failure:
-            {
-                "status": "failed",
-                "error": str,
-                "message": "Could not file the meeting notes...",
-            }
+        On success: {"status": "saved", "title", "client_id",
+                     "markdown_url", "docx_url", "memory_output_id",
+                     "message"}
+        On failure: {"status": "failed", "error", "message"}
     """
     try:
         result = await publish_meeting_notes_to_teams(
             title=title,
             summary=summary,
             client_id=client_id,
+            project_name=project,
+            meeting_date_time=meeting_date_time,
+            attendees=attendees,
+            decisions=decisions,
+            action_items=action_items,
+            questions=questions,
+            next_steps=next_steps,
+            source_material=source_material,
             channel="tavus_meeting",
             agent_name="nathan",
         )

@@ -190,6 +190,98 @@ class MeetingNotesServiceTests(unittest.TestCase):
             result["docx_template"]["fallback_reason"],
         )
 
+    def test_renderer_duplicates_list_paragraphs_and_action_item_rows(self):
+        """Pass structured list_items + action_items into the renderer and
+        verify the output DOCX has the right number of paragraphs and rows.
+        Uses the existing minimal-docx test fixture pattern."""
+        from app.microsoft365 import render_meeting_notes_template_docx
+        import io
+        import zipfile as _zf
+        from docx import Document
+
+        # Build a tiny template with: 1 paragraph with {{DECISIONS}}, and
+        # a 2-row table where the second row has the action item placeholders.
+        template_body = (
+            "<w:p><w:r><w:t>Title</w:t></w:r></w:p>"
+            "<w:p><w:r><w:t>{{DECISIONS}}</w:t></w:r></w:p>"
+            "<w:tbl>"
+              "<w:tr><w:tc><w:p><w:r><w:t>OWNER</w:t></w:r></w:p></w:tc>"
+                    "<w:tc><w:p><w:r><w:t>ACTION</w:t></w:r></w:p></w:tc>"
+                    "<w:tc><w:p><w:r><w:t>DUE</w:t></w:r></w:p></w:tc></w:tr>"
+              "<w:tr><w:tc><w:p><w:r><w:t>{{ACTION_OWNER}}</w:t></w:r></w:p></w:tc>"
+                    "<w:tc><w:p><w:r><w:t>{{ACTION_ITEM}}</w:t></w:r></w:p></w:tc>"
+                    "<w:tc><w:p><w:r><w:t>{{ACTION_DUE}}</w:t></w:r></w:p></w:tc></w:tr>"
+            "</w:tbl>"
+        )
+
+        # Use the same minimal docx helper format as test_microsoft365
+        content_types_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+            "</Types>"
+        )
+        package_rels_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+            "</Relationships>"
+        )
+        document_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            f"<w:body>{template_body}<w:sectPr/></w:body>"
+            "</w:document>"
+        )
+        buf = io.BytesIO()
+        with _zf.ZipFile(buf, "w") as z:
+            z.writestr("[Content_Types].xml", content_types_xml)
+            z.writestr("_rels/.rels", package_rels_xml)
+            z.writestr("word/document.xml", document_xml)
+        template_bytes = buf.getvalue()
+
+        rendered = render_meeting_notes_template_docx(
+            template_bytes,
+            placeholders={"{{TITLE}}": "ignored"},  # nothing matches; just to exercise the simple-sub path
+            list_items={
+                "{{DECISIONS}}": ["Decision A.", "Decision B.", "Decision C."],
+            },
+            action_items=[
+                {"owner": "Riley", "action": "File the meeting notes.", "due_date": "EOD today"},
+                {"owner": "Dylan", "action": "Stage the site refresh.", "due_date": "May 30"},
+            ],
+        )
+
+        # Parse the output with python-docx and verify structure
+        out_doc = Document(io.BytesIO(rendered))
+
+        decision_paragraphs = [p.text for p in out_doc.paragraphs if "Decision" in p.text]
+        self.assertEqual(len(decision_paragraphs), 3, decision_paragraphs)
+        self.assertEqual(decision_paragraphs[0], "Decision A.")
+        self.assertEqual(decision_paragraphs[1], "Decision B.")
+        self.assertEqual(decision_paragraphs[2], "Decision C.")
+
+        # The action items table: header row + 2 data rows
+        self.assertEqual(len(out_doc.tables), 1)
+        table = out_doc.tables[0]
+        self.assertEqual(len(table.rows), 3, "header row plus one row per action item")
+        # Data rows have actual values, not placeholders
+        row1_text = " ".join(c.text for c in table.rows[1].cells)
+        self.assertIn("Riley", row1_text)
+        self.assertIn("File the meeting notes.", row1_text)
+        self.assertIn("EOD today", row1_text)
+        row2_text = " ".join(c.text for c in table.rows[2].cells)
+        self.assertIn("Dylan", row2_text)
+        self.assertIn("Stage the site refresh.", row2_text)
+        self.assertIn("May 30", row2_text)
+        # No placeholders survived
+        all_text = " ".join(c.text for r in table.rows for c in r.cells)
+        self.assertNotIn("{{ACTION_OWNER}}", all_text)
+        self.assertNotIn("{{ACTION_ITEM}}", all_text)
+        self.assertNotIn("{{ACTION_DUE}}", all_text)
+
     def test_loads_template_from_local_client_artifacts_first(self):
         """When client_artifacts/<client>/<template> exists locally, the
         service must use that and NOT fall back to Teams download."""

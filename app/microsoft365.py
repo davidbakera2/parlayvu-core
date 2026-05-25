@@ -369,6 +369,16 @@ def _summary_sections(summary: str) -> dict[str, str]:
     }
 
 
+def _default_meeting_date_time() -> str:
+    """Friendly date+time string used when caller doesn't supply MEETING_DATE.
+
+    Format: "May 25, 2026 at 14:32 UTC". Uses portable strftime tokens
+    (no platform-specific %-d / %#d) so it works on Windows and Unix alike,
+    even though it leaves a leading zero on single-digit days.
+    """
+    return datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
+
+
 def build_meeting_notes_template_placeholders(
     *,
     title: str,
@@ -377,12 +387,27 @@ def build_meeting_notes_template_placeholders(
     client_name: Optional[str] = None,
     client_full_name: Optional[str] = None,
     project_id: Optional[str] = None,
+    project_name: Optional[str] = None,
+    meeting_date_time: Optional[str] = None,
     source_label: str = "ParlayVU project memory",
 ) -> dict[str, str]:
+    """Build the simple-text placeholder map for the meeting notes template.
+
+    This returns only the single-value substitutions. The structured
+    fields (attendees, decisions, action items, etc.) are passed to the
+    renderer via separate `list_items` and `action_items` arguments, see
+    `render_meeting_notes_template_docx`.
+
+    Backward compatibility: callers that don't supply the new structured
+    fields will see the same legacy keys (`{{ATTENDEES}}`, `{{DECISIONS}}`,
+    etc.) populated from the markdown summary as before. New callers can
+    omit those — the renderer will handle list duplication instead.
+    """
     sections = _summary_sections(summary)
     client = (client_name or client_id or "RamAir").strip() or "RamAir"
     client_full = (client_full_name or client).strip() or client
-    project = project_id or client_id or "RamAir"
+    project = project_name or project_id or client_id or "RamAir"
+    meeting_date = meeting_date_time or _default_meeting_date_time()
 
     def first_section(*keys: str, default: str = "Not specified.") -> str:
         for key in keys:
@@ -392,10 +417,13 @@ def build_meeting_notes_template_placeholders(
 
     return {
         "{{MEETING_TITLE}}": title.strip() or "Meeting Notes",
-        "{{MEETING_DATE}}": datetime.now(timezone.utc).date().isoformat(),
+        "{{MEETING_DATE}}": meeting_date,
         "{{CLIENT}}": client,
         "{{CLIENT_NAME}}": client_full,
         "{{PROJECT}}": project,
+        # Legacy single-value placeholders. New callers that pass
+        # structured `list_items` to the renderer can leave these empty -
+        # the renderer's list-duplication path takes precedence.
         "{{ATTENDEES}}": first_section("attendees"),
         "{{SUMMARY}}": first_section("meeting_summary", "summary", default=summary.strip() or "No summary provided."),
         "{{DECISIONS}}": first_section("decisions"),
@@ -407,6 +435,9 @@ def build_meeting_notes_template_placeholders(
 
 
 def _replace_docx_placeholder(xml: str, placeholder: str, value: str) -> tuple[str, int]:
+    """Legacy XML-string substitution. Used as a fallback for the headers/footers
+    path in render_meeting_notes_template_docx for any placeholders not handled
+    by the structured renderer."""
     escaped_value = escape(value)
     direct_count = xml.count(placeholder)
     updated = xml.replace(placeholder, escaped_value)
@@ -417,12 +448,263 @@ def _replace_docx_placeholder(xml: str, placeholder: str, value: str) -> tuple[s
     return updated, direct_count + split_count
 
 
-def render_meeting_notes_template_docx(template_docx: bytes, placeholders: dict[str, str]) -> bytes:
+# ── Structured DOCX template rendering ────────────────────────────────────────
+# Supports three behaviors:
+#   1. Simple text substitution: {{KEY}} → "value"
+#   2. List paragraph duplication: a paragraph containing {{KEY}} is duplicated
+#      once per item in list_items[{{KEY}}]. Preserves paragraph style, so
+#      bulleted-list paragraphs in the template stay bulleted in the output.
+#   3. Action items table row duplication: a table row containing any of
+#      {{ACTION_OWNER}}, {{ACTION_ITEM}}, {{ACTION_DUE}} is duplicated once
+#      per action item, with the three placeholders filled in each copy.
+# All three behaviors work in body paragraphs, table cells, and headers/footers.
+
+_ACTION_OWNER_PLACEHOLDER = "{{ACTION_OWNER}}"
+_ACTION_ITEM_PLACEHOLDER  = "{{ACTION_ITEM}}"
+_ACTION_DUE_PLACEHOLDER   = "{{ACTION_DUE}}"
+
+
+def _substitute_in_paragraph(paragraph, placeholder: str, value: str) -> int:
+    """Replace placeholder text in a paragraph, handling cases where the
+    placeholder spans multiple runs. Preserves paragraph-level styling
+    (list bullets, indent) but collapses run-level formatting *inside* the
+    placeholder to whatever the first run had."""
+    full_text = "".join(r.text or "" for r in paragraph.runs)
+    if placeholder not in full_text:
+        return 0
+    count = full_text.count(placeholder)
+    new_text = full_text.replace(placeholder, value)
+    runs = list(paragraph.runs)
+    if runs:
+        runs[0].text = new_text
+        for r in runs[1:]:
+            r.text = ""
+    return count
+
+
+def _all_paragraphs(doc):
+    """Yield every paragraph anywhere in the document: body, table cells,
+    headers, footers, and nested tables-within-cells."""
+    for p in doc.paragraphs:
+        yield p
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for p in cell.paragraphs:
+                    yield p
+                for nested in cell.tables:
+                    for nrow in nested.rows:
+                        for ncell in nrow.cells:
+                            for np in ncell.paragraphs:
+                                yield np
+    for section in doc.sections:
+        for hf in (section.header, section.footer):
+            for p in hf.paragraphs:
+                yield p
+            for table in hf.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for p in cell.paragraphs:
+                            yield p
+
+
+def _substitute_all(doc, placeholder: str, value: str) -> int:
+    count = 0
+    for p in _all_paragraphs(doc):
+        count += _substitute_in_paragraph(p, placeholder, value)
+    return count
+
+
+def _substitute_text_in_element(element, placeholder: str, value: str) -> int:
+    """Replace placeholder in all <w:t> text nodes within an XML element.
+    Used for row-duplication where we operate at the XML level after deepcopy."""
+    from docx.oxml.ns import qn  # local import to avoid hard dep at module load
+    count = 0
+    for t in element.iter(qn("w:t")):
+        if t.text and placeholder in t.text:
+            count += t.text.count(placeholder)
+            t.text = t.text.replace(placeholder, value)
+    return count
+
+
+def _duplicate_list_paragraphs_in_doc(doc, placeholder: str, items: list[str]) -> int:
+    """Find every paragraph containing the placeholder; duplicate it once per
+    item (preserving paragraph style); fill each copy with one item. If
+    items is empty, remove the placeholder paragraph entirely.
+
+    Operates on body, table cells, headers, footers.
+    """
+    from copy import deepcopy
+    from docx.text.paragraph import Paragraph
+
+    count = 0
+
+    # Snapshot paragraphs first so we don't iterate over a mutating collection
+    targets = []
+    for p in _all_paragraphs(doc):
+        if placeholder in (p.text or ""):
+            targets.append(p)
+
+    for p in targets:
+        element = p._element
+        parent_element = element.getparent()
+        if parent_element is None:
+            continue
+
+        if not items:
+            parent_element.remove(element)
+            count += 1
+            continue
+
+        # Snapshot the placeholder-bearing element BEFORE substituting, so
+        # each copy still has the raw placeholder we can target.
+        template_element = deepcopy(element)
+
+        # First item goes into the original paragraph (preserves any
+        # surrounding context / order)
+        _substitute_in_paragraph(p, placeholder, str(items[0]))
+        count += 1
+
+        # Additional items: deep-copy the SNAPSHOT (still has placeholder)
+        # and insert each after the original
+        idx = list(parent_element).index(element)
+        for offset, item in enumerate(items[1:], start=1):
+            new_element = deepcopy(template_element)
+            parent_element.insert(idx + offset, new_element)
+            new_p = Paragraph(new_element, p._parent)
+            _substitute_in_paragraph(new_p, placeholder, str(item))
+            count += 1
+
+    return count
+
+
+def _duplicate_action_item_rows(doc, action_items: list[dict[str, str]]) -> int:
+    """Find table rows containing any of the action-item placeholders and
+    duplicate them once per action item. If action_items is empty, fills
+    the row with em-dashes so the table doesn't show literal placeholders.
+    """
+    from copy import deepcopy
+
+    count = 0
+    placeholders = (_ACTION_OWNER_PLACEHOLDER, _ACTION_ITEM_PLACEHOLDER, _ACTION_DUE_PLACEHOLDER)
+
+    def row_contains_placeholders(row) -> bool:
+        text = " ".join(cell.text or "" for cell in row.cells)
+        return any(ph in text for ph in placeholders)
+
+    for table in doc.tables:
+        template_row = None
+        for row in table.rows:
+            if row_contains_placeholders(row):
+                template_row = row
+                break
+        if template_row is None:
+            continue
+
+        tr_element = template_row._element
+        tbl_element = tr_element.getparent()
+        if tbl_element is None:
+            continue
+
+        if not action_items:
+            # Fill placeholders with em-dashes so the table renders cleanly
+            for cell in template_row.cells:
+                for p in cell.paragraphs:
+                    _substitute_in_paragraph(p, _ACTION_OWNER_PLACEHOLDER, "—")
+                    _substitute_in_paragraph(p, _ACTION_ITEM_PLACEHOLDER, "No action items recorded.")
+                    _substitute_in_paragraph(p, _ACTION_DUE_PLACEHOLDER, "—")
+            count += 1
+            continue
+
+        # First item: fill in the original template row in place
+        first = action_items[0]
+        for cell in template_row.cells:
+            for p in cell.paragraphs:
+                _substitute_in_paragraph(p, _ACTION_OWNER_PLACEHOLDER, str(first.get("owner") or first.get("assignee") or ""))
+                _substitute_in_paragraph(p, _ACTION_ITEM_PLACEHOLDER, str(first.get("action") or first.get("item") or first.get("task") or ""))
+                _substitute_in_paragraph(p, _ACTION_DUE_PLACEHOLDER, str(first.get("due_date") or first.get("due") or ""))
+        count += 1
+
+        # Remaining items: deep-copy the template row's XML and substitute at the XML level
+        template_idx = list(tbl_element).index(tr_element)
+        for offset, item in enumerate(action_items[1:], start=1):
+            new_tr = deepcopy(tr_element)
+            tbl_element.insert(template_idx + offset, new_tr)
+            # Note: the deep-copy already contains the FIRST item's text because we
+            # mutated the original above. Reverse it: replace first item's values
+            # with this item's values.
+            _substitute_text_in_element(new_tr, str(first.get("owner") or first.get("assignee") or ""), str(item.get("owner") or item.get("assignee") or ""))
+            _substitute_text_in_element(new_tr, str(first.get("action") or first.get("item") or first.get("task") or ""), str(item.get("action") or item.get("item") or item.get("task") or ""))
+            _substitute_text_in_element(new_tr, str(first.get("due_date") or first.get("due") or ""), str(item.get("due_date") or item.get("due") or ""))
+            count += 1
+
+    return count
+
+
+def render_meeting_notes_template_docx(
+    template_docx: bytes,
+    placeholders: dict[str, str],
+    *,
+    list_items: Optional[dict[str, list[str]]] = None,
+    action_items: Optional[list[dict[str, str]]] = None,
+) -> bytes:
+    """Render the meeting notes DOCX template with substitution + duplication.
+
+    Two-phase rendering:
+
+      Phase 1 - structural transforms via python-docx (only run if list_items
+      or action_items are provided). Handles:
+        * List paragraph duplication: a paragraph containing a list-item
+          placeholder is duplicated once per item, preserving paragraph
+          style (bulleted-list paragraphs stay bulleted).
+        * Action-items table row duplication: the first row containing
+          {{ACTION_OWNER}}/{{ACTION_ITEM}}/{{ACTION_DUE}} is duplicated
+          per action item.
+
+      Phase 2 - simple text substitution via XML string replace. Iterates
+      every word/*.xml file in the zip (body, headers, footers, footnotes,
+      etc.) and does literal placeholder->value replacement. This catches
+      everything Phase 1 didn't, including headers and footers that aren't
+      reachable through python-docx's section API.
+
+    Args:
+        template_docx: The .docx template file contents as bytes.
+        placeholders: Simple text substitutions: {"{{KEY}}": "value"}.
+        list_items: Optional dict of {"{{KEY}}": [items...]} for paragraph
+            duplication. Empty list deletes the placeholder paragraph.
+        action_items: Optional list of {owner, action, due_date} dicts for
+            table row duplication.
+
+    Returns:
+        The rendered .docx file as bytes.
+    """
     if not template_docx:
         raise ValueError("Meeting notes template is empty")
 
+    structural_count = 0
+
+    # ---- Phase 1: python-docx structural transforms ----
+    if list_items or action_items is not None:
+        from docx import Document  # lazy import
+        try:
+            doc = Document(BytesIO(template_docx))
+        except Exception as exc:
+            raise ValueError("Meeting notes template is not a valid DOCX file") from exc
+
+        if list_items:
+            for placeholder, items in list_items.items():
+                structural_count += _duplicate_list_paragraphs_in_doc(doc, placeholder, list(items or []))
+
+        if action_items is not None:
+            structural_count += _duplicate_action_item_rows(doc, list(action_items))
+
+        intermediate = BytesIO()
+        doc.save(intermediate)
+        template_docx = intermediate.getvalue()
+
+    # ---- Phase 2: simple XML-level string substitution ----
     output = BytesIO()
-    replacements = 0
+    text_count = 0
     try:
         with zipfile.ZipFile(BytesIO(template_docx), "r") as source:
             names = set(source.namelist())
@@ -434,9 +716,9 @@ def render_meeting_notes_template_docx(template_docx: bytes, placeholders: dict[
                     content = source.read(info.filename)
                     if info.filename.startswith("word/") and info.filename.endswith(".xml"):
                         text = content.decode("utf-8")
-                        for placeholder, value in placeholders.items():
-                            text, count = _replace_docx_placeholder(text, placeholder, value)
-                            replacements += count
+                        for placeholder, value in (placeholders or {}).items():
+                            text, count = _replace_docx_placeholder(text, placeholder, value or "")
+                            text_count += count
                         content = text.encode("utf-8")
                     target.writestr(info, content)
     except zipfile.BadZipFile as exc:
@@ -444,7 +726,7 @@ def render_meeting_notes_template_docx(template_docx: bytes, placeholders: dict[
     except UnicodeDecodeError as exc:
         raise ValueError("Meeting notes template contains unsupported XML encoding") from exc
 
-    if replacements == 0:
+    if structural_count == 0 and text_count == 0:
         raise ValueError("Meeting notes template did not contain recognized placeholders")
     return output.getvalue()
 

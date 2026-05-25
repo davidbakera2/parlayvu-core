@@ -208,6 +208,15 @@ class Microsoft365Tests(unittest.TestCase):
 
     @staticmethod
     def _minimal_docx(document_body: str, extra_files: dict[str, str] | None = None) -> bytes:
+        """Build a minimal but spec-compliant DOCX for tests.
+
+        Earlier versions of this helper produced a DOCX with empty
+        `[Content_Types].xml` and `_rels/.rels` files - good enough for
+        naive string-replace rendering but rejected by python-docx, which
+        requires actual content-type overrides and relationship targets to
+        parse the package. The bodies below are the minimum spec-compliant
+        content for an Office Open XML word document.
+        """
         buffer = BytesIO()
         document_xml = (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -215,9 +224,23 @@ class Microsoft365Tests(unittest.TestCase):
             f"<w:body>{document_body}<w:sectPr/></w:body>"
             "</w:document>"
         )
+        content_types_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+            "</Types>"
+        )
+        package_rels_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+            "</Relationships>"
+        )
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr("[Content_Types].xml", "<Types />")
-            archive.writestr("_rels/.rels", "<Relationships />")
+            archive.writestr("[Content_Types].xml", content_types_xml)
+            archive.writestr("_rels/.rels", package_rels_xml)
             archive.writestr("word/document.xml", document_xml)
             for filename, content in (extra_files or {}).items():
                 archive.writestr(filename, content)
