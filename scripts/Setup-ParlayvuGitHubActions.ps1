@@ -96,14 +96,26 @@ foreach ($fc in $existingFcs) {
 if ($alreadyHas) {
     Write-Skip "Federated credential '$fcName' already exists"
 } else {
-    $params = @{
-        name      = $fcName
-        issuer    = "https://token.actions.githubusercontent.com"
-        subject   = "repo:${GitHubRepo}:ref:refs/heads/main"
-        audiences = @("api://AzureADTokenExchange")
-    } | ConvertTo-Json -Compress
-    az ad app federated-credential create --id $appId --parameters $params | Out-Null
-    Write-Ok "Federated credential created: $fcName"
+    # az on Windows is a .cmd wrapper, and PowerShell's argument passing
+    # strips/transforms the quotes in ConvertTo-Json output before az
+    # sees it. The result is invalid JSON like {name:foo} instead of
+    # {"name":"foo"}. The reliable workaround is to write the JSON to a
+    # temp file and use az's `--parameters @file` syntax.
+    $tmp = New-TemporaryFile
+    @"
+{
+  "name": "$fcName",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:${GitHubRepo}:ref:refs/heads/main",
+  "audiences": ["api://AzureADTokenExchange"]
+}
+"@ | Set-Content -Path $tmp -Encoding ASCII
+    try {
+        az ad app federated-credential create --id $appId --parameters "@$tmp" | Out-Null
+        Write-Ok "Federated credential created: $fcName"
+    } finally {
+        Remove-Item $tmp -ErrorAction SilentlyContinue
+    }
 }
 
 # -- Step 5: Capture ACR admin credentials (still needed for docker push) --
