@@ -67,7 +67,15 @@ For action items, build a table with **a header row** (column titles) and **one 
 +----------+------------------+----------+
 ```
 
-The renderer finds the row containing any of those three placeholders, duplicates it once per action item Nathan extracts, and fills the cells.
+The renderer finds the row containing any of those placeholders, duplicates it once per action item Nathan extracts, and fills the cells.
+
+**Accepted placeholder names per column** (use whichever feels natural; the renderer recognizes any of these):
+
+| Column | Accepted placeholders |
+|---|---|
+| Owner | `{{ACTION_OWNER}}`, `{{OWNER}}` |
+| Action item | `{{ACTION_ITEM}}`, `{{ACTION}}`, `{{ITEM}}`, `{{TASK}}` |
+| Due date | `{{ACTION_DUE}}`, `{{ACTION_DATE}}`, `{{DUE_DATE}}`, `{{DUE}}` |
 
 You can style the template row however you like — borders, fill color, font — and every duplicated row inherits the same styling.
 

@@ -459,9 +459,16 @@ def _replace_docx_placeholder(xml: str, placeholder: str, value: str) -> tuple[s
 #      per action item, with the three placeholders filled in each copy.
 # All three behaviors work in body paragraphs, table cells, and headers/footers.
 
-_ACTION_OWNER_PLACEHOLDER = "{{ACTION_OWNER}}"
-_ACTION_ITEM_PLACEHOLDER  = "{{ACTION_ITEM}}"
-_ACTION_DUE_PLACEHOLDER   = "{{ACTION_DUE}}"
+# Each column accepts a few natural-feeling placeholder names so the template
+# author isn't tied to one exact spelling. The renderer substitutes ALL
+# variants in each row, so a template using {{ACTION_DATE}} works the same
+# as one using {{ACTION_DUE}} or {{DUE_DATE}}.
+_ACTION_OWNER_PLACEHOLDERS = ("{{ACTION_OWNER}}", "{{OWNER}}")
+_ACTION_ITEM_PLACEHOLDERS  = ("{{ACTION_ITEM}}", "{{ACTION}}", "{{ITEM}}", "{{TASK}}")
+_ACTION_DUE_PLACEHOLDERS   = ("{{ACTION_DUE}}", "{{ACTION_DATE}}", "{{DUE_DATE}}", "{{DUE}}")
+_ALL_ACTION_PLACEHOLDERS = (
+    _ACTION_OWNER_PLACEHOLDERS + _ACTION_ITEM_PLACEHOLDERS + _ACTION_DUE_PLACEHOLDERS
+)
 
 
 def _substitute_in_paragraph(paragraph, placeholder: str, value: str) -> int:
@@ -578,19 +585,34 @@ def _duplicate_list_paragraphs_in_doc(doc, placeholder: str, items: list[str]) -
     return count
 
 
+def _action_item_owner(item: dict[str, str]) -> str:
+    return str(item.get("owner") or item.get("assignee") or "")
+
+
+def _action_item_action(item: dict[str, str]) -> str:
+    return str(item.get("action") or item.get("item") or item.get("task") or "")
+
+
+def _action_item_due(item: dict[str, str]) -> str:
+    return str(item.get("due_date") or item.get("due") or "")
+
+
 def _duplicate_action_item_rows(doc, action_items: list[dict[str, str]]) -> int:
     """Find table rows containing any of the action-item placeholders and
     duplicate them once per action item. If action_items is empty, fills
     the row with em-dashes so the table doesn't show literal placeholders.
+
+    The renderer accepts multiple natural placeholder names per column
+    (see _ACTION_OWNER_PLACEHOLDERS etc.) so the template author can use
+    {{ACTION_DATE}}, {{DUE_DATE}}, or {{ACTION_DUE}} interchangeably.
     """
     from copy import deepcopy
 
     count = 0
-    placeholders = (_ACTION_OWNER_PLACEHOLDER, _ACTION_ITEM_PLACEHOLDER, _ACTION_DUE_PLACEHOLDER)
 
     def row_contains_placeholders(row) -> bool:
         text = " ".join(cell.text or "" for cell in row.cells)
-        return any(ph in text for ph in placeholders)
+        return any(ph in text for ph in _ALL_ACTION_PLACEHOLDERS)
 
     for table in doc.tables:
         template_row = None
@@ -606,36 +628,43 @@ def _duplicate_action_item_rows(doc, action_items: list[dict[str, str]]) -> int:
         if tbl_element is None:
             continue
 
-        if not action_items:
-            # Fill placeholders with em-dashes so the table renders cleanly
-            for cell in template_row.cells:
+        def fill_row(row, owner: str, action: str, due: str) -> None:
+            """Substitute every accepted placeholder variant in the row with the
+            corresponding value. Variants we don't find are simply no-ops."""
+            for cell in row.cells:
                 for p in cell.paragraphs:
-                    _substitute_in_paragraph(p, _ACTION_OWNER_PLACEHOLDER, "—")
-                    _substitute_in_paragraph(p, _ACTION_ITEM_PLACEHOLDER, "No action items recorded.")
-                    _substitute_in_paragraph(p, _ACTION_DUE_PLACEHOLDER, "—")
+                    for ph in _ACTION_OWNER_PLACEHOLDERS:
+                        _substitute_in_paragraph(p, ph, owner)
+                    for ph in _ACTION_ITEM_PLACEHOLDERS:
+                        _substitute_in_paragraph(p, ph, action)
+                    for ph in _ACTION_DUE_PLACEHOLDERS:
+                        _substitute_in_paragraph(p, ph, due)
+
+        if not action_items:
+            fill_row(template_row, "—", "No action items recorded.", "—")
             count += 1
             continue
 
-        # First item: fill in the original template row in place
+        # Snapshot the template row BEFORE mutating the original. Each
+        # subsequent row is a deep-copy of this snapshot, so all rows
+        # start with the same placeholder text and get filled independently.
+        from docx.table import _Row  # type: ignore
+        template_snapshot = deepcopy(tr_element)
+
+        # First item: fill the original row in place
         first = action_items[0]
-        for cell in template_row.cells:
-            for p in cell.paragraphs:
-                _substitute_in_paragraph(p, _ACTION_OWNER_PLACEHOLDER, str(first.get("owner") or first.get("assignee") or ""))
-                _substitute_in_paragraph(p, _ACTION_ITEM_PLACEHOLDER, str(first.get("action") or first.get("item") or first.get("task") or ""))
-                _substitute_in_paragraph(p, _ACTION_DUE_PLACEHOLDER, str(first.get("due_date") or first.get("due") or ""))
+        fill_row(template_row, _action_item_owner(first), _action_item_action(first), _action_item_due(first))
         count += 1
 
-        # Remaining items: deep-copy the template row's XML and substitute at the XML level
+        # Remaining items: clone the snapshot and fill
         template_idx = list(tbl_element).index(tr_element)
         for offset, item in enumerate(action_items[1:], start=1):
-            new_tr = deepcopy(tr_element)
+            new_tr = deepcopy(template_snapshot)
             tbl_element.insert(template_idx + offset, new_tr)
-            # Note: the deep-copy already contains the FIRST item's text because we
-            # mutated the original above. Reverse it: replace first item's values
-            # with this item's values.
-            _substitute_text_in_element(new_tr, str(first.get("owner") or first.get("assignee") or ""), str(item.get("owner") or item.get("assignee") or ""))
-            _substitute_text_in_element(new_tr, str(first.get("action") or first.get("item") or first.get("task") or ""), str(item.get("action") or item.get("item") or item.get("task") or ""))
-            _substitute_text_in_element(new_tr, str(first.get("due_date") or first.get("due") or ""), str(item.get("due_date") or item.get("due") or ""))
+            # Wrap the inserted <w:tr> as a python-docx Row so fill_row can
+            # iterate its cells. _Row takes (tr_element, parent_table).
+            new_row = _Row(new_tr, table)
+            fill_row(new_row, _action_item_owner(item), _action_item_action(item), _action_item_due(item))
             count += 1
 
     return count
