@@ -424,6 +424,33 @@ async def _execute_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
 
 # ── Claude conversation loop ───────────────────────────────────────────────────
 
+def _build_current_date_context() -> str:
+    """
+    Inject today's date into Nathan's system prompt.
+
+    Claude has no built-in clock. Without this, when the client says
+    "Friday" or "tomorrow" or "next week", Nathan has no anchor to
+    resolve from - he'll pass the literal phrase through as the action
+    item due_date, and the rendered DOCX shows "Friday" or nothing
+    instead of a real date.
+
+    Format keeps day-of-week up front so resolving "this Friday" is
+    one step of arithmetic.
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    return (
+        f"CURRENT DATE: {now.strftime('%A, %B %d, %Y')} (UTC).\n"
+        f"Use this as the anchor when meeting participants mention RELATIVE "
+        f"dates like 'tomorrow', 'this Friday', 'next week', 'in two days', "
+        f"'end of month'. Resolve them to specific calendar dates (e.g. "
+        f"'June 1, 2026') BEFORE you pass them as action item due_dates or "
+        f"meeting dates. The client should hear and see real dates, not "
+        f"'Friday'. If a relative reference is ambiguous (e.g. 'soon', "
+        f"'next time'), ask for clarification."
+    )
+
+
 def _openai_messages_to_anthropic(
     messages: list[dict[str, Any]],
 ) -> tuple[str, list[dict[str, Any]]]:
@@ -431,8 +458,11 @@ def _openai_messages_to_anthropic(
     Convert OpenAI-format messages to Anthropic format.
     Returns (system_prompt, anthropic_messages).
     Merges any system messages from Tavus with our Nathan prompt.
+
+    Prepends a CURRENT DATE context block so Nathan knows what "today"
+    means and can resolve relative date references in real time.
     """
-    system_parts = [_NATHAN_MEETING_SYSTEM]
+    system_parts = [_build_current_date_context(), _NATHAN_MEETING_SYSTEM]
     anthropic_msgs: list[dict[str, Any]] = []
 
     for msg in messages:
