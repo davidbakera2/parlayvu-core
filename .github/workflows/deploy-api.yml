@@ -16,8 +16,9 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: parlayvucore.azurecr.io
-  RESOURCE_GROUP: rg-parlayvu-demo
+  REGISTRY: parlayvuacr.azurecr.io
+  RESOURCE_GROUP: rg-parlayvu-prod
+  ACR_NAME: parlayvuacr
   CONTAINER_APP: parlayvu-api
   IMAGE_NAME: parlayvu-api
 
@@ -39,7 +40,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to Azure Container Registry
-        run: az acr login --name parlayvucore
+        run: az acr login --name ${{ env.ACR_NAME }}
 
       - name: Build and push API image
         uses: docker/build-push-action@v5
