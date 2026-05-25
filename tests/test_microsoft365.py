@@ -2,7 +2,12 @@ import os
 import unittest
 import zipfile
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
+
+# Tests that exercise the Teams-download path force the local-first lookup
+# to miss by pointing _ARTIFACTS_ROOT at a path that can't exist.
+_NO_LOCAL_ARTIFACTS_DIR = Path("__no_local_artifacts_for_tests__")
 
 from fastapi.testclient import TestClient
 
@@ -509,23 +514,24 @@ class Microsoft365Tests(unittest.TestCase):
         ]
 
         project_context = {"client": {"id": "ramair", "name": "RamAir International"}}
-        with patch("app.services.meeting_notes_service.MicrosoftGraphClient", return_value=graph_client):
-            with patch("app.main.get_project_context", return_value=project_context):
-                with patch("app.services.meeting_notes_service.record_generated_output", return_value="output-1") as generated_output:
-                    with patch("app.services.meeting_notes_service.record_agent_event", return_value="event-1") as event:
-                        client = TestClient(app)
-                        response = client.post(
-                            "/m365/files/meeting-notes",
-                            json={
-                                "title": "RamAir Weekly",
-                                "summary": "Nathan captured the client-approved next steps.",
-                                "client_id": "ramair",
-                                "client_name": "RamAir",
-                                "project_id": "ramair-straight-from-the-hart",
-                                "team_id": "team-1",
-                                "channel_id": "channel-1",
-                            },
-                        )
+        with patch("app.services.meeting_notes_service.MicrosoftGraphClient", return_value=graph_client), \
+             patch("app.services.meeting_notes_service._ARTIFACTS_ROOT", _NO_LOCAL_ARTIFACTS_DIR), \
+             patch("app.main.get_project_context", return_value=project_context), \
+             patch("app.services.meeting_notes_service.record_generated_output", return_value="output-1") as generated_output, \
+             patch("app.services.meeting_notes_service.record_agent_event", return_value="event-1") as event:
+            client = TestClient(app)
+            response = client.post(
+                "/m365/files/meeting-notes",
+                json={
+                    "title": "RamAir Weekly",
+                    "summary": "Nathan captured the client-approved next steps.",
+                    "client_id": "ramair",
+                    "client_name": "RamAir",
+                    "project_id": "ramair-straight-from-the-hart",
+                    "team_id": "team-1",
+                    "channel_id": "channel-1",
+                },
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["files"]["markdown"]["id"], "md-1")
@@ -569,21 +575,22 @@ class Microsoft365Tests(unittest.TestCase):
             {"id": "docx-1", "name": "ramair-weekly.docx", "webUrl": "https://sharepoint.example/ramair-weekly.docx"},
         ]
 
-        with patch("app.services.meeting_notes_service.MicrosoftGraphClient", return_value=graph_client):
-            with patch("app.services.meeting_notes_service.record_generated_output", return_value="output-1"):
-                with patch("app.services.meeting_notes_service.record_agent_event", return_value="event-1"):
-                    client = TestClient(app)
-                    response = client.post(
-                        "/m365/files/meeting-notes",
-                        json={
-                            "title": "RamAir Weekly",
-                            "summary": "Nathan captured the client-approved next steps.",
-                            "client_id": "ramair",
-                            "project_id": "ramair-straight-from-the-hart",
-                            "team_id": "team-1",
-                            "channel_id": "channel-1",
-                        },
-                    )
+        with patch("app.services.meeting_notes_service.MicrosoftGraphClient", return_value=graph_client), \
+             patch("app.services.meeting_notes_service._ARTIFACTS_ROOT", _NO_LOCAL_ARTIFACTS_DIR), \
+             patch("app.services.meeting_notes_service.record_generated_output", return_value="output-1"), \
+             patch("app.services.meeting_notes_service.record_agent_event", return_value="event-1"):
+            client = TestClient(app)
+            response = client.post(
+                "/m365/files/meeting-notes",
+                json={
+                    "title": "RamAir Weekly",
+                    "summary": "Nathan captured the client-approved next steps.",
+                    "client_id": "ramair",
+                    "project_id": "ramair-straight-from-the-hart",
+                    "team_id": "team-1",
+                    "channel_id": "channel-1",
+                },
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["docx_template"]["status"], "fallback")

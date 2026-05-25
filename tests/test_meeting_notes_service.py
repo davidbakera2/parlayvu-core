@@ -10,11 +10,17 @@ import asyncio
 import unittest
 import zipfile
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from app.microsoft365 import Microsoft365Settings
 from app.services.meeting_notes_service import publish_meeting_notes_to_teams
 from app.tools.meeting_notes_tool import save_meeting_notes
+
+
+# Tests that exercise the Teams-download path force the local-first lookup
+# to miss by pointing _ARTIFACTS_ROOT at a path that can't exist.
+_NO_LOCAL_ARTIFACTS = Path("__no_local_artifacts_for_tests__")
 
 
 def _graph_client_with_template():
@@ -160,6 +166,9 @@ class MeetingNotesServiceTests(unittest.TestCase):
             "app.services.meeting_notes_service.MicrosoftGraphClient",
             return_value=graph_client,
         ), patch(
+            "app.services.meeting_notes_service._ARTIFACTS_ROOT",
+            _NO_LOCAL_ARTIFACTS,
+        ), patch(
             "app.services.meeting_notes_service.record_generated_output",
             return_value="output-1",
         ), patch(
@@ -180,6 +189,56 @@ class MeetingNotesServiceTests(unittest.TestCase):
             "template missing",
             result["docx_template"]["fallback_reason"],
         )
+
+    def test_loads_template_from_local_client_artifacts_first(self):
+        """When client_artifacts/<client>/<template> exists locally, the
+        service must use that and NOT fall back to Teams download."""
+        graph_client = AsyncMock()
+        graph_client.settings = Microsoft365Settings(
+            tenant_id="tenant",
+            client_id="client",
+            client_secret="secret",
+            graph_scope="scope",
+            webhook_client_state="state",
+            allow_send=False,
+            agent_mailboxes={"nathan": "nathan@parlayvu.ai"},
+        )
+        # If the service hits Teams, this would explode loudly. We want it
+        # to NEVER be called when the local template exists.
+        graph_client.download_teams_channel_file.side_effect = AssertionError(
+            "Teams download should not be called when local template exists"
+        )
+        graph_client.upload_teams_channel_file.side_effect = [
+            {"id": "md-local", "name": "x.md", "webUrl": "https://sharepoint.example/x.md"},
+            {"id": "docx-local", "name": "x.docx", "webUrl": "https://sharepoint.example/x.docx"},
+        ]
+
+        # client_id="ramair" exists at client_artifacts/ramair/00_Client_Brief/
+        # Templates/RamAir Meeting Notes Template.docx in this repo.
+        with patch(
+            "app.services.meeting_notes_service.MicrosoftGraphClient",
+            return_value=graph_client,
+        ), patch(
+            "app.services.meeting_notes_service.record_generated_output",
+            return_value="output-local",
+        ), patch(
+            "app.services.meeting_notes_service.record_agent_event",
+            return_value="event-local",
+        ):
+            result = asyncio.run(
+                publish_meeting_notes_to_teams(
+                    title="Local Template Test",
+                    summary="Verifying client_artifacts is the source of truth.",
+                    client_id="ramair",
+                )
+            )
+
+        self.assertEqual(result["status"], "published")
+        self.assertEqual(result["docx_template"]["status"], "template")
+        # Confirm the template came from local artifacts, not Teams
+        self.assertEqual(result["docx_template"]["source"], "client_artifacts")
+        self.assertIn("client_artifacts/ramair", result["docx_template"]["path"])
+        graph_client.download_teams_channel_file.assert_not_awaited()
 
 
 class SaveMeetingNotesToolTests(unittest.TestCase):

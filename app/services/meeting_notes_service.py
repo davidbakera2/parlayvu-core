@@ -21,6 +21,7 @@ fallback, same memory recording, same event log. No drift.
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -97,6 +98,59 @@ def _template_fallback_reason(exc: Exception) -> str:
     return str(exc)
 
 
+_ARTIFACTS_ROOT = Path("client_artifacts")
+
+
+async def _load_template_docx(
+    *,
+    client_id: str,
+    template_path: str,
+    team_id: str | None,
+    channel_id: str | None,
+    graph_client: MicrosoftGraphClient,
+) -> tuple[bytes, dict[str, Any]]:
+    """
+    Locate the meeting-notes DOCX template, preferring local client_artifacts
+    over the Teams channel.
+
+    Source-of-truth order:
+      1. client_artifacts/<client_id>/<template_path>   (ships in Docker image)
+      2. Teams channel /<template_path>                  (legacy fallback)
+
+    Local-first is the right default because client_artifacts is the canonical
+    template store: it ships with the code, gets versioned in git, and updates
+    on every deploy. The Teams fallback exists for clients whose templates
+    haven't been moved into client_artifacts yet, or for ad-hoc overrides.
+
+    Returns (docx_bytes, source_info_dict). Raises if neither source has it.
+    """
+    local_path = _ARTIFACTS_ROOT / client_id / template_path
+    if local_path.is_file():
+        try:
+            content = local_path.read_bytes()
+            return content, {
+                "status": "template",
+                "source": "client_artifacts",
+                "path": str(local_path).replace("\\", "/"),
+                "fallback_reason": None,
+            }
+        except Exception as exc:
+            logger.warning("Local template found at %s but unreadable: %s", local_path, exc)
+            # Fall through to Teams attempt rather than failing outright
+
+    template_docx = await graph_client.download_teams_channel_file(
+        file_path=template_path,
+        team_id=team_id,
+        channel_id=channel_id,
+    )
+    return template_docx, {
+        "status": "template",
+        "source": "teams_channel",
+        "path": template_path,
+        "fallback_reason": None,
+    }
+
+
 async def publish_meeting_notes_to_teams(
     *,
     title: str,
@@ -162,11 +216,14 @@ async def publish_meeting_notes_to_teams(
     stem = sanitize_file_stem(title)
     graph_client = MicrosoftGraphClient()
     template_path = graph_client.settings.files_meeting_notes_template_path
-    expected_template_location = f"Teams channel Files root/{template_path.strip('/')}"
+    expected_template_location = (
+        f"client_artifacts/{client_id}/{template_path.strip('/')} "
+        f"OR Teams channel Files root/{template_path.strip('/')}"
+    )
 
-    # Try the templated DOCX first, fall back to the generated DOCX if the
-    # template can't be downloaded or rendered. Either way we end up with
-    # bytes we can upload.
+    # Try the templated DOCX first (local-first via _load_template_docx),
+    # fall back to the generated DOCX if neither source has it or the render
+    # fails. Either way we end up with bytes we can upload.
     docx_template_info: dict[str, Any] = {
         "status": "template",
         "path": template_path,
@@ -174,10 +231,18 @@ async def publish_meeting_notes_to_teams(
         "fallback_reason": None,
     }
     try:
-        template_docx = await graph_client.download_teams_channel_file(
-            file_path=template_path,
+        template_docx, source_info = await _load_template_docx(
+            client_id=client_id,
+            template_path=template_path,
             team_id=team_id,
             channel_id=channel_id,
+            graph_client=graph_client,
+        )
+        docx_template_info.update(source_info)
+        logger.info(
+            "Meeting notes template loaded from %s: %s",
+            source_info.get("source"),
+            source_info.get("path"),
         )
         display = _client_display_name(client_name=client_name, client_id=client_id)
         docx = render_meeting_notes_template_docx(
