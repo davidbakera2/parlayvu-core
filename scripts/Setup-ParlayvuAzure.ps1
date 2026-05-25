@@ -91,7 +91,6 @@ Write-Step "Step 3: Ensure signed-in user has Owner on subscription"
 # Query by object ID (avoids UPN aliasing weirdness when multiple users have similar names)
 $existingAssignments = az role assignment list `
     --assignee-object-id $myId `
-    --assignee-principal-type User `
     --scope "/subscriptions/$SubscriptionId" `
     --query "[?roleDefinitionName=='Owner']" | ConvertFrom-Json
 
