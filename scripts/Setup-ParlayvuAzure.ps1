@@ -56,6 +56,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# az writes informational warnings to stderr; suppress so PS 5.1 doesn't
+# promote them to terminating errors when ErrorActionPreference=Stop
+$env:AZURE_CORE_ONLY_SHOW_ERRORS = "true"
 
 function Write-Step($msg)   { Write-Host ""; Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg)     { Write-Host "[OK]   $msg" -ForegroundColor Green }
@@ -138,9 +141,12 @@ foreach ($ns in @("Microsoft.App", "Microsoft.ContainerRegistry", "Microsoft.Ope
 
 # -- Step 5: Resource group ------------------------------------------------
 Write-Step "Step 5: Resource group $ResourceGroup"
-$rg = az group show --name $ResourceGroup 2>$null | ConvertFrom-Json
-if ($rg) {
-    Write-Skip "Resource group already exists in $($rg.location)"
+# `az group exists` returns "true"/"false" on stdout without erroring - safer
+# than `az group show` which writes to stderr on miss and trips ErrorAction.
+$rgExists = (az group exists --name $ResourceGroup) -eq "true"
+if ($rgExists) {
+    $rgLocation = az group show --name $ResourceGroup --query "location" -o tsv
+    Write-Skip "Resource group already exists in $rgLocation"
 } else {
     az group create --name $ResourceGroup --location $Location | Out-Null
     Write-Ok "Created in $Location"
@@ -148,7 +154,9 @@ if ($rg) {
 
 # -- Step 6: ACR -----------------------------------------------------------
 Write-Step "Step 6: Azure Container Registry"
-$existingAcr = az acr list --resource-group $ResourceGroup --query "[0]" 2>$null | ConvertFrom-Json
+# List-and-pick avoids the show-on-empty stderr promotion in PS 5.1
+$acrJson = az acr list --resource-group $ResourceGroup -o json
+$existingAcr = ($acrJson | ConvertFrom-Json) | Select-Object -First 1
 if ($existingAcr) {
     $finalAcrName = $existingAcr.name
     Write-Skip "ACR $finalAcrName already exists"
@@ -162,11 +170,12 @@ if ($existingAcr) {
     $available = az acr check-name --name $finalAcrName --query nameAvailable -o tsv
     if ($available -ne "true") {
         Write-Warn "$finalAcrName is taken globally. Trying alternatives..."
+        $found = $false
         foreach ($alt in @("parlayvuagents","parlayvuprod","parlayvuregistry","parlayvucr2026","parlayvuacr1")) {
             $a = az acr check-name --name $alt --query nameAvailable -o tsv
-            if ($a -eq "true") { $finalAcrName = $alt; break }
+            if ($a -eq "true") { $finalAcrName = $alt; $found = $true; break }
         }
-        if ($finalAcrName -eq $AcrName) {
+        if (-not $found) {
             Write-Fail "No fallback ACR name was available. Re-run with -AcrName <something-unique>."
             exit 1
         }
@@ -182,7 +191,9 @@ $acrServer = "$finalAcrName.azurecr.io"
 
 # -- Step 7: Container Apps environment ------------------------------------
 Write-Step "Step 7: Container Apps environment $ContainerEnvName"
-$existingEnv = az containerapp env show --name $ContainerEnvName --resource-group $ResourceGroup 2>$null | ConvertFrom-Json
+# List-and-filter pattern again - no stderr noise on miss
+$envJson = az containerapp env list --resource-group $ResourceGroup --query "[?name=='$ContainerEnvName']" -o json
+$existingEnv = ($envJson | ConvertFrom-Json) | Select-Object -First 1
 if ($existingEnv -and $existingEnv.properties.provisioningState -eq "Succeeded") {
     Write-Skip "Environment already exists and is Succeeded"
 } else {
