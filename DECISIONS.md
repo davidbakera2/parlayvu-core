@@ -1,0 +1,145 @@
+# Architecture Decisions
+
+> The "why" behind key calls so future-us doesn't re-litigate them. Each entry: what we chose, what we explicitly didn't, why, and what would make us revisit.
+
+**See also:** [ARCHITECTURE.md](./ARCHITECTURE.md) for current state, [ROADMAP.md](./ROADMAP.md) for what's next.
+
+---
+
+## 1. Tavus over HeyGen for avatar
+
+**Chosen:** Tavus CVI with Phoenix-3 model. Persona points at our custom LLM endpoint.
+
+**Considered and rejected:** HeyGen Streaming Avatar API.
+
+**Why Tavus:**
+- Tavus's CVI is a complete conversation pipeline (STT + turn-taking + barge-in + TTS + avatar). HeyGen Streaming Avatar is just a video stream — you build conversation logic yourself. That's 4-6 weeks of integration to match what Tavus gives us out of the box.
+- ~1-second response latency vs. 2-4 seconds for a custom HeyGen pipeline. Latency is the single biggest "is this a real person?" UX delta.
+- The custom_llm hook lets us plug in Claude Opus 4.7 + tools as Nathan's brain.
+- Visual fidelity tradeoff: HeyGen is slightly better in close-up shots. Doesn't matter when Nathan is one tile of many in a Teams call.
+
+**What would make us reconsider:**
+- Tavus pricing changes that make it >$500/mo for active client work
+- Tavus's turn-taking falls apart in noisy multi-person Teams calls (we'd end up wrapping their stream anyway, at which point HeyGen's flexibility wins)
+- A specific need for voice cloning quality that exceeds Tavus's options
+
+**Migration cost if we change our mind:** ~1 week of work to swap the avatar provider abstraction at `app/avatar/`.
+
+---
+
+## 2. Document-dumping over RAG for client memory (today)
+
+**Chosen:** `get_project_context(client_id)` reads the top 3 markdown files from each standard folder in `client_artifacts/<client>/`, caps each at 6K chars, dumps the whole blob into Nathan's context.
+
+**Considered and rejected (for now):** Proper RAG with embeddings, vector store, chunked retrieval, citations.
+
+**Why document-dumping today:**
+- One real client (RamAir) with ~20 markdown files total. Token budget is comfortable.
+- Building RAG infrastructure first means delaying everything else.
+- The infrastructure-vs-Claude tradeoff: Claude is already extremely good at scanning a 20K-character context and finding the relevant parts. The marginal value of retrieval over dumping is small at this scale.
+- Shipping is more valuable than scaling for a problem we don't yet have.
+
+**What would make us reconsider (any of these):**
+- Any client has >30 markdown files
+- We accumulate >10 saved meeting notes per client (those grow quickly with regular cadence)
+- Nathan needs to answer specific historical questions ("what did we decide about subject lines in March?") and starts getting them wrong
+- Token costs per Tavus turn start mattering
+
+**When we build it:** pgvector in Neon (already a Postgres user, no new infra), Voyage-3-lite embeddings (Anthropic-recommended), hybrid retrieval (vector + Postgres full-text search). Two complementary tools: keep `get_project_context` for the always-cheap summary, add `search_project_memory(client_id, query, k=5)` for targeted lookup.
+
+**Cost when we build it:** ~1 day of focused work.
+
+---
+
+## 3. One Nathan brain across every surface
+
+**Chosen:** All conversational surfaces for Nathan (Tavus avatar, Teams chat, Slack later, SMS later, email later) route through the same `/v1/chat/completions` endpoint. Each surface is a thin adapter that translates its native format into OpenAI Chat Completions messages.
+
+**Considered and rejected:** Separate Nathan logic per surface (which is actually what we have *today* — Tavus uses `/v1/chat/completions`, Teams uses the older agent graph).
+
+**Why one brain:**
+- Prompt updates apply everywhere. Add a tool, every surface gets it.
+- New surfaces become trivial — write a Bot Framework / Slack / SMS adapter once, done.
+- The cost of N brains is N system prompts to maintain, N tool registries, N anti-hallucination rule sets that can drift.
+- All Nathan's intelligence is in one place (`app/nathan_llm.py` + tools). Surface adapters are dumb plumbing.
+
+**What we deliberately accept:**
+- The OpenAI Chat Completions format isn't a perfect fit for every channel (Teams has adaptive cards, Slack has blocks). Surface adapters do the translation; Nathan's responses are plain prose by design.
+- The single endpoint is now a critical dependency. We mitigate with the `/readiness` check and Container Apps's scaling (min 1, max 3 replicas).
+
+**When this might break down:** If a surface needs fundamentally different conversation patterns (e.g., async email threads spanning days). Then we'd consider a sister endpoint with different memory semantics, not a fork of Nathan.
+
+---
+
+## 4. `client_artifacts/` is the source of truth for client knowledge
+
+**Chosen:** Each client gets a folder `client_artifacts/<client_id>/` with a standard 6-folder structure (00_Client_Brief, 01_Source_Material, 02_Planning, 03_Deliverables, 04_Approvals, 05_Performance). Templates live here too (`00_Client_Brief/Templates/`). The folder ships in the Docker image. Postgres `project_memory` holds metadata + audit trail but defers to flat files for content.
+
+**Considered and rejected:**
+- Postgres-as-truth (with files as derived artifacts) — clients can't see/edit, harder to grep, requires sync logic
+- Teams files / SharePoint as truth (with code reading via Graph) — adds Graph latency to every read, can't ship templates in the image, harder to test locally
+- Hybrid as peers (what we had at the start) — drift between sources, confusing
+
+**Why files in repo:**
+- Templates are version-controlled with the code that uses them. Update template, push, CI deploys both.
+- Local testing works without M365 access.
+- `grep` works. Diffing works.
+- Clients can see their content rendered (we already publish back to Teams via `save_meeting_notes`).
+
+**What we deliberately accept:**
+- `client_artifacts/` is checked into git. Fine for non-confidential demos and the RamAir engagement. Becomes a problem the moment a client requires NDA-grade isolation.
+- Migration path when it matters: a `client_artifacts_private/` tree git-ignored locally and synced from a separate private repo or S3 bucket per client. Same code path; just a different mount.
+
+**When this might break down:** Confidential clients, very large source material (videos, datasets), or any content that shouldn't sit in a public Docker image.
+
+---
+
+## 5. Lean tools over building infrastructure (the May 25 lesson)
+
+**Chosen:** When adding a new Nathan capability, default to "give Claude one small tool and update the prompt" before reaching for "build a system."
+
+**Considered and rejected** (mostly by me, claude, after David rightly called me out): proposing 2-3 day builds for things Claude can already do with one extra tool.
+
+**Why:**
+- Claude is genuinely good at design, writing, reasoning. The "skill" is access, not infrastructure.
+- Concrete examples:
+  - "Real web design skills for Dylan" → 2-3 hour `write_site_file` tool + prompt update, NOT 2-3 day analyzer + template library + image pipeline
+  - "Smart meeting notes" → 10-field structured tool + good prompt, NOT a NLP pipeline
+  - "Client preferences" → YAML file per client + auto-inject in prompt, NOT a preferences microservice
+- Big infrastructure is hard to change later. Small tools are easy to replace.
+- Shipping a thing that's working in 3 hours beats a "real system" in 3 days, especially when we don't yet know what the final shape needs to be.
+
+**The bar for building infrastructure:** Only when (a) we've shipped the lean version, (b) it's hitting a wall, and (c) the wall is structural (data model, scale, integration) rather than "could use polish."
+
+**What this means in practice:**
+- Default to adding tools to Nathan, not new services or pipelines
+- Per-client config = file, not a microservice
+- Templates = repo files, not a CMS
+- Memory = document-dumping until clients actually need RAG
+- We can always refactor up. We can rarely refactor down.
+
+---
+
+## 6. ParlayVU tenant migration (Baker Strategy → ParlayVU's own M365 + Azure)
+
+**Chosen:** Rebuild all infrastructure in ParlayVU's own Entra tenant and Azure subscription. Decommission Baker Strategy resources after stable operation.
+
+**Considered and rejected:** Cross-tenant access (multi-tenant app registration in Baker Strategy with consent in ParlayVU). Azure subscription transfer.
+
+**Why rebuild over migrate:**
+- Tiny surface area (one Container App, one ACR, one resource group). Rebuild = ~3 hours.
+- Subscription transfers are operationally complex and have weird permission edge cases.
+- All persistent state is external — Neon DB stays where it is, Teams files stay where they are, Tavus persona stays where it is. We're only rebuilding stateless infra.
+- Cleaner audit story: ParlayVU's resources live in ParlayVU's tenant, owned by ParlayVU's accounts. No "this lives in our former parent's tenant" confusion.
+
+**What we built to make this fast:**
+- Four idempotent PowerShell scripts in `scripts/` that re-create the full Azure + Entra setup. Safe to re-run. Future tenant migrations (if we ever spin up a separate tenant for a big client) are templated.
+
+**What we deliberately accept:**
+- The migration revealed our env vars had ~20 orphaned values from previous experiments (`HEYGEN_*`, `M365_*` duplicates, `TEAMS_BOT_*` duplicates). Cleanup is a follow-up task. Doesn't break anything; just noise.
+- Nathan's mailbox is currently also Global Admin (see ROADMAP.md "Identity hygiene"). Pragmatic but worth cleaning up.
+
+**What we would do differently next time:**
+- Set up the SP elevation + role-grant + re-login sequence as a single script upfront. We hit "AuthorizationFailed" three times because of token caching after role grant.
+- Test the JSON-quoting workaround for `az ad app federated-credential create` first. PowerShell + `az.cmd` quoting bit us.
+- Verify Bot Framework messaging endpoint and Tavus persona base_url get updated BEFORE decommissioning old infra. (We caught both; just risky.)
