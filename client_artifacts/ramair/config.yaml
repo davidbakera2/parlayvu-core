@@ -1,0 +1,12 @@
+client_id: ramair
+display_name: "RamAir International"
+teams:
+  team_id: "33a5c785-1cf8-4ec5-b894-c8957c608ed8"
+  channel_id: "19:pkhXam4_sg85C1ha_P8vhv5mVyI44YqD2I9l4cqdMO01@thread.tacv2"
+  meeting_notes_folder: "03_Deliverables/Meeting Notes"
+  template_path: "00_Client_Brief/Templates/RamAir Meeting Notes Template.docx"
+preferences:
+  pronunciation:
+    RamAir: "Ram-Air"
+  tone: null
+  authorized_contacts: []

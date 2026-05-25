@@ -24,7 +24,15 @@
     Your Tavus API key (TAVUS_API_KEY).
 
 .PARAMETER PersonaId
-    Nathan's Tavus persona ID (TAVUS_PERSONA_ID). Default: p03513c08d91
+    The Tavus persona ID to update. ParlayVU runs one persona per client
+    (e.g. p03513c08d91 = RamAir's Nathan). Create a new persona in the
+    Tavus UI for each additional client and pass its ID here.
+
+.PARAMETER ClientId
+    The ParlayVU client_id this persona represents (e.g. "ramair",
+    "christshope"). The script injects an X-Parlayvu-Client-Id header into
+    the persona's custom-LLM config; our /v1/chat/completions endpoint reads
+    that header to load the right client_artifacts/<client_id>/config.yaml.
 
 .PARAMETER ParlayVuApiUrl
     The base URL of the ParlayVU API. Used as the custom_llm base_url.
@@ -39,17 +47,19 @@
     Print the PATCH payload without sending it.
 
 .EXAMPLE
-    # Dry run to review the payload
+    # Dry run to review the payload (RamAir's Nathan persona)
     .\Update-NathanPersonaLLM.ps1 `
         -TavusApiKey $env:TAVUS_API_KEY `
         -PersonaId p03513c08d91 `
+        -ClientId ramair `
         -ParlayVuApiUrl https://parlayvu-api.kindsmoke-12345678.eastus.azurecontainerapps.io `
         -DryRun
 
-    # Live update
+    # Live update for Christ's Hope (use the new persona ID created in Tavus UI)
     .\Update-NathanPersonaLLM.ps1 `
         -TavusApiKey $env:TAVUS_API_KEY `
-        -PersonaId p03513c08d91 `
+        -PersonaId <ch-persona-id> `
+        -ClientId christshope `
         -ParlayVuApiUrl https://parlayvu-api.kindsmoke-12345678.eastus.azurecontainerapps.io `
         -NathanLlmApiKey $env:NATHAN_LLM_API_KEY
 #>
@@ -57,7 +67,11 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$TavusApiKey,
 
-    [string]$PersonaId = "p03513c08d91",
+    [Parameter(Mandatory = $true)]
+    [string]$PersonaId,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ClientId,
 
     [Parameter(Mandatory = $true)]
     [string]$ParlayVuApiUrl,
@@ -123,6 +137,12 @@ $llmLayerValue = [ordered]@{
     # /v1/, so the base_url must include that prefix or Tavus hits a 404.
     base_url = "$baseUrl/v1"
     api_key  = if ($NathanLlmApiKey) { $NathanLlmApiKey } else { "" }
+    # Per-client binding: the ParlayVU API reads X-Parlayvu-Client-Id to
+    # choose which client_artifacts/<id>/config.yaml drives meeting-note
+    # publishing, pronunciation, and tone.
+    headers  = [ordered]@{
+        "X-Parlayvu-Client-Id" = $ClientId
+    }
 }
 
 $operation = [ordered]@{
@@ -139,10 +159,12 @@ $patchJson = "[$operationJson]"
 Write-Host ""
 Write-Host "=== Tavus Persona Patch ===" -ForegroundColor Cyan
 Write-Host "Persona ID  : $PersonaId"
+Write-Host "Client ID   : $ClientId"
 Write-Host "path        : /layers/llm"
 Write-Host "model       : nathan-opus"
 Write-Host "base_url    : $baseUrl"
 Write-Host "api_key set : $($NathanLlmApiKey -ne '')"
+Write-Host "headers     : X-Parlayvu-Client-Id=$ClientId"
 Write-Host ""
 Write-Host "Patch payload:"
 Write-Host $patchJson

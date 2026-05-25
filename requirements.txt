@@ -16,3 +16,5 @@ psycopg2-binary>=2.9.0
 sqlalchemy>=2.0.0
 # Nathan conversational LLM + tools
 anthropic>=0.40.0
+# Per-client config (client_artifacts/<client>/config.yaml)
+PyYAML>=6.0

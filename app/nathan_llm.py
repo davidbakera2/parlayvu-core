@@ -40,6 +40,7 @@ from typing import Any, AsyncIterator
 
 import anthropic
 
+from app.client_config import ClientConfigError, load_client_config
 from app.tools.web_tools import fetch_url, web_search
 from app.tools.teams_files_tool import list_teams_files, read_teams_file
 from app.tools.project_tools import get_project_context
@@ -451,8 +452,42 @@ def _build_current_date_context() -> str:
     )
 
 
+def _build_client_preferences_context(client_id: str | None) -> str | None:
+    """
+    Inject per-client preferences (pronunciation, tone) into Nathan's system prompt.
+
+    Loaded from client_artifacts/<client_id>/config.yaml. Returns None when no
+    client_id is bound (e.g. local dev with no header) or when the client's
+    config has no preferences worth mentioning — letting the caller skip the
+    block entirely rather than emitting an empty section.
+    """
+    if not client_id:
+        return None
+    try:
+        config = load_client_config(client_id)
+    except ClientConfigError as exc:
+        logger.warning("Skipping client preferences for %r: %s", client_id, exc)
+        return None
+
+    lines = [f"ACTIVE CLIENT: {config.display_name} (client_id: {config.client_id})."]
+    lines.append(
+        "Use this client_id for get_project_context and save_meeting_notes "
+        "unless the client themselves names a different one out loud."
+    )
+    for word, spoken in config.preferences.pronunciation.items():
+        lines.append(
+            f'Pronunciation: when you say "{word}" aloud, render it as "{spoken}" '
+            f"so the text-to-speech voices it correctly."
+        )
+    if config.preferences.tone:
+        lines.append(f"Tone notes for this client: {config.preferences.tone}")
+    return "\n".join(lines)
+
+
 def _openai_messages_to_anthropic(
     messages: list[dict[str, Any]],
+    *,
+    client_id: str | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """
     Convert OpenAI-format messages to Anthropic format.
@@ -461,8 +496,15 @@ def _openai_messages_to_anthropic(
 
     Prepends a CURRENT DATE context block so Nathan knows what "today"
     means and can resolve relative date references in real time.
+
+    If `client_id` is set, also prepends per-client preferences (pronunciation,
+    tone) loaded from client_artifacts/<client_id>/config.yaml.
     """
-    system_parts = [_build_current_date_context(), _NATHAN_MEETING_SYSTEM]
+    system_parts: list[str] = [_build_current_date_context()]
+    client_prefs = _build_client_preferences_context(client_id)
+    if client_prefs:
+        system_parts.append(client_prefs)
+    system_parts.append(_NATHAN_MEETING_SYSTEM)
     anthropic_msgs: list[dict[str, Any]] = []
 
     for msg in messages:
@@ -501,6 +543,7 @@ def _openai_messages_to_anthropic(
 async def run_nathan_conversation_streaming(
     openai_messages: list[dict[str, Any]],
     *,
+    client_id: str | None = None,
     max_tool_rounds: int = 5,
 ) -> AsyncIterator[str]:
     """
@@ -527,7 +570,9 @@ async def run_nathan_conversation_streaming(
         return
 
     client = anthropic.AsyncAnthropic(api_key=api_key)
-    system_prompt, messages = _openai_messages_to_anthropic(openai_messages)
+    system_prompt, messages = _openai_messages_to_anthropic(
+        openai_messages, client_id=client_id
+    )
     any_text_emitted = False
 
     for round_num in range(max_tool_rounds + 1):
@@ -605,6 +650,7 @@ async def run_nathan_conversation_streaming(
 async def run_nathan_conversation(
     openai_messages: list[dict[str, Any]],
     *,
+    client_id: str | None = None,
     max_tool_rounds: int = 5,
 ) -> str:
     """
@@ -616,6 +662,7 @@ async def run_nathan_conversation(
     chunks: list[str] = []
     async for chunk in run_nathan_conversation_streaming(
         openai_messages,
+        client_id=client_id,
         max_tool_rounds=max_tool_rounds,
     ):
         chunks.append(chunk)

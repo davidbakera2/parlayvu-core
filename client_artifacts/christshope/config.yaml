@@ -1,0 +1,11 @@
+client_id: christshope
+display_name: "Christ's Hope International"
+teams:
+  team_id: "5e569702-e7a0-471d-8a63-a9462e53d038"
+  channel_id: "19:F7wVUYUspEwQFcUPunyzENxjeDaYkZpFDVIjydU62Tw1@thread.tacv2"
+  meeting_notes_folder: "03_Deliverables/Meeting Notes"
+  template_path: "00_Client_Brief/Templates/Christs Hope Meeting Notes Template.docx"
+preferences:
+  pronunciation: {}
+  tone: null
+  authorized_contacts: []

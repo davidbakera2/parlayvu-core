@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.microsoft365 import (
-    DEFAULT_MEETING_NOTES_TEMPLATE_PATH,
     Microsoft365Settings,
     MicrosoftGraphClient,
     build_meeting_notes_docx,
@@ -38,8 +37,6 @@ class Microsoft365Tests(unittest.TestCase):
                 "AVA_MAILBOX": "ava@parlayvu.ai",
                 "ONENOTE_NOTEBOOK_NAME": "RamAir",
                 "ONENOTE_SECTION_NAME": "Meeting Notes",
-                "M365_FILES_TEAM_ID": "team-1",
-                "M365_FILES_CHANNEL_ID": "channel-1",
             },
             clear=True,
         ):
@@ -50,9 +47,6 @@ class Microsoft365Tests(unittest.TestCase):
         self.assertEqual(settings.agent_mailboxes["ava"], "ava@parlayvu.ai")
         self.assertEqual(settings.onenote_owner_mailbox, "nathan@parlayvu.ai")
         self.assertEqual(settings.onenote_section_name, "Meeting Notes")
-        self.assertEqual(settings.files_team_id, "team-1")
-        self.assertEqual(settings.files_channel_id, "channel-1")
-        self.assertEqual(settings.files_meeting_notes_template_path, DEFAULT_MEETING_NOTES_TEMPLATE_PATH)
         self.assertFalse(settings.allow_send)
 
     def test_mailbox_status_does_not_expose_secrets(self):
@@ -348,7 +342,7 @@ class Microsoft365Tests(unittest.TestCase):
                     graph_client.download_drive_file(
                         drive_id="drive-1",
                         folder_item_id="folder-1",
-                        file_path=DEFAULT_MEETING_NOTES_TEMPLATE_PATH,
+                        file_path="00_Client_Brief/Templates/RamAir Meeting Notes Template.docx",
                     )
                 )
 

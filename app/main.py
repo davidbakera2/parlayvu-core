@@ -1203,6 +1203,19 @@ async def openai_chat_completions(request: Request, body: ChatCompletionRequest)
     if not body.messages:
         raise HTTPException(status_code=400, detail="messages array is required.")
 
+    # Per-client binding: each Tavus persona is configured to send
+    # X-Parlayvu-Client-Id on its custom-LLM calls. Falls back to
+    # NATHAN_DEFAULT_CLIENT_ID (default "ramair") so the existing single
+    # persona keeps working through any deploy window where personas haven't
+    # been updated yet.
+    client_id = (
+        request.headers.get("X-Parlayvu-Client-Id", "").strip()
+        or os.getenv("NATHAN_DEFAULT_CLIENT_ID", "ramair").strip()
+        or None
+    )
+    if client_id:
+        logger.info("Nathan conversation bound to client_id=%s", client_id)
+
     if body.stream:
         # Streaming: emit text chunks AS Claude produces them. Critically,
         # this means narration text Claude produces alongside a tool call
@@ -1232,7 +1245,9 @@ async def openai_chat_completions(request: Request, body: ChatCompletionRequest)
 
             any_chunk = False
             try:
-                async for text in run_nathan_conversation_streaming(body.messages):
+                async for text in run_nathan_conversation_streaming(
+                    body.messages, client_id=client_id
+                ):
                     if not text:
                         continue
                     any_chunk = True
@@ -1269,7 +1284,7 @@ async def openai_chat_completions(request: Request, body: ChatCompletionRequest)
 
     # Non-streaming
     try:
-        text = await run_nathan_conversation(body.messages)
+        text = await run_nathan_conversation(body.messages, client_id=client_id)
     except Exception as exc:
         logger.exception("Nathan LLM error")
         text = "I'm having a bit of trouble right now. Can you repeat the question?"

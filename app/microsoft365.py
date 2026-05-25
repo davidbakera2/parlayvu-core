@@ -10,8 +10,6 @@ from urllib.parse import quote
 
 import httpx
 
-DEFAULT_MEETING_NOTES_TEMPLATE_PATH = "00_Client_Brief/Templates/RamAir Meeting Notes Template.docx"
-
 AGENT_MAILBOX_ENV = {
     "nathan": "NATHAN_MAILBOX",
     "alex": "ALEX_MAILBOX",
@@ -43,12 +41,9 @@ class Microsoft365Settings:
     onenote_notebook_name: str = "RamAir"
     onenote_section_id: str = ""
     onenote_section_name: str = "Meeting Notes"
-    files_team_id: str = ""
-    files_channel_id: str = ""
     files_drive_id: str = ""
     files_folder_item_id: str = ""
     files_base_path: str = "03_Deliverables/Meeting Notes"
-    files_meeting_notes_template_path: str = DEFAULT_MEETING_NOTES_TEMPLATE_PATH
 
     @property
     def configured(self) -> bool:
@@ -78,15 +73,9 @@ def get_microsoft365_settings() -> Microsoft365Settings:
         onenote_notebook_name=os.getenv("ONENOTE_NOTEBOOK_NAME", "RamAir"),
         onenote_section_id=os.getenv("ONENOTE_SECTION_ID", ""),
         onenote_section_name=os.getenv("ONENOTE_SECTION_NAME", "Meeting Notes"),
-        files_team_id=os.getenv("M365_FILES_TEAM_ID", os.getenv("RAMAIR_TEAMS_TEAM_ID", "")),
-        files_channel_id=os.getenv("M365_FILES_CHANNEL_ID", os.getenv("RAMAIR_TEAMS_CHANNEL_ID", "")),
         files_drive_id=os.getenv("M365_FILES_DRIVE_ID", ""),
         files_folder_item_id=os.getenv("M365_FILES_FOLDER_ITEM_ID", ""),
         files_base_path=os.getenv("M365_FILES_BASE_PATH", "03_Deliverables/Meeting Notes"),
-        files_meeting_notes_template_path=os.getenv(
-            "M365_FILES_MEETING_NOTES_TEMPLATE_PATH",
-            DEFAULT_MEETING_NOTES_TEMPLATE_PATH,
-        ),
     )
 
 
@@ -106,17 +95,10 @@ def mailbox_status(settings: Optional[Microsoft365Settings] = None) -> dict[str,
             "section_name": active_settings.onenote_section_name or None,
         },
         "files": {
-            "configured": active_settings.configured
-            and (
-                bool(active_settings.files_team_id and active_settings.files_channel_id)
-                or bool(active_settings.files_drive_id)
-            ),
-            "team_id_configured": bool(active_settings.files_team_id),
-            "channel_id_configured": bool(active_settings.files_channel_id),
+            "configured": active_settings.configured and bool(active_settings.files_drive_id),
             "drive_id_configured": bool(active_settings.files_drive_id),
             "folder_item_id_configured": bool(active_settings.files_folder_item_id),
             "base_path": active_settings.files_base_path or None,
-            "meeting_notes_template_path": active_settings.files_meeting_notes_template_path or None,
         },
         "agents": {
             agent: {
@@ -850,8 +832,8 @@ class MicrosoftGraphClient:
         channel_id: Optional[str] = None,
         token: Optional[str] = None,
     ) -> dict[str, Any]:
-        resolved_team_id = team_id or self.settings.files_team_id
-        resolved_channel_id = channel_id or self.settings.files_channel_id
+        resolved_team_id = team_id
+        resolved_channel_id = channel_id
         if not resolved_team_id or not resolved_channel_id:
             raise ValueError("Teams file publishing requires a team_id and channel_id")
 
@@ -957,7 +939,7 @@ class MicrosoftGraphClient:
         channel_id: Optional[str] = None,
         folder_path: Optional[str] = None,
     ) -> dict[str, Any]:
-        if team_id or channel_id or (self.settings.files_team_id and self.settings.files_channel_id):
+        if team_id and channel_id:
             folder = await self.resolve_channel_files_folder(team_id=team_id, channel_id=channel_id)
             upload = await self.upload_drive_file(
                 drive_id=folder["drive_id"],
@@ -988,7 +970,7 @@ class MicrosoftGraphClient:
         team_id: Optional[str] = None,
         channel_id: Optional[str] = None,
     ) -> bytes:
-        if team_id or channel_id or (self.settings.files_team_id and self.settings.files_channel_id):
+        if team_id and channel_id:
             folder = await self.resolve_channel_files_folder(team_id=team_id, channel_id=channel_id)
             return await self.download_drive_file(
                 drive_id=folder["drive_id"],

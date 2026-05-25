@@ -26,6 +26,7 @@ from typing import Any
 
 import httpx
 
+from app.client_config import ClientConfigError, load_client_config
 from app.microsoft365 import (
     MicrosoftGraphClient,
     build_meeting_notes_docx,
@@ -187,10 +188,12 @@ async def publish_meeting_notes_to_teams(
         client_name: Optional explicit display name for the client.
         source_conversation_id: Optional id of the originating conversation
             (Teams thread, Tavus session, etc.). Stored in audit metadata.
-        team_id: Optional Teams group id. Falls back to M365_FILES_TEAM_ID.
-        channel_id: Optional Teams channel id. Falls back to M365_FILES_CHANNEL_ID.
+        team_id: Optional Teams group id. Falls back to the client's
+            teams.team_id from client_artifacts/<client_id>/config.yaml.
+        channel_id: Optional Teams channel id. Falls back to the client's
+            teams.channel_id from the same config.
         folder_path: Optional folder path within the channel. Falls back to
-            the configured default Meeting Notes folder.
+            the client's teams.meeting_notes_folder.
         channel: Originating channel for the audit event ("api", "tavus_meeting",
             "teams", etc.). Pure metadata.
         agent_name: Which agent is recorded as the publisher. Defaults to nathan.
@@ -216,6 +219,23 @@ async def publish_meeting_notes_to_teams(
     if not summary:
         raise ValueError("Meeting note summary is required")
 
+    try:
+        client_config = load_client_config(client_id)
+    except ClientConfigError as exc:
+        raise ValueError(f"Cannot publish meeting notes: {exc}") from exc
+
+    if team_id is None:
+        team_id = client_config.teams.team_id
+    if channel_id is None:
+        channel_id = client_config.teams.channel_id
+    if folder_path is None:
+        folder_path = client_config.teams.meeting_notes_folder
+    template_path = client_config.teams.template_path
+    if not template_path:
+        raise ValueError(
+            f"Client {client_id!r} has no teams.template_path configured in config.yaml"
+        )
+
     markdown = build_meeting_notes_markdown(
         title=title,
         summary=summary,
@@ -224,7 +244,6 @@ async def publish_meeting_notes_to_teams(
     )
     stem = sanitize_file_stem(title)
     graph_client = MicrosoftGraphClient()
-    template_path = graph_client.settings.files_meeting_notes_template_path
     expected_template_location = (
         f"client_artifacts/{client_id}/{template_path.strip('/')} "
         f"OR Teams channel Files root/{template_path.strip('/')}"
