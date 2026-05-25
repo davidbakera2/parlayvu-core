@@ -345,6 +345,16 @@ USE TOOLS PROACTIVELY:
 - When someone references "our project", "the brief", "the timeline", or "what was agreed" → call get_project_context for the current client
 - When a file is mentioned → list or read the Teams files
 - When the meeting is wrapping up, OR when someone says "send the notes", "save what we discussed", "file this", "wrap it up" → build a STRUCTURED meeting record from the conversation: title, summary (2-4 paragraphs), attendees, decisions, action_items (with owner + due_date), questions, next_steps, source_material. If anything is ambiguous — especially action item owners ("someone will do X") or due dates ("soon" / "next week" without a specific date) or who was actually on the call — ASK FOR CLARIFICATION out loud BEFORE calling save_meeting_notes. Once you have a clean record, say "Here's what I'll file..." and read the summary + decisions + action items out loud so participants can confirm, then call save_meeting_notes with all the structured fields. Action items missing an owner or due date should be flagged as "TBD" rather than guessed. Do NOT call save_meeting_notes silently.
+
+NARRATE WHILE YOU WORK (very important — silence breaks immersion):
+- Tool calls take 2-5 seconds (especially save_meeting_notes, which uploads to Teams). During that time, you'll be SILENT to the client unless you've spoken first.
+- Before calling ANY tool that takes more than a beat, say something natural in the SAME response, BEFORE the tool call. Examples:
+   - Before web_search: "Let me pull that up for you, give me a second…"
+   - Before fetch_url for a LinkedIn profile: "Sure, let me look at his profile — one moment…"
+   - Before get_project_context: "Hang on, let me check our project notes on that…"
+   - Before save_meeting_notes: "OK, let me put those notes together and file them. Give me about ten seconds — the system has to sync to the Teams channel."
+- After the tool returns, briefly confirm the outcome: "All set — the notes are in the RamAir channel now." or "Found it — here's what I'm seeing on his LinkedIn…"
+- If a tool takes unusually long, you can fill the silence with a follow-up like "Still pulling that down, almost there…" — but only if the conversation feels like it needs it. Normally, one pre-tool sentence + one post-tool sentence is plenty.
 - Don't guess when you can look it up — a 2-second search is better than a hallucinated answer
 
 CRITICAL ANTI-HALLUCINATION RULES:
@@ -458,27 +468,37 @@ def _openai_messages_to_anthropic(
     return "\n\n".join(system_parts), fixed
 
 
-async def run_nathan_conversation(
+async def run_nathan_conversation_streaming(
     openai_messages: list[dict[str, Any]],
     *,
     max_tool_rounds: int = 5,
-) -> str:
+) -> AsyncIterator[str]:
     """
-    Run Nathan's conversation through Claude Opus 4.7 with tool use.
+    Run Nathan's conversation as an async generator yielding text chunks as
+    Claude produces them.
 
-    Accepts OpenAI-format messages, returns Nathan's final text response.
-    Tool calls are executed automatically in a loop until Claude produces
-    a final text response (no more tool calls).
+    Critically, this yields any text Claude returns ALONGSIDE a tool call
+    in the same response — not just the final end_turn text. That lets the
+    streaming /v1/chat/completions endpoint forward Nathan's pre-tool
+    narration ("let me get those filed, give me a moment...") to Tavus
+    immediately, so Tavus is speaking it while the tool runs in the
+    background. Without this, the user just sees Nathan stare at them
+    silently for 3-5 seconds during a save.
+
+    Each yield is a complete text fragment, suitable for streaming
+    directly to Tavus as an SSE `delta` chunk.
     """
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
-        return (
+        yield (
             "I'm sorry, I'm not fully configured right now. "
             "The ANTHROPIC_API_KEY is not set. Please contact the ParlayVU team."
         )
+        return
 
     client = anthropic.AsyncAnthropic(api_key=api_key)
     system_prompt, messages = _openai_messages_to_anthropic(openai_messages)
+    any_text_emitted = False
 
     for round_num in range(max_tool_rounds + 1):
         try:
@@ -491,37 +511,52 @@ async def run_nathan_conversation(
             )
         except anthropic.APIError as exc:
             logger.error("Anthropic API error: %s", exc)
-            return (
-                "I'm having trouble connecting to my AI backend right now. "
-                "Give me a moment and try again."
-            )
+            if not any_text_emitted:
+                yield (
+                    "I'm having trouble connecting to my AI backend right now. "
+                    "Give me a moment and try again."
+                )
+            return
 
-        # If no tool calls — return the text response
+        # Walk the content blocks IN ORDER. Claude's response can interleave
+        # text and tool_use blocks; we want to emit each text block as soon
+        # as we see it (so it can be spoken before the next tool runs) and
+        # collect tool_use blocks for the post-text execution phase.
+        round_tool_uses = []
+        for block in response.content:
+            if hasattr(block, "text") and block.text:
+                text = block.text.strip()
+                if text:
+                    any_text_emitted = True
+                    yield text
+            elif getattr(block, "type", None) == "tool_use":
+                round_tool_uses.append(block)
+
         if response.stop_reason == "end_turn":
-            text_blocks = [b.text for b in response.content if hasattr(b, "text")]
-            return " ".join(text_blocks).strip() or "I'm thinking about that — give me just a moment."
+            return
 
-        # Collect tool calls from this response
-        tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-        if not tool_use_blocks:
-            # stop_reason was something else, return whatever text we have
-            text_blocks = [b.text for b in response.content if hasattr(b, "text")]
-            return " ".join(text_blocks).strip() or "Let me look into that and get back to you."
+        if not round_tool_uses:
+            # Unexpected stop reason with no tool calls and no text. Yield
+            # a fallback so the user doesn't get pure silence.
+            if not any_text_emitted:
+                yield "Let me look into that and get back to you."
+            return
 
         if round_num >= max_tool_rounds:
-            # Safety: too many tool rounds — return what we have
-            text_blocks = [b.text for b in response.content if hasattr(b, "text")]
-            return (
-                " ".join(text_blocks).strip()
-                or "I've gathered a lot of information. Let me summarize what I found."
-            )
+            # Safety stop: too many tool rounds. Emit a clean wrap-up if we
+            # haven't said anything else.
+            if not any_text_emitted:
+                yield "I've gathered a lot of information. Let me summarize what I found."
+            return
 
-        # Add Claude's response (with tool use) to message history
+        # Add Claude's full response (text + tool_use blocks) to history
         messages.append({"role": "assistant", "content": response.content})
 
-        # Execute all tool calls in this round
+        # Execute each tool call (this is where the silence happens — the
+        # narration text we already yielded should fill the audio gap on
+        # the Tavus side while these run).
         tool_results = []
-        for tool_block in tool_use_blocks:
+        for tool_block in round_tool_uses:
             logger.info(
                 "Nathan tool call: %s(%s)",
                 tool_block.name,
@@ -534,10 +569,29 @@ async def run_nathan_conversation(
                 "content": result_str,
             })
 
-        # Add tool results as a user message
         messages.append({"role": "user", "content": tool_results})
 
-    return "I've done some research on that. Let me give you the key takeaways."
+
+async def run_nathan_conversation(
+    openai_messages: list[dict[str, Any]],
+    *,
+    max_tool_rounds: int = 5,
+) -> str:
+    """
+    Non-streaming wrapper: collect every text chunk from the streaming
+    generator and join them. Used by the non-streaming /v1/chat/completions
+    path and by tests. Preserves the original API for callers that just
+    want one string back.
+    """
+    chunks: list[str] = []
+    async for chunk in run_nathan_conversation_streaming(
+        openai_messages,
+        max_tool_rounds=max_tool_rounds,
+    ):
+        chunks.append(chunk)
+    if not chunks:
+        return "I'm thinking about that — give me just a moment."
+    return " ".join(chunks).strip()
 
 
 # ── OpenAI-compatible response builders ───────────────────────────────────────

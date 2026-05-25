@@ -1156,6 +1156,7 @@ from .nathan_llm import (
     build_chat_completion_response,
     build_models_response,
     run_nathan_conversation,
+    run_nathan_conversation_streaming,
 )
 
 
@@ -1203,24 +1204,19 @@ async def openai_chat_completions(request: Request, body: ChatCompletionRequest)
         raise HTTPException(status_code=400, detail="messages array is required.")
 
     if body.stream:
-        # Streaming: run Nathan and stream the response character by character
+        # Streaming: emit text chunks AS Claude produces them. Critically,
+        # this means narration text Claude produces alongside a tool call
+        # gets streamed to Tavus BEFORE the tool runs - so Tavus speaks
+        # "give me a moment while I file these" while we're uploading to
+        # Graph in the background, instead of silence.
         from fastapi.responses import StreamingResponse
         import json as _json
 
         async def stream_response():
-            try:
-                text = await run_nathan_conversation(body.messages)
-            except Exception as exc:
-                logger.exception("Nathan LLM stream error")
-                text = "I'm having trouble right now. Give me a moment."
-
             request_id = f"{uuid4().hex[:12]}"
             created = int(__import__("time").time())
 
-            # Stream in chunks
-            chunk_size = 20
-            for i in range(0, len(text), chunk_size):
-                chunk_text = text[i:i + chunk_size]
+            def chunk_event(text: str) -> str:
                 chunk = {
                     "id": f"chatcmpl-{request_id}",
                     "object": "chat.completion.chunk",
@@ -1228,13 +1224,30 @@ async def openai_chat_completions(request: Request, body: ChatCompletionRequest)
                     "model": body.model,
                     "choices": [{
                         "index": 0,
-                        "delta": {"role": "assistant", "content": chunk_text},
+                        "delta": {"role": "assistant", "content": text},
                         "finish_reason": None,
                     }],
                 }
-                yield f"data: {_json.dumps(chunk)}\n\n"
+                return f"data: {_json.dumps(chunk)}\n\n"
 
-            # Final chunk with finish_reason
+            any_chunk = False
+            try:
+                async for text in run_nathan_conversation_streaming(body.messages):
+                    if not text:
+                        continue
+                    any_chunk = True
+                    # Trailing space so spoken output flows between fragments
+                    yield chunk_event(text if any_chunk else text)
+                    # (No space prefix - Tavus joins chunks verbatim. The
+                    # natural sentence breaks in Claude's output handle pacing.)
+            except Exception:
+                logger.exception("Nathan LLM stream error")
+                if not any_chunk:
+                    yield chunk_event("I'm having trouble right now. Give me a moment.")
+
+            if not any_chunk:
+                yield chunk_event("I'm thinking about that — give me just a moment.")
+
             final_chunk = {
                 "id": f"chatcmpl-{request_id}",
                 "object": "chat.completion.chunk",
