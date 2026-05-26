@@ -53,6 +53,12 @@ class IngestClientFilesRequest(BaseModel):
     force: bool = False
 
 
+class DylanGenerateVariationsRequest(BaseModel):
+    client_id: str
+    variation_count: int = 5
+    deploy: bool = True
+
+
 class DylanDeploySiteRequest(BaseModel):
     site_path: str
     client_id: Optional[str] = None
@@ -476,6 +482,45 @@ async def ingest_client_files_endpoint(client_id: str, body: IngestClientFilesRe
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         logger.exception("ingest_client_files failed for %s", client_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+    return result
+
+
+@app.post("/dylan/generate-variations")
+async def dylan_generate_variations_endpoint(body: DylanGenerateVariationsRequest):
+    """Generate N distinct homepage variations for a client using the client's
+    reference sites + brand notes + design notes, optionally deploying all
+    variations under one Cloudflare Pages preview project (<client>-previews).
+
+    Body:
+        client_id: ParlayVU client_id (must be onboarded).
+        variation_count: clamped to [1, 10]; default 5.
+        deploy: if true, deploys to <client>-previews.pages.dev after writing
+            local files. Default true.
+
+    Returns the service result (status, variations list, preview_url, audit IDs).
+    Preview deploys do NOT go through the approval gate — they land on a
+    <client>-previews subdomain, not the client's live site. The existing
+    /dylan/deploy-site approval flow still gates production deploys.
+    """
+    from .client_config import ClientConfigError
+    from .services.dylan_variations_service import generate_homepage_variations
+
+    if not body.client_id or not body.client_id.strip():
+        raise HTTPException(status_code=400, detail="client_id is required")
+
+    try:
+        result = await generate_homepage_variations(
+            client_id=body.client_id.strip(),
+            variation_count=body.variation_count,
+            deploy=body.deploy,
+        )
+    except ClientConfigError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        logger.exception("generate_homepage_variations failed for %s", body.client_id)
         raise HTTPException(status_code=500, detail=str(exc))
     return result
 

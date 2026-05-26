@@ -1191,3 +1191,90 @@ def deploy_to_cloudflare(site_path: str, project_name: Optional[str] = None) -> 
         "message": "Cloudflare Pages deployment completed.",
         "stdout": deploy.stdout[-4000:],
     }
+
+
+def deploy_static_directory_to_cloudflare(
+    directory: Path,
+    project_name: str,
+) -> Dict[str, Any]:
+    """Deploy a static-HTML directory (no build step) to Cloudflare Pages.
+
+    Used by the Dylan variation generator: each variation is a single
+    self-contained `index.html` (Tailwind via CDN), so there's no `npm install`
+    or `npm run build` — just `npx wrangler pages deploy <dir>`.
+
+    Args:
+        directory: Path to the directory whose contents become the Pages site.
+            Must contain at least one `index.html`.
+        project_name: Cloudflare Pages project slug (e.g. "ulcannarbor-previews").
+            Created on first deploy if missing.
+
+    Returns:
+        {"status": "success", "project_name": ..., "url": "https://<project>.pages.dev/", ...}
+        or
+        {"status": "manual_step_required", "command": "...", "stdout": "...", "stderr": "..."}
+        Mirrors deploy_to_cloudflare's error contract for the same UX.
+    """
+    if not directory.exists():
+        return {
+            "status": "error",
+            "message": f"Directory does not exist: {directory}",
+        }
+    if not directory.is_dir():
+        return {
+            "status": "error",
+            "message": f"Not a directory: {directory}",
+        }
+
+    npx_cmd = shutil.which("npx") or shutil.which("npx.cmd") or r"C:\Program Files\nodejs\npx.cmd"
+    if not Path(npx_cmd).exists() and shutil.which(npx_cmd) is None:
+        return {
+            "status": "manual_step_required",
+            "message": (
+                f"npx was not found. Deploy manually with: "
+                f"npx wrangler pages deploy {directory} --project-name={project_name}"
+            ),
+            "project_name": project_name,
+            "command": f"npx wrangler pages deploy {directory} --project-name={project_name}",
+        }
+
+    deploy = subprocess.run(
+        [
+            npx_cmd, "wrangler", "pages", "deploy",
+            str(directory),
+            f"--project-name={project_name}",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        shell=False,
+    )
+    if deploy.returncode != 0:
+        stdout = deploy.stdout or ""
+        stderr = deploy.stderr or ""
+        return {
+            "status": "manual_step_required",
+            "message": (
+                "Cloudflare deployment did not complete. You may need to run "
+                "`npx wrangler login` or create/configure the Pages project."
+            ),
+            "project_name": project_name,
+            "stdout": stdout[-4000:],
+            "stderr": stderr[-4000:],
+            "command": f"npx wrangler pages deploy {directory} --project-name={project_name}",
+        }
+
+    # Wrangler prints the preview URL in its stdout — pull it out for the
+    # caller's convenience. Pattern: "https://<commit>.{project}.pages.dev"
+    # or "https://{project}.pages.dev". We grep the simpler canonical form.
+    stdout = deploy.stdout or ""
+    project_url = f"https://{project_name}.pages.dev/"
+    return {
+        "status": "success",
+        "project_name": project_name,
+        "directory": str(directory),
+        "url": project_url,
+        "message": "Cloudflare Pages deployment completed.",
+        "stdout": stdout[-4000:],
+    }
