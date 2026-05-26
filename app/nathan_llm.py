@@ -45,6 +45,7 @@ from app.tools.web_tools import fetch_url, web_search
 from app.tools.teams_files_tool import list_teams_files, read_teams_file
 from app.tools.project_tools import get_project_context
 from app.tools.meeting_notes_tool import save_meeting_notes
+from app.tools.client_files_tool import list_client_files, read_client_file
 
 logger = logging.getLogger("parlayvu.nathan_llm")
 
@@ -167,6 +168,62 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
                 },
             },
             "required": ["client_id"],
+        },
+    },
+    {
+        "name": "list_client_files",
+        "description": (
+            "List files and subfolders inside the active client's Teams channel Files area. "
+            "Use this when a participant references a report, document, contract, or any "
+            "specific file. Pass `folder` to scope to a subfolder like 'Reports'. Returns "
+            "a flat listing of one folder level — call again with the subfolder's `path` "
+            "to descend. Always call this BEFORE read_client_file so you have the exact path."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_id": {
+                    "type": "string",
+                    "description": "The active client_id (e.g. 'ramair'). Same value you use for get_project_context.",
+                },
+                "folder": {
+                    "type": "string",
+                    "description": (
+                        "Optional subfolder path relative to the channel's Files root, "
+                        "e.g. 'Reports' or '03_Deliverables/Meeting Notes'. Omit to list "
+                        "the channel root."
+                    ),
+                },
+            },
+            "required": ["client_id"],
+        },
+    },
+    {
+        "name": "read_client_file",
+        "description": (
+            "Read a file from the active client's Teams channel and get its text "
+            "content. Supports markdown (.md, .txt), PDFs (.pdf), and Word docs (.docx). "
+            "Use this when a participant asks you to summarize a report, look something "
+            "up in a document, or answer a question grounded in a specific file. The "
+            "returned content is capped at 30,000 characters — if `truncated: true`, "
+            "tell the user the file is long and you've read the first portion."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_id": {
+                    "type": "string",
+                    "description": "The active client_id (e.g. 'ramair').",
+                },
+                "relative_path": {
+                    "type": "string",
+                    "description": (
+                        "Path to the file relative to the channel's Files root, e.g. "
+                        "'Reports/Q3-2026.pdf'. Get the exact path from list_client_files."
+                    ),
+                },
+            },
+            "required": ["client_id", "relative_path"],
         },
     },
     {
@@ -335,16 +392,17 @@ TOOLS AVAILABLE:
 You have real-time access to:
 1. Web search — find competitor data, industry benchmarks, recent news, market research
 2. URL fetching — read any webpage: LinkedIn profiles, company sites, social media, news articles
-3. Microsoft Teams files — browse and read documents shared in this Teams channel
-4. Project context — pull a specific client's brief, deliverables, approvals, and strategy
-5. Save meeting notes — file a written summary to the client's Teams channel as markdown + Word doc. This is your ONE write tool.
+3. Client files (list_client_files + read_client_file) — browse and READ any document in the active client's Teams channel: reports (PDF), Word docs, markdown. Use these when someone references a specific file — "Did you see the Q3 report?" → list_client_files to find it → read_client_file to read it → answer from what's actually in the file. NEVER guess the contents of a file you haven't read.
+4. Microsoft Teams files (raw Graph) — list_teams_files / read_teams_file for ad-hoc Teams channels outside the active client binding. Prefer list_client_files / read_client_file when you already know the client_id.
+5. Project context — pull a specific client's brief, deliverables, approvals, and strategy
+6. Save meeting notes — file a written summary to the client's Teams channel as markdown + Word doc. This is your ONE write tool.
 
 USE TOOLS PROACTIVELY:
 - When someone mentions a person, competitor, or company you don't know → fetch their LinkedIn or website
 - When asked about industry trends, benchmarks, or "what's working" → search before answering
 - When a client is named (e.g. "RamAir", "Acme Corp") → call get_project_context with client_id set to that name lowercased and stripped of spaces (e.g. "ramair", "acmecorp"). Do this FIRST, before answering anything project-specific.
 - When someone references "our project", "the brief", "the timeline", or "what was agreed" → call get_project_context for the current client
-- When a file is mentioned → list or read the Teams files
+- When a file, report, or document is mentioned ("the Q3 report", "the brand guide", "what did the contract say") → call list_client_files (with `folder` if you can guess where it lives, e.g. 'Reports' for a quarterly report), then read_client_file with the exact path. Narrate while you wait — PDF downloads + extraction take 2-5 seconds. Example: "Let me pull that up — give me a second to read through it…" then answer from the actual file contents
 - When the meeting is wrapping up, OR when someone says "send the notes", "save what we discussed", "file this", "wrap it up" → build a STRUCTURED meeting record from the conversation: title, summary (2-4 paragraphs), attendees, decisions, action_items (with owner + due_date), questions, next_steps, source_material. If anything is ambiguous — especially action item owners ("someone will do X") or due dates ("soon" / "next week" without a specific date) or who was actually on the call — ASK FOR CLARIFICATION out loud BEFORE calling save_meeting_notes. Once you have a clean record, say "Here's what I'll file..." and read the summary + decisions + action items out loud so participants can confirm, then call save_meeting_notes with all the structured fields. Action items missing an owner or due date should be flagged as "TBD" rather than guessed. Do NOT call save_meeting_notes silently.
 
 NARRATE WHILE YOU WORK (very important — silence breaks immersion):
@@ -398,6 +456,16 @@ async def _execute_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
                 tool_input["client_id"],
                 tool_input.get("project_id"),
                 sections=tool_input.get("sections"),
+            )
+        elif tool_name == "list_client_files":
+            result = await list_client_files(
+                tool_input["client_id"],
+                folder=tool_input.get("folder"),
+            )
+        elif tool_name == "read_client_file":
+            result = await read_client_file(
+                tool_input["client_id"],
+                tool_input["relative_path"],
             )
         elif tool_name == "save_meeting_notes":
             result = await save_meeting_notes(

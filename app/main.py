@@ -49,6 +49,10 @@ class DylanGenerateSiteRequest(BaseModel):
     approval_id: Optional[str] = None
 
 
+class IngestClientFilesRequest(BaseModel):
+    force: bool = False
+
+
 class DylanDeploySiteRequest(BaseModel):
     site_path: str
     client_id: Optional[str] = None
@@ -453,6 +457,27 @@ async def memory_clients_endpoint():
     except Exception as e:
         logger.error(f"Error in /memory/clients: {e}")
         raise _memory_error(e)
+
+
+@app.post("/clients/{client_id}/ingest-files")
+async def ingest_client_files_endpoint(client_id: str, body: IngestClientFilesRequest):
+    """Pre-ingest a client's Teams channel files (PDF, .docx) into structured
+    markdown summaries Nathan reads via get_project_context — no Graph round-
+    trip mid-call. Body: {"force": bool}. Force re-ingests even if the local
+    .md is newer than the source's last-modified timestamp."""
+    from .client_config import ClientConfigError
+    from .services.client_file_ingester import ingest_client_files
+
+    try:
+        result = await ingest_client_files(client_id, force=body.force)
+    except ClientConfigError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        logger.exception("ingest_client_files failed for %s", client_id)
+        raise HTTPException(status_code=500, detail=str(exc))
+    return result
 
 
 @app.get("/memory/projects")

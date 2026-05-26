@@ -855,6 +855,56 @@ class MicrosoftGraphClient:
             "channel_id": resolved_channel_id,
         }
 
+    async def list_channel_files(
+        self,
+        *,
+        team_id: str,
+        channel_id: str,
+        folder_path: Optional[str] = None,
+        token: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        """List the files and subfolders at a path inside a Teams channel's Files tab.
+
+        `folder_path` is relative to the channel's Files root (e.g. "Reports" or
+        "03_Deliverables/Meeting Notes"). When None or empty, lists the root.
+        Returns a list of dicts shaped like {name, kind, size, last_modified,
+        web_url, path}; `kind` is "file" or "folder" so callers can recurse.
+        """
+        access_token = token or await self.get_access_token()
+        folder = await self.resolve_channel_files_folder(
+            team_id=team_id, channel_id=channel_id, token=access_token
+        )
+        drive_id = folder["drive_id"]
+        root_item_id = folder["id"]
+
+        clean_path = (folder_path or "").strip("/")
+        if clean_path:
+            quoted_path = quote(clean_path, safe="/")
+            list_path = f"/drives/{quote(drive_id, safe='')}/root:/{quoted_path}:/children"
+        else:
+            list_path = f"/drives/{quote(drive_id, safe='')}/items/{quote(root_item_id, safe='')}/children"
+
+        response = await self._graph_get(
+            f"{list_path}?$top=200&$select=id,name,size,lastModifiedDateTime,file,folder,webUrl",
+            access_token,
+        )
+        items: list[dict[str, Any]] = []
+        for entry in response.get("value", []):
+            kind = "folder" if entry.get("folder") else "file" if entry.get("file") else "other"
+            name = entry.get("name") or ""
+            child_path = f"{clean_path}/{name}".strip("/") if clean_path else name
+            items.append(
+                {
+                    "name": name,
+                    "kind": kind,
+                    "size": entry.get("size"),
+                    "last_modified": entry.get("lastModifiedDateTime"),
+                    "web_url": entry.get("webUrl"),
+                    "path": child_path,
+                }
+            )
+        return items
+
     async def upload_drive_file(
         self,
         *,
