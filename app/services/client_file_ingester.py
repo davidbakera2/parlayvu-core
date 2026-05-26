@@ -329,9 +329,12 @@ async def ingest_client_files(
         logger.exception("Channel walk failed for %s", client_id)
         return {
             "client_id": client_id,
+            "client_display_name": config.display_name,
             "ingested": [],
             "skipped": [],
             "errors": [{"path": "(channel root)", "error": str(exc)}],
+            "memory_output_id": None,
+            "event_id": None,
         }
 
     logger.info(
@@ -488,7 +491,8 @@ def _cli() -> int:
         print(f"ERROR: ingestion failed: {exc}", file=sys.stderr)
         return 1
 
-    print(f"\n== Ingestion complete for {result['client_display_name']} ==")
+    display = result.get("client_display_name") or result.get("client_id") or args.client_id
+    print(f"\n== Ingestion complete for {display} ==")
     print(f"  Ingested: {len(result['ingested'])}")
     for entry in result["ingested"]:
         print(f"    + {entry['path']} -> {entry['target']} ({entry['summary_chars']} chars)")
@@ -500,6 +504,12 @@ def _cli() -> int:
         print(f"  Errors  : {len(result['errors'])}")
         for entry in result["errors"]:
             print(f"    ! {entry['path']}: {entry['error']}")
+        print(
+            "\n  Common causes: MICROSOFT_CLIENT_SECRET in .env has expired "
+            "or doesn't match the value set on the Container App. Check Azure "
+            "portal -> Entra ID -> App registrations -> ParlayVU Agents -> "
+            "Certificates & secrets."
+        )
     return 0 if not result["errors"] else 1
 
 
