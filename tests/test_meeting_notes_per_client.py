@@ -93,7 +93,7 @@ class PerClientPublishingTests(unittest.TestCase):
             "ramair",
             team_id="ramair-team",
             channel_id="ramair-channel",
-            template_path="06_Templates/RamAir Meeting Notes Template.docx",
+            template_path="06_Templates/Meeting_Notes_Template.docx",
             folder="03_Deliverables/Meeting Notes",
         )
         graph = self._publish("ramair", config)
@@ -109,7 +109,7 @@ class PerClientPublishingTests(unittest.TestCase):
             "christshope",
             team_id="ch-team",
             channel_id="ch-channel",
-            template_path="06_Templates/Christs Hope Meeting Notes Template.docx",
+            template_path="06_Templates/Meeting_Notes_Template.docx",
             folder="03_Deliverables/CH Notes",
         )
         graph = self._publish("christshope", config)

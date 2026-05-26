@@ -3,8 +3,8 @@ display_name: "Christ's Hope International"
 teams:
   team_id: "5e569702-e7a0-471d-8a63-a9462e53d038"
   channel_id: "19:F7wVUYUspEwQFcUPunyzENxjeDaYkZpFDVIjydU62Tw1@thread.tacv2"
-  meeting_notes_folder: "03_Deliverables/Meeting Notes"
-  template_path: "06_Templates/Christs Hope Meeting Notes Template.docx"
+  # meeting_notes_folder and template_path use the standard defaults from
+  # app/client_config.py — override here if this client needs a custom path.
 preferences:
   pronunciation: {}
   tone: null

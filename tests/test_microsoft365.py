@@ -342,14 +342,14 @@ class Microsoft365Tests(unittest.TestCase):
                     graph_client.download_drive_file(
                         drive_id="drive-1",
                         folder_item_id="folder-1",
-                        file_path="06_Templates/RamAir Meeting Notes Template.docx",
+                        file_path="06_Templates/Meeting_Notes_Template.docx",
                     )
                 )
 
         self.assertEqual(content, b"docx-template")
         self.assertTrue(FakeClient.follow_redirects)
         self.assertIn(
-            "/drives/drive-1/items/folder-1:/06_Templates/RamAir%20Meeting%20Notes%20Template.docx:/content",
+            "/drives/drive-1/items/folder-1:/06_Templates/Meeting_Notes_Template.docx:/content",
             FakeClient.last_get["url"],
         )
 

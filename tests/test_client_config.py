@@ -138,7 +138,9 @@ class ClientConfigTests(unittest.TestCase):
         )
         cfg = load_client_config("minimal")
         self.assertEqual(cfg.teams.meeting_notes_folder, "03_Deliverables/Meeting Notes")
-        self.assertEqual(cfg.teams.template_path, "")
+        # Standard template filename — every client uses the same path,
+        # only the docx content differs per client.
+        self.assertEqual(cfg.teams.template_path, "06_Templates/Meeting_Notes_Template.docx")
         self.assertEqual(cfg.preferences.pronunciation, {})
         self.assertIsNone(cfg.preferences.tone)
         self.assertEqual(cfg.preferences.authorized_contacts, [])

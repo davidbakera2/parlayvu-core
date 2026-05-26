@@ -3,8 +3,8 @@ display_name: "RamAir International"
 teams:
   team_id: "33a5c785-1cf8-4ec5-b894-c8957c608ed8"
   channel_id: "19:pkhXam4_sg85C1ha_P8vhv5mVyI44YqD2I9l4cqdMO01@thread.tacv2"
-  meeting_notes_folder: "03_Deliverables/Meeting Notes"
-  template_path: "06_Templates/RamAir Meeting Notes Template.docx"
+  # meeting_notes_folder and template_path use the standard defaults from
+  # app/client_config.py — override here if this client needs a custom path.
 preferences:
   pronunciation:
     RamAir: "Ram-Air"

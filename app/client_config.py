@@ -19,6 +19,10 @@ CLIENT_ARTIFACTS_ROOT = Path(
     os.getenv("CLIENT_ARTIFACTS_ROOT", "client_artifacts")
 )
 DEFAULT_MEETING_NOTES_FOLDER = "03_Deliverables/Meeting Notes"
+# Canonical meeting-notes template location. Every client has the same path —
+# only the content of the docx varies. New clients inherit this default by
+# leaving teams.template_path unset in their config.yaml.
+DEFAULT_MEETING_NOTES_TEMPLATE_PATH = "06_Templates/Meeting_Notes_Template.docx"
 
 
 class ClientConfigError(Exception):
@@ -30,7 +34,7 @@ class TeamsConfig:
     team_id: str
     channel_id: str
     meeting_notes_folder: str = DEFAULT_MEETING_NOTES_FOLDER
-    template_path: str = ""
+    template_path: str = DEFAULT_MEETING_NOTES_TEMPLATE_PATH
 
 
 @dataclass(frozen=True)
@@ -105,7 +109,9 @@ def load_client_config(client_id: str) -> ClientConfig:
         meeting_notes_folder=str(
             teams_raw.get("meeting_notes_folder") or DEFAULT_MEETING_NOTES_FOLDER
         ),
-        template_path=str(teams_raw.get("template_path") or ""),
+        template_path=str(
+            teams_raw.get("template_path") or DEFAULT_MEETING_NOTES_TEMPLATE_PATH
+        ),
     )
 
     prefs_raw = raw.get("preferences") or {}
