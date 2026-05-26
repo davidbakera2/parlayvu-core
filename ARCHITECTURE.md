@@ -150,10 +150,19 @@ Currently only `ramair` is populated. The `get_project_context` tool tries the D
 ## 6. Integration surfaces
 
 ### Tavus (live avatar)
-- **Persona** `p03513c08d91` (Nathan Ellis) — `layers.llm` points to `/v1/chat/completions` with bearer auth via `NATHAN_LLM_API_KEY`
-- **Replica** `ra534cde00e5` (Nathan's face/voice)
-- Custom LLM contract: OpenAI Chat Completions format, streaming + non-streaming both supported
-- Setup script: `services/teams-media-bot/scripts/Update-NathanPersonaLLM.ps1`
+- **One Nathan persona per client.** Each persona shares the same replica (face + voice) but sends a different `X-Parlayvu-Client-Id` header on every custom-LLM call. Our `/v1/chat/completions` reads that header and loads the right `client_artifacts/<id>/config.yaml`, so Nathan publishes meeting notes into the right Teams channel and applies the right pronunciation/tone rules per call.
+- **Replica** `ra534cde00e5` — Nathan's face/voice, shared across all client personas.
+- **Per-client persona registry:**
+
+  | Client | Persona ID | Client header value |
+  |---|---|---|
+  | RamAir | `p02372056aec` | `ramair` |
+  | Christ's Hope | `p7017121a743` | `christshope` |
+  | ULC Ann Arbor | `p577962cd534` | `ulcannarbor` |
+
+- Custom LLM contract: OpenAI Chat Completions format, streaming + non-streaming both supported. Bearer auth via `NATHAN_LLM_API_KEY`. Per-client header is `X-Parlayvu-Client-Id` (see `app/main.py` /v1/chat/completions handler; falls back to `NATHAN_DEFAULT_CLIENT_ID` env var if header is missing).
+- **Setup script:** `services/teams-media-bot/scripts/Update-NathanPersonaLLM.ps1 -PersonaId <id> -ClientId <client>` — re-runnable per client whenever a persona's LLM wiring needs to be re-applied.
+- **Onboarding a new client persona:** (1) create the persona in the Tavus UI, cloning replica `ra534cde00e5` and writing a client-specific `system_prompt`, (2) run the setup script with the new persona ID and the client_id, (3) add the row to the table above.
 
 ### Microsoft Graph
 - One **Entra app registration** with permissions: `Files.Read.All`, `Sites.Read.All`, `Mail.Send`, `Notes.ReadWrite.All` (and others)
