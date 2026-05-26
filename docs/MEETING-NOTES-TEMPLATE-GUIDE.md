@@ -6,17 +6,21 @@
 
 ## Where the template lives
 
-Per-client at:
+Every client uses the same filename: `Meeting_Notes_Template.docx`. Only the content of the docx varies per client.
+
+**Canonical location (Teams-first source of truth):**
 ```
-client_artifacts/<client_id>/00_Client_Brief/Templates/<template-filename>.docx
+<client Teams channel> / Files / 06_Templates / Meeting_Notes_Template.docx
 ```
 
-For RamAir specifically:
+Clients open this file in Word directly from Teams, edit branding/wording/structure, save back. Nathan picks up the change on the next `save_meeting_notes` call — no deploy required.
+
+**Repo starter / cold-start fallback:**
 ```
-client_artifacts/ramair/00_Client_Brief/Templates/RamAir Meeting Notes Template.docx
+client_artifacts/<client_id>/06_Templates/Meeting_Notes_Template.docx
 ```
 
-That path ships in the Docker image. The renderer looks here first, then falls back to a Teams channel download if a local file isn't found.
+The repo copy ships in the Docker image and is used as a starter (uploaded to Teams once at onboarding) and as a fallback if Teams is unreachable. The path can be overridden per client via `teams.template_path` in their `config.yaml`, but no client currently does.
 
 ---
 
@@ -149,7 +153,7 @@ from app.microsoft365 import (
     render_meeting_notes_template_docx,
 )
 
-with open("client_artifacts/ramair/00_Client_Brief/Templates/RamAir Meeting Notes Template.docx", "rb") as f:
+with open("client_artifacts/ramair/06_Templates/Meeting_Notes_Template.docx", "rb") as f:
     template = f.read()
 
 placeholders = build_meeting_notes_template_placeholders(

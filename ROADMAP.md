@@ -2,18 +2,29 @@
 
 > What's next, in plain language. Updated when we ship or commit to new work.
 
-**Last updated:** 2026-05-25
+**Last updated:** 2026-05-26
 **See also:** [ARCHITECTURE.md](./ARCHITECTURE.md) for current state, [DECISIONS.md](./DECISIONS.md) for the why.
 
 ---
 
-## Recently shipped (last week)
+## Recently shipped
+
+**This session (2026-05-25 / 26):**
+
+- ✅ **Multi-client foundation** — per-client config at `client_artifacts/<client_id>/config.yaml` replaces singleton `M365_FILES_TEAM_ID`/`CHANNEL_ID` env vars. Tavus `/v1/chat/completions` reads `X-Parlayvu-Client-Id` header per persona; Nathan's system prompt gets per-client preferences (pronunciation, tone) injected at conversation start. (Track 2)
+- ✅ **Christ's Hope onboarded** as second live client (`p7017121a743` Tavus persona, full client_artifacts folder).
+- ✅ **ULC Ann Arbor onboarded** as third live client (`p577962cd534` Tavus persona, reference-sites + design notes already captured from visioning session).
+- ✅ **Teams-first templates** — `06_Templates/Meeting_Notes_Template.docx` in each client's Teams channel is the canonical, client-editable source. Repo copy is starter/fallback.
+- ✅ **Standardized template filename** — `Meeting_Notes_Template.docx` is the same path for every client; only docx content varies.
+- ✅ **Pronunciation fix bundled into config.yaml** — RamAir → "Ram-Air" lives in `preferences.pronunciation` rather than a one-off prompt edit. (Track 1)
+- ✅ **Tavus persona registry** documented in ARCHITECTURE.md §6 with onboarding steps for client N.
+
+**Previous (last week):**
 
 - ✅ **Tenant migration complete** — all infra moved from Baker Strategy Group Azure/Entra to ParlayVU's own subscription + tenant
 - ✅ **`save_meeting_notes` tool** — Nathan files notes himself at end of meeting, no human in the loop
 - ✅ **10-field structured meeting notes** — title, date+time, project, attendees, summary, decisions, action items table, questions, next steps, source material
 - ✅ **DOCX template renderer with structural duplication** — bulleted-list paragraphs duplicate per item, action items table duplicates rows per action
-- ✅ **Local-first template loading** — `client_artifacts/<client>/Templates/...` is source of truth, ships in Docker image
 - ✅ **Multiple placeholder aliases** in action items table — `{{ACTION_DATE}}`, `{{DUE_DATE}}`, `{{ACTION_DUE}}` all work
 - ✅ **Streaming with mid-tool narration** — Nathan talks during long-running tool calls instead of going silent
 - ✅ **Date awareness in prompt** — Nathan resolves "tomorrow"/"Friday"/"next week" to specific dates
@@ -23,49 +34,7 @@
 
 ## Next up
 
-Four parallel tracks. Order is driven by real-world deadlines (when do clients need these), not by code dependency. Some can ship in parallel.
-
-### Track 1: Pronunciation hotfix (5 min)
-
-**Goal:** Nathan says "Ram-Air" not "RAM-air".
-
-**Approach:** One line in Nathan's system prompt: *"When you say 'RamAir' aloud, render it as 'Ram-Air' so the TTS gets the spacing."* No new infrastructure. Use as a warm-up before bigger work.
-
-**Status:** Not started. ~5 min.
-
----
-
-### Track 2: Multi-client foundation + Christ's Hope onboarding (~2-3 hours)
-
-**Goal:** ParlayVU supports more than one client without env-var hacks. New clients can be onboarded by dropping a config file.
-
-**Current blocker:** `M365_FILES_TEAM_ID` and `M365_FILES_CHANNEL_ID` are singletons in env vars. They point at RamAir. Adding Christ's Hope means breaking RamAir.
-
-**Approach:**
-- Per-client config at `client_artifacts/<client>/config.yaml`:
-  ```yaml
-  client_id: ramair
-  display_name: "RamAir International"
-  teams:
-    team_id: "33a5c785-..."
-    channel_id: "19:pkhXam4..."
-    meeting_notes_folder: "03_Deliverables/Meeting Notes"
-    template_path: "00_Client_Brief/Templates/RamAir Meeting Notes Template.docx"
-  preferences:
-    pronunciation:
-      RamAir: "Ram-Air"
-    tone: "Direct, no filler."
-  ```
-- `meeting_notes_service` looks up the right team_id/channel_id/template by `client_id`
-- Nathan's prompt gets per-client preferences injected at conversation start (pronunciation, tone, etc.)
-- Once foundation is in place, onboarding Christ's Hope is: drop `client_artifacts/christshope/` folder, add `config.yaml` with their Teams team_id, done
-
-**Status:** Not started. Foundation ~2 hrs, Christ's Hope onboarding ~20 min after.
-
-**Open questions:**
-- How does Nathan know which client a conversation is about? (Tavus: explicit in persona context. Teams: bound to channel via existing `bind_teams_channel` system. 1:1 DMs: harder — see Track 4.)
-
----
+Two main tracks remaining from the original four. Order is driven by real-world deadlines (when do clients need these), not by code dependency. Some can ship in parallel.
 
 ### Track 3: Dylan v2 web design (~3-4 hours)
 
@@ -75,9 +44,9 @@ Four parallel tracks. Order is driven by real-world deadlines (when do clients n
 - One new tool for Dylan: `write_site_file(client_id, relative_path, content)` — writes HTML/CSS/JSX into `client_artifacts/<client>/03_Deliverables/sites/<variation>/`
 - Update Dylan's system prompt: *"For design work, generate complete HTML/Tailwind pages and write them. For multiple variations, produce N visually distinct treatments of the same content. Fetch reference URLs first to understand the client's taste."*
 - Reuse existing `deploy_to_cloudflare` for multi-preview URLs
-- Test with ULC Ann Arbor as the forcing function
+- ULC Ann Arbor is the forcing function — reference sites and visioning notes already captured at `client_artifacts/ulcannarbor/01_Source_Material/reference-sites.md`.
 
-**Status:** Not started. ~3-4 hrs including iteration on prompt.
+**Status:** Not started. ~3-4 hrs including iteration on prompt. ULC fully scaffolded and ready to consume the output.
 
 **Open questions:**
 - Image sourcing: Unsplash API, AI-generated, or just placeholder boxes for v1?
@@ -117,10 +86,11 @@ These are deliberate "not now" calls. Each lists what would make us revisit.
 - **Estimate:** ~1 day when we build
 - See [DECISIONS.md](./DECISIONS.md) for why document-dumping is fine today
 
-### Native Teams video (Nathan as a real Teams call participant)
-- **Trigger:** A paying customer specifically demands "Nathan as a Teams participant, not a shared window"
-- **Approach:** Windows VM + Graph Communications Media SDK (scaffolded in `services/teams-media-bot-media-worker/`)
-- **Estimate:** Weeks. Don't build until forced.
+### Native Teams video (Nathan as a real Teams call participant) + screen sharing
+- **Trigger:** David asked to re-explore this for the screen-sharing UX unlock (Nathan presenting websites / PDFs / images relevant to the discussion in-meeting).
+- **Approach:** Windows VM + Graph Communications Media SDK (scaffolded in `services/teams-media-bot-media-worker/`) + headless-browser content rendering for the screen-share track.
+- **Estimate:** 4–5 weeks of focused work for participant join + screen share combined.
+- **Scoping doc:** [docs/scoping/native-teams-video-and-screen-share.md](./docs/scoping/native-teams-video-and-screen-share.md) — what's already scaffolded, what's missing, alternatives (Recall.ai vendor path, in-meeting Teams app, smart Tavus-window content automation), and recommendation. Read before committing.
 
 ### Per-agent Tavus avatars
 - **Trigger:** Concrete need to put Alex, Ava, Dylan, etc. on video calls — not hypothetical

@@ -71,9 +71,13 @@
 
 ---
 
-## 4. `client_artifacts/` is the source of truth for client knowledge
+## 4. `client_artifacts/` is the source of truth for client knowledge (with per-client config + Teams-first templates)
 
-**Chosen:** Each client gets a folder `client_artifacts/<client_id>/` with a standard 6-folder structure (00_Client_Brief, 01_Source_Material, 02_Planning, 03_Deliverables, 04_Approvals, 05_Performance). Templates live here too (`00_Client_Brief/Templates/`). The folder ships in the Docker image. Postgres `project_memory` holds metadata + audit trail but defers to flat files for content.
+**Chosen:** Each client gets a folder `client_artifacts/<client_id>/` with a standard 6-folder structure (00_Client_Brief, 01_Source_Material, 02_Planning, 03_Deliverables, 04_Approvals, 05_Performance) **plus `06_Templates/`** for Word/DOCX templates. The folder ships in the Docker image. Postgres `project_memory` holds metadata + audit trail but defers to flat files for content.
+
+**Per-client config lives at `client_artifacts/<client_id>/config.yaml`** — Teams team_id, channel_id, meeting-notes folder, template path (defaults to `06_Templates/Meeting_Notes_Template.docx`), and prompt-time preferences (pronunciation, tone, authorized contacts). This replaced the singleton `M365_FILES_TEAM_ID` / `M365_FILES_CHANNEL_ID` env vars that previously blocked us from serving more than one client at a time. See `app/client_config.py`.
+
+**Templates are Teams-first.** Clients open `06_Templates/Meeting_Notes_Template.docx` in Word directly from their Teams channel, edit it, and save back. The repo copy at `client_artifacts/<client_id>/06_Templates/Meeting_Notes_Template.docx` is a starter (uploaded to Teams once at onboarding) and a cold-start fallback if Teams is unreachable. This inverts the original local-first design once we had real clients who needed to own their templates.
 
 **Considered and rejected:**
 - Postgres-as-truth (with files as derived artifacts) — clients can't see/edit, harder to grep, requires sync logic

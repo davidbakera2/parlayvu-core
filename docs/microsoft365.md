@@ -48,12 +48,11 @@ ONENOTE_NOTEBOOK_ID=
 ONENOTE_NOTEBOOK_NAME=RamAir
 ONENOTE_SECTION_ID=
 ONENOTE_SECTION_NAME=Meeting Notes
-M365_FILES_TEAM_ID=
-M365_FILES_CHANNEL_ID=
+# M365_FILES_DRIVE_ID / M365_FILES_FOLDER_ITEM_ID are for the alternative
+# SharePoint-document-library upload path. Most deployments leave these unset.
 M365_FILES_DRIVE_ID=
 M365_FILES_FOLDER_ITEM_ID=
 M365_FILES_BASE_PATH=03_Deliverables/Meeting Notes
-M365_FILES_MEETING_NOTES_TEMPLATE_PATH=00_Client_Brief/Templates/RamAir Meeting Notes Template.docx
 
 NATHAN_MAILBOX=nathan@parlayvu.ai
 AVA_MAILBOX=ava@parlayvu.ai
@@ -61,9 +60,11 @@ AVA_MAILBOX=ava@parlayvu.ai
 
 Add the remaining specialist mailboxes as they are created.
 
-For Files publishing, prefer `M365_FILES_TEAM_ID` and `M365_FILES_CHANNEL_ID` so ParlayVU resolves the channel SharePoint folder through Graph. If a channel is not available, configure `M365_FILES_DRIVE_ID` and optionally `M365_FILES_FOLDER_ITEM_ID` to upload directly to a SharePoint document library. `M365_FILES_BASE_PATH` defaults to `03_Deliverables/Meeting Notes`.
+**Per-client Teams team_id / channel_id / template_path** live in `client_artifacts/<client_id>/config.yaml`, not env vars — this is how ParlayVU supports more than one client without singleton conflicts. See `app/client_config.py` for the loader and `ARCHITECTURE.md` §5 for the model. The legacy `M365_FILES_TEAM_ID`, `M365_FILES_CHANNEL_ID`, and `M365_FILES_MEETING_NOTES_TEMPLATE_PATH` env vars were removed.
 
-For Word meeting notes, Nathan first downloads `M365_FILES_MEETING_NOTES_TEMPLATE_PATH` from the same configured Teams/SharePoint Files destination. The default is `00_Client_Brief/Templates/RamAir Meeting Notes Template.docx`. If the template is missing, unreadable, or does not include recognized placeholders, Nathan still publishes the `.md` copy and uses the built-in generated `.docx` fallback.
+For Files publishing, `meeting_notes_service.publish_meeting_notes_to_teams(client_id=...)` reads the client's `teams.team_id` and `teams.channel_id` from their config.yaml. If a channel is not available, configure `M365_FILES_DRIVE_ID` (and optionally `M365_FILES_FOLDER_ITEM_ID`) globally to upload directly to a SharePoint document library. `M365_FILES_BASE_PATH` defaults to `03_Deliverables/Meeting Notes` for the global drive path; per-client folder is configured via `teams.meeting_notes_folder`.
+
+For Word meeting notes, the renderer is **Teams-first**: it tries to download `<client_id>'s teams.template_path` from the client's Teams channel `06_Templates/` folder, and falls back to the repo's starter copy at `client_artifacts/<client_id>/06_Templates/Meeting_Notes_Template.docx` if the Teams copy isn't present. If both are missing, Nathan still publishes the `.md` copy and uses the built-in generated `.docx` fallback. See `docs/MEETING-NOTES-TEMPLATE-GUIDE.md`.
 
 Supported Word template placeholders:
 
