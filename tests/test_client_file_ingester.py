@@ -24,6 +24,7 @@ from app.client_config import (
 )
 from app.services import client_file_ingester
 from app.services.client_file_ingester import (
+    _is_skipped_path,
     _is_up_to_date,
     _sanitize_filename,
     _target_md_path,
@@ -122,6 +123,32 @@ class SanitizeFilenameTests(unittest.TestCase):
 
     def test_unknown_collapses_to_document(self):
         self.assertEqual(_sanitize_filename("///.pdf"), "document.md")
+
+
+class SkipFolderTests(unittest.TestCase):
+    def test_skips_06_templates(self):
+        self.assertTrue(_is_skipped_path("06_Templates/Meeting_Notes_Template.docx"))
+        self.assertTrue(_is_skipped_path("06_Templates"))
+        self.assertTrue(_is_skipped_path("06_Templates/"))
+
+    def test_skips_meeting_notes_outputs(self):
+        self.assertTrue(
+            _is_skipped_path("03_Deliverables/Meeting Notes/ramair-weekly.docx")
+        )
+
+    def test_does_not_skip_other_03_deliverables(self):
+        # Only Meeting Notes inside 03_Deliverables is skipped — other Dylan
+        # deliverables (sites/, etc.) should still be ingestible if they ever
+        # become a thing.
+        self.assertFalse(_is_skipped_path("03_Deliverables/sites/variation-1/index.html"))
+        self.assertFalse(_is_skipped_path("03_Deliverables/some-other-doc.pdf"))
+
+    def test_does_not_skip_reports_or_brief(self):
+        self.assertFalse(_is_skipped_path("Reports/Q3-2026.pdf"))
+        self.assertFalse(_is_skipped_path("00_Client_Brief/brand-voice.pdf"))
+
+    def test_handles_backslash_paths(self):
+        self.assertTrue(_is_skipped_path("06_Templates\\Meeting_Notes_Template.docx"))
 
 
 class UpToDateTests(unittest.TestCase):

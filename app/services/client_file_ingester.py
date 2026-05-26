@@ -56,6 +56,19 @@ MAX_EXTRACTED_CHARS_TO_SUMMARIZE = 80_000
 # they're already in the right format and don't need re-summarizing.
 INGESTIBLE_EXTENSIONS = (".pdf", ".docx")
 
+# Folders we skip during the walk. These contain content that should NOT be
+# re-summarized into the client's project context:
+#   - 06_Templates/ holds DOCX templates full of {{PLACEHOLDER}} tokens — a
+#     "summary" of these is noise (the renderer's literal field list).
+#   - 03_Deliverables/Meeting Notes/ holds Nathan's own .md + .docx meeting
+#     note outputs. The .md versions are already markdown; summarizing the
+#     .docx version produces a duplicate of content Nathan already has.
+# Path prefix match against the source_path returned by list_channel_files.
+SKIP_FOLDER_PREFIXES: tuple[str, ...] = (
+    "06_Templates/",
+    "03_Deliverables/Meeting Notes/",
+)
+
 
 def _sanitize_filename(source_path: str) -> str:
     """Turn a Teams path like 'Reports/Q3-2026 Report.pdf' into a clean .md
@@ -124,6 +137,10 @@ async def _walk_channel_files(
     files: list[dict[str, Any]] = []
     for item in items:
         kind = item.get("kind")
+        item_path = item.get("path", "")
+        if _is_skipped_path(item_path):
+            logger.info("Skipping %r (matches SKIP_FOLDER_PREFIXES)", item_path)
+            continue
         if kind == "file":
             files.append(item)
         elif kind == "folder":
@@ -138,6 +155,17 @@ async def _walk_channel_files(
                 )
             )
     return files
+
+
+def _is_skipped_path(path: str) -> bool:
+    """True if the given Teams-channel-relative path falls under any folder we
+    deliberately do not ingest (templates, Nathan's own outputs, etc.)."""
+    normalized = path.replace("\\", "/").strip("/")
+    for prefix in SKIP_FOLDER_PREFIXES:
+        clean = prefix.strip("/")
+        if normalized == clean or normalized.startswith(clean + "/"):
+            return True
+    return False
 
 
 def _page_count_label(extracted_text: str) -> str:
@@ -504,12 +532,36 @@ def _cli() -> int:
         print(f"  Errors  : {len(result['errors'])}")
         for entry in result["errors"]:
             print(f"    ! {entry['path']}: {entry['error']}")
-        print(
-            "\n  Common causes: MICROSOFT_CLIENT_SECRET in .env has expired "
-            "or doesn't match the value set on the Container App. Check Azure "
-            "portal -> Entra ID -> App registrations -> ParlayVU Agents -> "
-            "Certificates & secrets."
-        )
+        print()
+        # Surface the most likely fix based on what the error text says.
+        # The error strings come from upstream SDKs / Graph; we keyword-match
+        # rather than parse them to stay resilient to message changes.
+        joined = " ".join(str(e.get("error", "")) for e in result["errors"]).lower()
+        if "credit balance" in joined or "insufficient" in joined or "billing" in joined:
+            print(
+                "  Likely fix: Anthropic API credit balance is too low. Top up "
+                "at https://console.anthropic.com/settings/billing — a typical "
+                "ingestion run is well under $1."
+            )
+        elif "401" in joined or "unauthorized" in joined:
+            print(
+                "  Likely fix: MICROSOFT_CLIENT_SECRET in .env has expired or "
+                "doesn't match the value set on the Container App. Check Azure "
+                "portal -> Entra ID -> App registrations -> ParlayVU Agents -> "
+                "Certificates & secrets."
+            )
+        elif "403" in joined or "forbidden" in joined:
+            print(
+                "  Likely fix: the Graph app registration is missing a "
+                "permission. Check that Files.Read.All and Sites.Read.All are "
+                "admin-consented for the ParlayVU Agents app."
+            )
+        else:
+            print(
+                "  Check the error messages above and the application logs for "
+                "context. The most common failures are Anthropic billing and "
+                "Microsoft auth — both surface clearly when they're the cause."
+            )
     return 0 if not result["errors"] else 1
 
 
