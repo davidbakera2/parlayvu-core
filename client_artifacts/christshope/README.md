@@ -4,10 +4,11 @@ ParlayVU client folder. Folder structure mirrors RamAir's; see [client_artifacts
 
 - `client_id`: `christshope`
 - Teams channel binding: see `config.yaml`
-- Meeting notes template: `00_Client_Brief/Templates/Christs Hope Meeting Notes Template.docx`
+- Meeting notes template: `06_Templates/Christs Hope Meeting Notes Template.docx` (canonical copy lives in the Teams `06_Templates/` folder once uploaded; the repo copy is a starter and cold-start fallback).
 
 ## Onboarding TODO
 
-- [ ] Tavus persona: create a Christ's Hope Nathan persona in the Tavus UI, then run `services/teams-media-bot/scripts/Update-NathanPersonaLLM.ps1 -PersonaId <new-id> -ClientId christshope ...` to wire the `X-Parlayvu-Client-Id` header.
-- [ ] Template branding: the template was copied from RamAir's; visible header/footer text still says "RamAir" and needs a pass in Word (the `{{PLACEHOLDER}}` tokens are correct and will render).
-- [ ] First client brief: drop a `00_Client_Brief/client-brief.md` describing the engagement.
+- [x] Tavus persona: `p7017121a743` (Nathan Ellis for Christ's Hope), wired with `X-Parlayvu-Client-Id: christshope` header.
+- [x] First client brief: `00_Client_Brief/client-brief.md` drafted — fill in TBD team contacts when known.
+- [ ] Upload meeting-notes template to Teams: drag `06_Templates/Christs Hope Meeting Notes Template.docx` into the Christ's Hope Teams channel's `06_Templates/` folder so the client can edit it directly in Word.
+- [ ] Template branding: the template was copied from RamAir's; visible header/footer text still says "RamAir" and needs a pass in Word (the `{{PLACEHOLDER}}` tokens are correct and render regardless).

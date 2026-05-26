@@ -248,7 +248,7 @@ All scripts are idempotent — safe to re-run.
 - Strip orphaned `HEYGEN_*` env vars from the Container App (cosmetic, no behavior impact)
 - Tavus custom LLM auth currently uses a bearer token in plain env var — fine for now but worth moving to Key Vault when we have more clients
 - `client_artifacts/` is checked into git — fine for `ramair` but won't scale to clients with confidential data; needs a "private clients live elsewhere" pattern when we add client #2 (see ROADMAP.md "Multi-client foundation")
-- Templates system is per-client today, lives at `client_artifacts/<client>/00_Client_Brief/Templates/`. See [MEETING-NOTES-TEMPLATE-GUIDE.md](./docs/MEETING-NOTES-TEMPLATE-GUIDE.md) for authoring.
+- Templates are per-client and **Teams-first**: the canonical copy lives in the client's Teams channel under `06_Templates/`, so clients can edit in Word and save back without a deploy. A starter copy ships in the repo at `client_artifacts/<client>/06_Templates/` and is also used as a cold-start fallback if Teams is unreachable. See [MEETING-NOTES-TEMPLATE-GUIDE.md](./docs/MEETING-NOTES-TEMPLATE-GUIDE.md) for authoring.
 
 ---
 
@@ -310,7 +310,7 @@ parlayvu-core/
 | 401 on Tavus calls | `NATHAN_LLM_API_KEY` mismatch between Container App env and persona config |
 | RamAir info missing | Confirm running image is recent (`client_artifacts/` only ships in `3b0ed80`+) |
 | Tests fail after refactor | Most likely `patch("app.main.X")` needs to become `patch("app.services.X")` |
-| Meeting notes template not used | Check log for `"Meeting notes template loaded from"` — if missing, the local file at `client_artifacts/<client>/00_Client_Brief/Templates/` isn't shipping in the image (likely `.dockerignore` issue) |
+| Meeting notes template not used | Check log for `"Meeting notes template loaded from"` — Teams-first now, so it normally reads from the client's Teams `06_Templates/` folder. If that fails, log will show fallback to local `client_artifacts/<client>/06_Templates/` (or generated DOCX if neither works) |
 | Action items table shows literal `{{ACTION_DATE}}` | Template uses an alias name; renderer accepts `{{ACTION_DUE}}`, `{{ACTION_DATE}}`, `{{DUE_DATE}}`, `{{DUE}}` — all should work since commit `768eb1f` |
 | Nathan goes silent during a save | Streaming or narration regression — check `nathan_llm.py:run_nathan_conversation_streaming` |
 | Nathan passes literal "Friday" as a due date | Date awareness regression — check that `_build_current_date_context()` is being prepended to the system prompt |

@@ -111,45 +111,62 @@ async def _load_template_docx(
     graph_client: MicrosoftGraphClient,
 ) -> tuple[bytes, dict[str, Any]]:
     """
-    Locate the meeting-notes DOCX template, preferring local client_artifacts
-    over the Teams channel.
+    Locate the meeting-notes DOCX template, preferring the client's Teams
+    folder over the local repo copy.
 
     Source-of-truth order:
-      1. client_artifacts/<client_id>/<template_path>   (ships in Docker image)
-      2. Teams channel /<template_path>                  (legacy fallback)
+      1. Teams channel /<template_path>                  (canonical — clients edit here)
+      2. client_artifacts/<client_id>/<template_path>   (starter copy bundled in image)
 
-    Local-first is the right default because client_artifacts is the canonical
-    template store: it ships with the code, gets versioned in git, and updates
-    on every deploy. The Teams fallback exists for clients whose templates
-    haven't been moved into client_artifacts yet, or for ad-hoc overrides.
+    Teams-first is right because the client owns the template — they open it
+    from Teams in Word, edit branding/wording/structure, save back. Nathan
+    picks up the change on the next save_meeting_notes call, no deploy. The
+    repo copy is a starter (uploaded to Teams once at onboarding) and a
+    cold-start fallback if Teams is unreachable.
+
+    The Graph download adds ~200ms per call, which is fine because
+    save_meeting_notes runs once or twice per meeting — not per Tavus turn.
 
     Returns (docx_bytes, source_info_dict). Raises if neither source has it.
     """
+    teams_error: Exception | None = None
+    try:
+        template_docx = await graph_client.download_teams_channel_file(
+            file_path=template_path,
+            team_id=team_id,
+            channel_id=channel_id,
+        )
+        return template_docx, {
+            "status": "template",
+            "source": "teams_channel",
+            "path": template_path,
+            "fallback_reason": None,
+        }
+    except Exception as exc:
+        teams_error = exc
+        logger.info(
+            "Teams template at %s unavailable (%s); falling back to local repo copy",
+            template_path,
+            exc,
+        )
+
     local_path = _ARTIFACTS_ROOT / client_id / template_path
     if local_path.is_file():
-        try:
-            content = local_path.read_bytes()
-            return content, {
-                "status": "template",
-                "source": "client_artifacts",
-                "path": str(local_path).replace("\\", "/"),
-                "fallback_reason": None,
-            }
-        except Exception as exc:
-            logger.warning("Local template found at %s but unreadable: %s", local_path, exc)
-            # Fall through to Teams attempt rather than failing outright
+        content = local_path.read_bytes()
+        return content, {
+            "status": "template",
+            "source": "client_artifacts",
+            "path": str(local_path).replace("\\", "/"),
+            "fallback_reason": (
+                f"Teams template not reachable: {teams_error}" if teams_error else None
+            ),
+        }
 
-    template_docx = await graph_client.download_teams_channel_file(
-        file_path=template_path,
-        team_id=team_id,
-        channel_id=channel_id,
+    raise FileNotFoundError(
+        f"No meeting-notes template available for client_id={client_id!r}: "
+        f"Teams path {template_path!r} unreachable ({teams_error}); "
+        f"local fallback at {local_path} not found"
     )
-    return template_docx, {
-        "status": "template",
-        "source": "teams_channel",
-        "path": template_path,
-        "fallback_reason": None,
-    }
 
 
 async def publish_meeting_notes_to_teams(

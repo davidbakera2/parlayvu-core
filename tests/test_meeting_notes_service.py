@@ -282,9 +282,43 @@ class MeetingNotesServiceTests(unittest.TestCase):
         self.assertNotIn("{{ACTION_ITEM}}", all_text)
         self.assertNotIn("{{ACTION_DUE}}", all_text)
 
-    def test_loads_template_from_local_client_artifacts_first(self):
-        """When client_artifacts/<client>/<template> exists locally, the
-        service must use that and NOT fall back to Teams download."""
+    def test_loads_template_from_teams_first_when_available(self):
+        """When the client's Teams 06_Templates/ folder has the template, the
+        service uses that and never touches the local repo copy. This is the
+        canonical path — clients edit in Word, save back to Teams, changes are
+        live on the next save_meeting_notes call with no deploy."""
+        graph_client = _graph_client_with_template()
+        # If the service touches local artifacts, that's a regression — we
+        # want Teams to be the source of truth.
+        with patch(
+            "app.services.meeting_notes_service.MicrosoftGraphClient",
+            return_value=graph_client,
+        ), patch(
+            "app.services.meeting_notes_service._ARTIFACTS_ROOT",
+            _NO_LOCAL_ARTIFACTS,  # any local fallback path would fail
+        ), patch(
+            "app.services.meeting_notes_service.record_generated_output",
+            return_value="output-teams",
+        ), patch(
+            "app.services.meeting_notes_service.record_agent_event",
+            return_value="event-teams",
+        ):
+            result = asyncio.run(
+                publish_meeting_notes_to_teams(
+                    title="Teams Template Test",
+                    summary="Verifying Teams is the canonical template source.",
+                    client_id="ramair",
+                )
+            )
+
+        self.assertEqual(result["status"], "published")
+        self.assertEqual(result["docx_template"]["status"], "template")
+        self.assertEqual(result["docx_template"]["source"], "teams_channel")
+        graph_client.download_teams_channel_file.assert_awaited_once()
+
+    def test_falls_back_to_local_artifacts_when_teams_unavailable(self):
+        """When Teams is down or the template hasn't been uploaded there yet,
+        the service falls back to the starter copy bundled in the repo."""
         graph_client = AsyncMock()
         graph_client.settings = Microsoft365Settings(
             tenant_id="tenant",
@@ -295,42 +329,44 @@ class MeetingNotesServiceTests(unittest.TestCase):
             allow_send=False,
             agent_mailboxes={"nathan": "nathan@parlayvu.ai"},
         )
-        # If the service hits Teams, this would explode loudly. We want it
-        # to NEVER be called when the local template exists.
-        graph_client.download_teams_channel_file.side_effect = AssertionError(
-            "Teams download should not be called when local template exists"
+        graph_client.download_teams_channel_file.side_effect = RuntimeError(
+            "Teams template not yet uploaded"
         )
         graph_client.upload_teams_channel_file.side_effect = [
-            {"id": "md-local", "name": "x.md", "webUrl": "https://sharepoint.example/x.md"},
-            {"id": "docx-local", "name": "x.docx", "webUrl": "https://sharepoint.example/x.docx"},
+            {"id": "md-fb", "name": "x.md", "webUrl": "https://sharepoint.example/x.md"},
+            {"id": "docx-fb", "name": "x.docx", "webUrl": "https://sharepoint.example/x.docx"},
         ]
 
-        # client_id="ramair" exists at client_artifacts/ramair/00_Client_Brief/
-        # Templates/RamAir Meeting Notes Template.docx in this repo.
+        # client_id="ramair" has a real template at
+        # client_artifacts/ramair/06_Templates/RamAir Meeting Notes Template.docx
         with patch(
             "app.services.meeting_notes_service.MicrosoftGraphClient",
             return_value=graph_client,
         ), patch(
             "app.services.meeting_notes_service.record_generated_output",
-            return_value="output-local",
+            return_value="output-fb",
         ), patch(
             "app.services.meeting_notes_service.record_agent_event",
-            return_value="event-local",
+            return_value="event-fb",
         ):
             result = asyncio.run(
                 publish_meeting_notes_to_teams(
-                    title="Local Template Test",
-                    summary="Verifying client_artifacts is the source of truth.",
+                    title="Teams Down Test",
+                    summary="Verifying the repo starter is used when Teams fails.",
                     client_id="ramair",
                 )
             )
 
         self.assertEqual(result["status"], "published")
         self.assertEqual(result["docx_template"]["status"], "template")
-        # Confirm the template came from local artifacts, not Teams
         self.assertEqual(result["docx_template"]["source"], "client_artifacts")
         self.assertIn("client_artifacts/ramair", result["docx_template"]["path"])
-        graph_client.download_teams_channel_file.assert_not_awaited()
+        self.assertIn("06_Templates", result["docx_template"]["path"])
+        self.assertIn(
+            "Teams template not reachable",
+            result["docx_template"]["fallback_reason"],
+        )
+        graph_client.download_teams_channel_file.assert_awaited_once()
 
 
 class SaveMeetingNotesToolTests(unittest.TestCase):
