@@ -878,11 +878,19 @@ class MicrosoftGraphClient:
         root_item_id = folder["id"]
 
         clean_path = (folder_path or "").strip("/")
+        quoted_drive = quote(drive_id, safe="")
+        quoted_root = quote(root_item_id, safe="")
         if clean_path:
+            # Subfolder lookup MUST be relative to the channel files folder
+            # (root_item_id), NOT the drive root. The drive root is the
+            # SharePoint document library root; the channel files folder is
+            # one node inside it. Using /root:/{path}:/children would look for
+            # the path at the document library root and 404 on real channel
+            # subfolders.
             quoted_path = quote(clean_path, safe="/")
-            list_path = f"/drives/{quote(drive_id, safe='')}/root:/{quoted_path}:/children"
+            list_path = f"/drives/{quoted_drive}/items/{quoted_root}:/{quoted_path}:/children"
         else:
-            list_path = f"/drives/{quote(drive_id, safe='')}/items/{quote(root_item_id, safe='')}/children"
+            list_path = f"/drives/{quoted_drive}/items/{quoted_root}/children"
 
         response = await self._graph_get(
             f"{list_path}?$top=200&$select=id,name,size,lastModifiedDateTime,file,folder,webUrl",
