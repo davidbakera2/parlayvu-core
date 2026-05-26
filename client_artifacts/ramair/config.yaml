@@ -9,4 +9,7 @@ preferences:
   pronunciation:
     RamAir: "Ram-Air"
   tone: null
+  # Email addresses (or Bot Framework user identifiers) allowed to DM
+  # Nathan-for-this-client directly. Channel posts in the bound Teams
+  # channel skip this check. Empty list = no DM access allowed (fail-closed).
   authorized_contacts: []

@@ -54,6 +54,90 @@ def is_bot_framework_activity(payload: dict[str, Any]) -> bool:
     return "type" in payload and "conversation" in payload and "serviceUrl" in payload
 
 
+def is_one_to_one_dm(payload: dict[str, Any]) -> bool:
+    """True if the Bot Framework activity is a 1:1 personal chat, not a
+    channel/group conversation.
+
+    Heuristic: channel messages have `channelData.team.id` and
+    `channelData.channel.id`. 1:1 DMs lack the team/channel block.
+    Conservatively also treat anything where `conversation.conversationType`
+    is explicitly 'personal' as a DM, regardless of channelData.
+    """
+    conversation = payload.get("conversation") or {}
+    if (conversation.get("conversationType") or "").lower() == "personal":
+        return True
+    channel_data = payload.get("channelData") or {}
+    team = channel_data.get("team") or {}
+    channel = channel_data.get("channel") or {}
+    return not (team.get("id") and channel.get("id"))
+
+
+# ── Attachment handling ────────────────────────────────────────────────────────
+#
+# Teams file uploads arrive in Bot Framework activities under `attachments`
+# with contentType="application/vnd.microsoft.teams.file.download.info".
+# The actual file lives at attachment["content"]["downloadUrl"] — a pre-
+# authorized SharePoint URL that doesn't require a bearer token.
+# Other attachment shapes (inline images, etc.) are handled best-effort.
+
+TEAMS_FILE_CONTENT_TYPE = "application/vnd.microsoft.teams.file.download.info"
+
+
+def extract_teams_attachments(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize Bot Framework attachments into a flat list of
+    `{name, content_type, content_url, size}` dicts.
+
+    Skips attachments with no usable URL (e.g. card definitions, mentions
+    encoded as attachments).
+    """
+    out: list[dict[str, Any]] = []
+    for att in payload.get("attachments") or []:
+        if not isinstance(att, dict):
+            continue
+        name = att.get("name") or ""
+        content_type = att.get("contentType") or ""
+        # Teams file uploads put the real download URL inside `content`.
+        inner_content = att.get("content") if isinstance(att.get("content"), dict) else {}
+        content_url = (
+            inner_content.get("downloadUrl")
+            or att.get("contentUrl")
+            or ""
+        )
+        if not content_url:
+            continue
+        out.append({
+            "name": name or "attachment",
+            "content_type": content_type,
+            "content_url": content_url,
+            "size": inner_content.get("fileSize") or att.get("contentLength"),
+            "is_teams_file": content_type == TEAMS_FILE_CONTENT_TYPE,
+        })
+    return out
+
+
+async def download_bot_framework_attachment(
+    content_url: str,
+    *,
+    settings: TeamsSettings | None = None,
+    requires_bot_auth: bool = False,
+) -> bytes:
+    """Download a Teams attachment by URL.
+
+    `requires_bot_auth=True` adds the Bot Framework OAuth token (needed for
+    some attachment URLs that aren't pre-authorized). Teams file uploads
+    use pre-signed SharePoint download URLs that work without a token, so
+    the default is no auth.
+    """
+    headers: dict[str, str] = {}
+    if requires_bot_auth:
+        token = await get_bot_framework_token(settings)
+        headers["Authorization"] = f"Bearer {token}"
+    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+        response = await client.get(content_url, headers=headers)
+        response.raise_for_status()
+        return response.content
+
+
 def teams_message_from_activity(activity: dict[str, Any]) -> dict[str, Any]:
     channel_data = activity.get("channelData") or {}
     team = channel_data.get("team") or {}

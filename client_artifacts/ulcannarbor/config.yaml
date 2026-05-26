@@ -12,9 +12,10 @@ teams:
 preferences:
   pronunciation: {}
   tone: null
-  authorized_contacts: []
-  # Once Track 4 (Teams chat with tools) ships, add Matt's and any other
-  # ULC contacts here so Nathan responds to 1:1 DMs from them.
-  # Example:
+  # Email addresses (or Bot Framework user identifiers) allowed to DM
+  # Nathan-for-this-client directly. Channel posts in the bound Teams
+  # channel skip this check. Empty list = no DM access allowed (fail-closed).
+  # Example to add Matt at ULC:
   #   authorized_contacts:
   #     - matt@ulcannarbor.org
+  authorized_contacts: []

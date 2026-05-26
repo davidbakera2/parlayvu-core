@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 from dotenv import load_dotenv
 
@@ -737,6 +737,22 @@ async def teams_approval_decision_endpoint(approval_id: str, request: TeamsAppro
 
 
 async def _handle_teams_message(request: TeamsMessageRequest):
+    """Handle a Teams chat message via Nathan's unified tool-loop brain.
+
+    Pre-Track-4 this dispatched through the LangGraph router which gave
+    Nathan routing decisions but no direct tool access. Now Teams uses the
+    same Anthropic tool-loop that powers Tavus — Nathan can call
+    get_project_context, read_client_file, web_search, save_meeting_notes,
+    etc. directly from chat. Same brain, different surface: `surface=
+    "teams_chat"` enables markdown and drops the voice-narration guidance.
+
+    Returns: `{status, channel, conversation_id, team_id, channel_id,
+              client_id, project_id, nathan_text}`. Callers (the Bot
+    Framework handler, the direct-API caller) read `nathan_text` to feed
+    into the outbound reply.
+    """
+    from .nathan_llm import run_nathan_conversation
+
     normalized_text = normalize_teams_message(request.text)
     if not normalized_text:
         raise HTTPException(status_code=400, detail="Teams message text is required")
@@ -744,19 +760,10 @@ async def _handle_teams_message(request: TeamsMessageRequest):
     _apply_teams_channel_binding(request)
 
     try:
-        nathan_response = await _run_nathan_request(
-            NathanRequest(
-                message=normalized_text,
-                client_id=request.client_id,
-                project_id=request.project_id,
-            ),
-            channel="teams",
-            event_payload={
-                "from_user": request.from_user,
-                "conversation_id": request.conversation_id,
-                "team_id": request.team_id,
-                "channel_id": request.channel_id,
-            },
+        nathan_text = await run_nathan_conversation(
+            [{"role": "user", "content": normalized_text}],
+            client_id=request.client_id,
+            surface="teams_chat",
         )
     except HTTPException:
         raise
@@ -764,13 +771,36 @@ async def _handle_teams_message(request: TeamsMessageRequest):
         logger.error(f"Error in /teams/messages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+    # Keep audit parity with the previous LangGraph path — every Teams
+    # turn produces one `nathan_replied` event tied to the conversation.
+    try:
+        record_agent_event(
+            agent_name="nathan",
+            client_id=request.client_id,
+            project_id=request.project_id,
+            channel="teams",
+            event_type="nathan_replied",
+            summary=normalized_text[:200],
+            payload={
+                "from_user": request.from_user,
+                "conversation_id": request.conversation_id,
+                "team_id": request.team_id,
+                "channel_id": request.channel_id,
+                "response_chars": len(nathan_text or ""),
+            },
+        )
+    except Exception as exc:
+        logger.warning("Audit record for Teams reply failed: %s", exc)
+
     return {
         "status": "routed",
         "channel": "teams",
         "conversation_id": request.conversation_id,
         "team_id": request.team_id,
         "channel_id": request.channel_id,
-        "nathan": nathan_response,
+        "client_id": request.client_id,
+        "project_id": request.project_id,
+        "nathan_text": nathan_text,
     }
 
 
@@ -780,6 +810,97 @@ def _apply_teams_channel_binding(request: TeamsMessageRequest) -> None:
         if binding:
             request.client_id = binding["client_id"]
             request.project_id = binding["project_id"]
+
+
+def _is_authorized_dm_sender(client_id: str | None, from_user: str | None) -> bool:
+    """Check if a 1:1 DM sender is on the client's authorized_contacts list.
+
+    Fail-closed semantics:
+      - No client_id resolved → unauthorized (no client → no allowlist).
+      - Client config can't be loaded → unauthorized.
+      - authorized_contacts is empty → unauthorized for ALL DMs (clients
+        opt in to DM access by populating the list).
+      - from_user not in the list → unauthorized.
+
+    Channel posts skip this check entirely — anyone in the bound channel
+    is implicitly authorized.
+    """
+    from .client_config import ClientConfigError, load_client_config
+
+    if not client_id or not from_user:
+        return False
+    try:
+        config = load_client_config(client_id)
+    except ClientConfigError:
+        return False
+    allowlist = [c.strip().lower() for c in config.preferences.authorized_contacts if c.strip()]
+    if not allowlist:
+        return False
+    return from_user.strip().lower() in allowlist
+
+
+async def _save_teams_attachments(
+    client_id: str,
+    attachments: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Download each Teams attachment and save under
+    client_artifacts/<client_id>/01_Source_Material/uploads/<safe-name>.
+
+    Returns a list of saved-file metadata dicts the caller can include in
+    Nathan's user message so he knows what landed and where.
+    """
+    import re
+    from pathlib import Path
+
+    from .teams import download_bot_framework_attachment
+
+    if not client_id or not attachments:
+        return []
+
+    uploads_root = Path("client_artifacts") / client_id / "01_Source_Material" / "uploads"
+    uploads_root.mkdir(parents=True, exist_ok=True)
+
+    saved: list[dict[str, Any]] = []
+    for att in attachments:
+        try:
+            data = await download_bot_framework_attachment(att["content_url"])
+        except Exception as exc:
+            logger.warning("Failed to download Teams attachment %r: %s", att.get("name"), exc)
+            saved.append({**att, "saved_path": None, "error": str(exc)})
+            continue
+        raw_name = att.get("name") or "attachment"
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "-", raw_name).strip("-") or "attachment"
+        target = uploads_root / safe
+        # Avoid overwriting an existing file with a different version by
+        # adding a numeric suffix when collisions happen.
+        if target.exists():
+            stem = target.stem
+            suffix = target.suffix
+            for i in range(1, 100):
+                candidate = uploads_root / f"{stem}-{i}{suffix}"
+                if not candidate.exists():
+                    target = candidate
+                    break
+        target.write_bytes(data)
+        rel_path = str(target).replace("\\", "/")
+        saved.append({**att, "saved_path": rel_path, "bytes": len(data)})
+        try:
+            record_agent_event(
+                agent_name="nathan",
+                client_id=client_id,
+                channel="teams",
+                event_type="teams_attachment_uploaded",
+                summary=f"Saved attachment {raw_name!r}",
+                payload={
+                    "saved_path": rel_path,
+                    "content_type": att.get("content_type"),
+                    "size": len(data),
+                    "is_teams_file": att.get("is_teams_file"),
+                },
+            )
+        except Exception as exc:
+            logger.warning("Audit for attachment save failed: %s", exc)
+    return saved
 
 
 @app.post("/teams/messages")
@@ -908,19 +1029,63 @@ async def teams_message_endpoint(request: Request):
                 raise HTTPException(status_code=502, detail=str(e))
             return response_payload
 
+        # 1:1 DM authorization gate. Channel posts skip — anyone in the
+        # bound channel is implicitly authorized. DMs require the sender to
+        # be on the client's authorized_contacts allowlist (fail-closed:
+        # empty allowlist = no DM access).
+        from .teams import is_one_to_one_dm, extract_teams_attachments
+
+        if is_one_to_one_dm(payload):
+            if not _is_authorized_dm_sender(teams_request.client_id, teams_request.from_user):
+                reply_text = (
+                    "I can only help you if you're on the authorized contacts "
+                    "list for one of our clients. Please reach out to your "
+                    "ParlayVU contact to get added."
+                )
+                try:
+                    await send_bot_framework_reply(payload, reply_text)
+                except Exception as e:
+                    logger.error(f"Error sending Bot Framework rejection: {e}")
+                return {
+                    "status": "unauthorized_dm",
+                    "channel": "teams",
+                    "conversation_id": teams_request.conversation_id,
+                }
+
+        # Attachment handling. Bot Framework activities may carry uploaded
+        # files; download them to the client's uploads folder and tell
+        # Nathan their paths so he can read them via read_client_file.
+        attachments = extract_teams_attachments(payload)
+        saved_attachments: list[dict[str, Any]] = []
+        if attachments and teams_request.client_id:
+            saved_attachments = await _save_teams_attachments(
+                teams_request.client_id, attachments
+            )
+            if saved_attachments:
+                successes = [a for a in saved_attachments if a.get("saved_path")]
+                if successes:
+                    lines = ["", "[Attachments saved to client_artifacts uploads/:"]
+                    for a in successes:
+                        size = a.get("bytes") or 0
+                        lines.append(
+                            f" - {a['saved_path']} ({size} bytes, {a.get('content_type') or 'unknown type'})"
+                        )
+                    lines.append("]")
+                    teams_request.text = (teams_request.text or "") + "\n" + "\n".join(lines)
+
         response = await _handle_teams_message(teams_request)
-        project_context = response["nathan"].get("project_context")
-        if project_context and teams_request.project_id:
-            approvals = list_approvals(project_id=teams_request.project_id, status="pending")
-            reply_text = grounded_project_reply(project_context, approvals)
-        else:
-            reply_text = nathan_response_to_text(response["nathan"])
+        reply_text = response["nathan_text"]
         try:
             await send_bot_framework_reply(payload, reply_text)
         except Exception as e:
             logger.error(f"Error sending Bot Framework reply: {e}")
             raise HTTPException(status_code=502, detail=str(e))
-        return {"status": "replied", "channel": "teams", "conversation_id": teams_request.conversation_id}
+        return {
+            "status": "replied",
+            "channel": "teams",
+            "conversation_id": teams_request.conversation_id,
+            "attachments_saved": [a.get("saved_path") for a in saved_attachments if a.get("saved_path")],
+        }
 
     teams_request = TeamsMessageRequest(**payload)
     _apply_teams_channel_binding(teams_request)

@@ -218,47 +218,47 @@ class TeamsTests(unittest.TestCase):
         self.assertIn("configured", response.json())
 
     def test_teams_message_endpoint_routes_to_nathan(self):
-        project_context = {
-            "id": "ramair-straight-from-the-hart",
-            "name": "Straight from the Hart",
-            "client_id": "ramair",
-            "client": {"id": "ramair", "name": "RamAir"},
-        }
+        # Post-Track-4: direct-API Teams messages go through Nathan's tool-loop
+        # (run_nathan_conversation) with surface="teams_chat". The response
+        # shape no longer carries the LangGraph `nathan` dict — it has
+        # `nathan_text` (the final tool-loop output text).
+        from unittest.mock import AsyncMock
 
-        with patch("app.main.get_teams_channel_binding", return_value=None):
-            with patch("app.main.get_project_context", return_value=project_context):
-                with patch("app.main.get_graph", return_value=FakeGraph()):
-                    with patch("app.main.record_agent_event", return_value=None) as record_event:
-                        client = TestClient(app)
-                        response = client.post(
-                            "/teams/messages",
-                            json={
-                                "text": " Nathan, summarize the current campaign. ",
-                                "from_user": "dave@parlayvu.ai",
-                                "conversation_id": "conversation-1",
-                                "team_id": "team-1",
-                                "channel_id": "channel-1",
-                                "client_id": "ramair",
-                                "project_id": "ramair-straight-from-the-hart",
-                            },
-                        )
+        with patch("app.main.get_teams_channel_binding", return_value=None), \
+             patch("app.nathan_llm.run_nathan_conversation", new=AsyncMock(return_value="Nathan's text reply.")) as nathan_call, \
+             patch("app.main.record_agent_event", return_value=None) as record_event:
+            client = TestClient(app)
+            response = client.post(
+                "/teams/messages",
+                json={
+                    "text": " Nathan, summarize the current campaign. ",
+                    "from_user": "dave@parlayvu.ai",
+                    "conversation_id": "conversation-1",
+                    "team_id": "team-1",
+                    "channel_id": "channel-1",
+                    "client_id": "ramair",
+                    "project_id": "ramair-straight-from-the-hart",
+                },
+            )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["status"], "routed")
         self.assertEqual(payload["channel"], "teams")
-        self.assertEqual(payload["nathan"]["project_context"]["client"]["name"], "RamAir")
+        self.assertEqual(payload["nathan_text"], "Nathan's text reply.")
+        nathan_call.assert_awaited_once()
+        self.assertEqual(nathan_call.await_args.kwargs["client_id"], "ramair")
+        self.assertEqual(nathan_call.await_args.kwargs["surface"], "teams_chat")
         record_event.assert_called_once()
         self.assertEqual(record_event.call_args.kwargs["channel"], "teams")
         self.assertEqual(record_event.call_args.kwargs["payload"]["conversation_id"], "conversation-1")
 
     def test_teams_message_endpoint_replies_to_bot_framework_activity(self):
-        project_context = {
-            "id": "ramair-straight-from-the-hart",
-            "name": "Straight from the Hart",
-            "client_id": "ramair",
-            "client": {"id": "ramair", "name": "RamAir"},
-        }
+        # Post-Track-4: Bot Framework activities go through Nathan's tool-loop;
+        # the reply text IS Nathan's response (no more grounded_project_reply
+        # formatter / list_approvals call).
+        from unittest.mock import AsyncMock
+
         activity = {
             "type": "message",
             "id": "activity-1",
@@ -280,29 +280,25 @@ class TeamsTests(unittest.TestCase):
             },
         }
 
-        with patch("app.main.get_teams_channel_binding", return_value=None):
-            with patch("app.main.get_project_context", return_value=project_context):
-                with patch("app.main.get_graph", return_value=FakeGraph()):
-                    with patch("app.main.record_agent_event", return_value=None):
-                        with patch("app.main.list_approvals", return_value=[]) as list_approval_records:
-                            with patch("app.main.send_bot_framework_reply", return_value=None) as send_reply:
-                                client = TestClient(app)
-                                response = client.post("/teams/messages", json=activity)
+        with patch("app.main.get_teams_channel_binding", return_value=None), \
+             patch("app.main.record_agent_event", return_value=None), \
+             patch("app.nathan_llm.run_nathan_conversation", new=AsyncMock(return_value="Here's the RamAir summary in chat form.")), \
+             patch("app.main.send_bot_framework_reply", new=AsyncMock(return_value=None)) as send_reply:
+            client = TestClient(app)
+            response = client.post("/teams/messages", json=activity)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "replied")
-        list_approval_records.assert_called_once_with(project_id="ramair-straight-from-the-hart", status="pending")
-        send_reply.assert_called_once()
-        self.assertEqual(send_reply.call_args.args[0]["id"], "activity-1")
-        self.assertIn("Here is what I can say from ParlayVU project memory", send_reply.call_args.args[1])
+        send_reply.assert_awaited_once()
+        self.assertEqual(send_reply.await_args.args[0]["id"], "activity-1")
+        self.assertEqual(send_reply.await_args.args[1], "Here's the RamAir summary in chat form.")
 
     def test_teams_message_endpoint_uses_channel_binding(self):
-        project_context = {
-            "id": "ramair-straight-from-the-hart",
-            "name": "Straight from the Hart",
-            "client_id": "ramair",
-            "client": {"id": "ramair", "name": "RamAir"},
-        }
+        # Post-Track-4: channel binding still resolves client_id, and Nathan's
+        # tool-loop is called with that client_id. The old list_approvals
+        # call is gone (Nathan calls get_project_context himself if relevant).
+        from unittest.mock import AsyncMock
+
         activity = {
             "type": "message",
             "id": "activity-1",
@@ -325,18 +321,18 @@ class TeamsTests(unittest.TestCase):
         }
         binding = {"client_id": "ramair", "project_id": "ramair-straight-from-the-hart"}
 
-        with patch("app.main.get_teams_channel_binding", return_value=binding):
-            with patch("app.main.get_project_context", return_value=project_context):
-                with patch("app.main.get_graph", return_value=FakeGraph()):
-                    with patch("app.main.record_agent_event", return_value=None):
-                        with patch("app.main.list_approvals", return_value=[]) as list_approval_records:
-                            with patch("app.main.send_bot_framework_reply", return_value=None):
-                                client = TestClient(app)
-                                response = client.post("/teams/messages", json=activity)
+        with patch("app.main.get_teams_channel_binding", return_value=binding), \
+             patch("app.main.record_agent_event", return_value=None), \
+             patch("app.nathan_llm.run_nathan_conversation", new=AsyncMock(return_value="bound reply")) as nathan_call, \
+             patch("app.main.send_bot_framework_reply", new=AsyncMock(return_value=None)):
+            client = TestClient(app)
+            response = client.post("/teams/messages", json=activity)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "replied")
-        list_approval_records.assert_called_once_with(project_id="ramair-straight-from-the-hart", status="pending")
+        nathan_call.assert_awaited_once()
+        # Binding overrode client_id from the activity-derived default
+        self.assertEqual(nathan_call.await_args.kwargs["client_id"], "ramair")
 
     def test_teams_message_endpoint_binds_channel_from_command(self):
         activity = {
