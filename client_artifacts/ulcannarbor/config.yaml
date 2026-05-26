@@ -1,9 +1,5 @@
 # ULC Ann Arbor — Client Config
 #
-# To activate this client: fill in the Teams team_id + channel_id below,
-# then rename this file to config.yaml. The loader requires both fields;
-# leaving them empty means load_client_config("ulcannarbor") will raise.
-#
 # meeting_notes_folder and template_path are inherited from the standard
 # defaults in app/client_config.py — only override here if ULC needs a
 # custom path (none currently do).
@@ -11,8 +7,8 @@
 client_id: ulcannarbor
 display_name: "ULC Ann Arbor"
 teams:
-  team_id: "TBD — paste from Teams channel link 'groupId' query param"
-  channel_id: "TBD — paste from Teams channel link, the '19:...@thread.tacv2' segment"
+  team_id: "3833d060-b330-41b9-a0d4-42dfa9db529e"
+  channel_id: "19:UeZIUG3kZWw2u6Tm0XfUFu7T2NrpHUy_OX5MWxhoe-w1@thread.tacv2"
 preferences:
   pronunciation: {}
   tone: null
