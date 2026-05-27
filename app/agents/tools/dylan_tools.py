@@ -1278,6 +1278,9 @@ def deploy_static_directory_to_cloudflare(
             env=subprocess_env,
         )
 
+    import logging as _logging
+    _wrangler_log = _logging.getLogger("parlayvu.dylan.wrangler")
+
     deploy = _run(deploy_cmd)
 
     # Self-heal once: if the deploy failed (most commonly because the Pages
@@ -1287,12 +1290,26 @@ def deploy_static_directory_to_cloudflare(
     # is harmless — we ignore the create result and let the retry tell us
     # whether the actual deploy now works.
     if deploy.returncode != 0:
-        _run(create_cmd)
+        _wrangler_log.warning(
+            "wrangler pages deploy failed (rc=%s) | project=%s | stderr=%s | stdout=%s",
+            deploy.returncode, project_name,
+            (deploy.stderr or "")[-2000:],
+            (deploy.stdout or "")[-1000:],
+        )
+        create = _run(create_cmd)
+        _wrangler_log.info(
+            "wrangler pages project create | project=%s rc=%s | stderr=%s",
+            project_name, create.returncode, (create.stderr or "")[-1000:],
+        )
         deploy = _run(deploy_cmd)
 
     if deploy.returncode != 0:
         stdout = deploy.stdout or ""
         stderr = deploy.stderr or ""
+        _wrangler_log.error(
+            "wrangler pages deploy retry FAILED (rc=%s) | project=%s | stderr=%s | stdout=%s",
+            deploy.returncode, project_name, stderr[-2000:], stdout[-1000:],
+        )
         return {
             "status": "manual_step_required",
             "message": (
@@ -1305,6 +1322,10 @@ def deploy_static_directory_to_cloudflare(
             "stderr": stderr[-4000:],
             "command": f"npx wrangler pages deploy {directory} --project-name={project_name}",
         }
+    _wrangler_log.info(
+        "wrangler pages deploy ok | project=%s | stdout=%s",
+        project_name, (deploy.stdout or "")[-500:],
+    )
 
     # Wrangler prints the preview URL in its stdout — pull it out for the
     # caller's convenience. Pattern: "https://<commit>.{project}.pages.dev"
