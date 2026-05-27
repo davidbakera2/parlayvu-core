@@ -1,12 +1,21 @@
 """Dylan's targeted-edit service.
 
-Reads the client's currently-active homepage from
-`client_artifacts/<client>/03_Deliverables/sites/active/index.html`, applies a
-plain-English change to that single file via the LLM, writes the result to
-`.../sites/edits/edit-<timestamp>/index.html`, and deploys it to the client's
-preview Pages project for review. Promotion (replacing active/ and pushing to
-prod) is handled by app/services/client_deploy.promote_to_production once the
+Source of truth for "what's currently live" is the production domain itself,
+not the container's local disk. On every edit, we fetch the live HTML from
+`https://<production_domain>/`, write it back to
+`client_artifacts/<client>/03_Deliverables/sites/active/index.html` as a cache,
+then apply the plain-English change to that file via the LLM. The result lands
+in `.../sites/edits/edit-<timestamp>/index.html` and gets deployed to the
+client's preview Pages project for review. Promotion (replacing active/ and
+pushing to prod) is handled by client_deploy.promote_to_production once the
 edit is approved in Teams.
+
+Live-as-source means the workflow survives container restarts, ephemeral disk
+wipes, and the case where a different client's revision didn't promote
+anything — onboarding is config-only: a client's `production_domain` in their
+config.yaml is enough to make edits work. Falls back to the on-disk cache only
+if the live fetch fails (offline, prod project not yet deployed, etc.) and the
+cache exists.
 
 This is the ongoing-edit workflow primitive — same spine as variations, just a
 different Dylan action. Both feed into the same preview→approval→promote flow.
@@ -22,9 +31,10 @@ from pathlib import Path
 from typing import Any, Optional
 
 import anthropic
+import httpx
 
 from app.agents.prompts import DYLAN_EDIT_PROMPT_TEMPLATE
-from app.client_config import ClientConfigError, load_client_config
+from app.client_config import ClientConfig, ClientConfigError, load_client_config
 from app.project_memory import record_agent_event, record_generated_output
 from app.services.client_deploy import (
     SITES_SUBPATH,
@@ -45,6 +55,89 @@ def _timestamp_slug(now: Optional[datetime] = None) -> str:
     """ISO-ish UTC slug safe for filesystems: 2026-05-27T184523Z."""
     now = now or datetime.now(timezone.utc)
     return now.strftime("%Y-%m-%dT%H%M%SZ")
+
+
+LIVE_FETCH_TIMEOUT_SECONDS = 10.0
+
+
+async def _resolve_active_html(
+    *,
+    client_id: str,
+    config: ClientConfig,
+    active_index: Path,
+) -> str:
+    """Get the current HTML for `client_id`'s homepage.
+
+    Strategy:
+      1. If config has a `production_domain`, fetch `https://<domain>/` via
+         httpx. On success, write the body to active_index as a local cache
+         and return it.
+      2. If the fetch fails (network, 4xx, 5xx) or no domain is configured,
+         fall back to reading active_index from disk.
+      3. If neither path produces HTML, raise FileNotFoundError with a
+         message that points to the underlying cause (no live site + no cache).
+
+    Live-fetch is the source of truth because container disks are ephemeral —
+    every revision roll wipes active/. The cache write makes the on-disk file
+    self-healing for the next call.
+    """
+    domain = config.cloudflare_config.production_domain
+    fetch_error: Optional[str] = None
+
+    if domain:
+        url = f"https://{domain}/"
+        try:
+            async with httpx.AsyncClient(
+                timeout=LIVE_FETCH_TIMEOUT_SECONDS,
+                follow_redirects=True,
+            ) as http:
+                response = await http.get(url)
+                response.raise_for_status()
+                html = response.text
+            # Best-effort cache write — don't fail the edit if disk write fails.
+            try:
+                active_index.parent.mkdir(parents=True, exist_ok=True)
+                active_index.write_text(html, encoding="utf-8")
+            except OSError as exc:
+                logger.warning(
+                    "Live-fetch cache write skipped | client=%s path=%s err=%s",
+                    client_id, active_index, exc,
+                )
+            logger.info(
+                "Live-fetched active HTML | client=%s url=%s bytes=%s",
+                client_id, url, len(html),
+            )
+            return html
+        except (httpx.HTTPError, httpx.TimeoutException) as exc:
+            fetch_error = f"{type(exc).__name__}: {exc}"
+            logger.warning(
+                "Live-fetch failed, will try disk cache | client=%s url=%s err=%s",
+                client_id, url, fetch_error,
+            )
+
+    # Disk fallback (either no domain, or fetch failed).
+    if active_index.is_file():
+        logger.info(
+            "Using cached active HTML | client=%s path=%s",
+            client_id, active_index,
+        )
+        return active_index.read_text(encoding="utf-8")
+
+    # Neither path produced HTML — fail with the most informative message we have.
+    if domain and fetch_error:
+        raise FileNotFoundError(
+            f"No active site to edit for {client_id!r}. Live fetch of "
+            f"https://{domain}/ failed ({fetch_error}) and the on-disk cache "
+            f"at {active_index} doesn't exist either. Either the production "
+            f"deploy hasn't happened yet (promote a variation first) or the "
+            f"domain isn't reachable."
+        )
+    raise FileNotFoundError(
+        f"No active site to edit for {client_id!r}. The client's config has "
+        f"no production_domain set, and there's no on-disk cache at "
+        f"{active_index}. Promote a homepage variation first so there's "
+        f"a live source to edit from."
+    )
 
 
 async def _apply_edit_with_llm(
@@ -118,14 +211,11 @@ async def edit_active_site(
         raise ValueError("change_description is required")
 
     active_index = client_active_dir(client_id) / "index.html"
-    if not active_index.is_file():
-        raise FileNotFoundError(
-            f"No active site to edit for {client_id!r}. Expected "
-            f"{active_index}. Promote a homepage variation first so there's "
-            f"a live source to edit from."
-        )
-
-    current_html = active_index.read_text(encoding="utf-8")
+    current_html = await _resolve_active_html(
+        client_id=client_id,
+        config=config,
+        active_index=active_index,
+    )
     if len(current_html) > MAX_HTML_CHARS:
         raise ValueError(
             f"Active HTML for {client_id} is {len(current_html):,} chars — "
