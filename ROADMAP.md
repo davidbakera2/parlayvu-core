@@ -2,39 +2,29 @@
 
 > What's next, in plain language. Updated when we ship or commit to new work.
 
-**Last updated:** 2026-05-26 (late-night refresh — bot auth fix in flight)
+**Last updated:** 2026-05-27 (post-midnight wrap — bot auth fix verified end-to-end via Nathan sideload)
 **See also:** [ARCHITECTURE.md](./ARCHITECTURE.md) for current state, [DECISIONS.md](./DECISIONS.md) for the why.
 
 ---
 
-## ⚠️ Active blocker — finish before anything else
+## ✅ Bot Framework auth fix — resolved end-to-end
 
-**Teams bot Bot Framework auth fix — server side DONE, Teams Admin Center upload PENDING.**
+The 2026-05-26 outage (Azure Bot Service pointing at the phantom `2dc8aa66-...` appId from the Baker Strategy migration) is functionally resolved. Server side was fixed first (new app reg `ea0775e7-...`, recreated Bot Service, env vars updated → revision `parlayvu-api--0000019`). Verification took a second pass because the **Microsoft 365 Admin Center "Update" flow on the existing `ParlayVU` catalog entry doesn't reliably bust the cache** — even after the update + uninstall/reinstall at the team level, Teams clients kept routing @-mentions to the dead old botId (zero POSTs reaching `/teams/messages`).
 
-The Azure Bot Service was created with `msaAppId = 2dc8aa66-...` carried over from the Baker Strategy tenant migration. That appId doesn't exist in the ParlayVU tenant, so every Bot Framework reply hit OAuth 400 at the token endpoint and returned 502 to Microsoft. Bot was silent in all 5 teams. (Track 4's "verify in real Teams" step was deferred and never actually ran, so this was never caught.)
+**What actually unblocked it:** sideloading a parallel manifest with a **fresh `id`** but the **same `botId` (`ea0775e7-...`)** under the name "Nathan". Within minutes of the Nathan install, real Bot Framework traffic appeared in the Container App logs. Bound all 5 channels (`@Nathan bind this channel to <client>`) and smoke-tested the 3 real client tenants (christshope, ramair, ulcannarbor) — Nathan answers from the correctly bound client's content in each.
 
-What's already done (this session):
-- ✅ New app registration `parlayvu-bot` (appId `ea0775e7-a6ae-4f70-9f4b-3409a06a29a5`) created in ParlayVU tenant with 2-year secret
-- ✅ Azure Bot Service deleted + recreated pointing at the new appId; MSTeams channel enabled
-- ✅ Container App env vars `TEAMS_APP_ID` + `TEAMS_APP_PASSWORD` updated → revision `parlayvu-api--0000019` active
-- ✅ Direct OAuth test confirmed: `client_credentials` grant returns valid Bot Framework token (3599s expiry)
-- ✅ `infra/teams-app/manifest.json` updated: kept `manifest.id` stable (`2dc8aa66-...`, the catalog identity) but changed `bots[0].botId` to `ea0775e7-...`. Bumped `version` to `1.0.1`. Zip rebuilt at `infra/teams-app/parlayvu-teams-app.zip`.
-- ✅ `scripts/Setup-ParlayvuBot.ps1` now requires `-TeamsAppId` (no hardcoded default) and refuses to run if the appId doesn't exist in the current tenant
-- ✅ `deploy-api.yml` triggers on `client_artifacts/**` so parlayvu/bakerstrategy scaffold actually deploys
-- ✅ Commits pushed: `8e190c8` (auth fix), `3fba08c` (restore stable manifest.id), `3b1d16c` (version bump)
+Persisted artifacts from the diagnostic: [`infra/teams-app/manifest-nathan.json`](infra/teams-app/manifest-nathan.json) (the source of truth for the Nathan catalog id; rebuild the zip with the same id by re-zipping this manifest + icons).
 
-What David needs to do to finish the fix (~5 min):
-1. Open https://admin.teams.microsoft.com → **Teams apps** → **Manage apps**, search `ParlayVU`
-2. There should be **two** entries: the orphan from the first wrong upload (id `ea0775e7-...`, 0 installs) and the original (id `2dc8aa66-...`, 5 installs). **Delete the orphan first.**
-3. Click the original entry → **Update** → upload the rebuilt `infra/teams-app/parlayvu-teams-app.zip` (version 1.0.1)
-4. Wait 3-5 min for Microsoft to propagate the new manifest to the 5 existing team installs
-5. Test in any team channel: `@ParlayVU bind this channel to <client>`. Expected: bot replies *"This channel is now bound to ..."*.
-6. If still silent after 10 min: uninstall + reinstall the bot in one team (e.g., RamAir) to force-bust Teams' local manifest cache, then retry.
+Operational lesson saved to memory: `teams_app_manifest_update_gotcha.md` — for any future botId change, skip the "uninstall/reinstall to bust cache" step and jump straight to a fresh-id sideload to isolate the bot from the catalog.
 
-Once verified, also worth a smoke test:
-- `@ParlayVU what's on the roadmap?` in the new ParlayVU team's General → expected: Nathan answers from synced repo docs in `client_artifacts/parlayvu/00_Client_Brief/`
+### Still open — non-urgent forward-path decisions
 
-If Nathan answers but reads RamAir docs instead of ParlayVU docs (we saw this in diagnostic), it's the secondary tuning issue noted under **Next up**.
+- **The original ParlayVU catalog entry is still broken.** It's installed in all 5 teams but routes to the dead old botId. Three options, pick later:
+  1. **Adopt Nathan as canonical** — polish the Nathan manifest (proper `name.full`, branded description/icons), install in all 5 teams, delete the broken ParlayVU entry. Brand shifts from `@ParlayVU` to `@Nathan` — arguably more on-brand for the persona.
+  2. **Delete + recreate ParlayVU as a fresh upload** (not Update). Keeps the `@ParlayVU` brand; existing per-channel bindings in our DB are keyed by Teams channel id so they should survive.
+  3. **Keep both for now.** Nathan works; ParlayVU entry stays dead.
+- **`TEAMS_APP_PASSWORD` is plaintext on the Container App revision env** — should rotate the secret and re-deploy with `secretRef` instead of inline value. ~30 min when convenient.
+- **Bake Nathan's diagnostic build into `infra/teams-app/build_app_package.py`** if Nathan stays as a real install (would make rebuilding `nathan-teams-app.zip` reproducible — today it was built ad-hoc in PowerShell). Skip this work if option (2) above is chosen.
 
 ---
 
@@ -82,19 +72,34 @@ Three short items committed for the next session — the first is small and unbl
 
 **Approach:** Strengthen the surface-rules system prompt to say *"You are operating in the context of client_id={X}. Use this client_id for every tool call unless the user EXPLICITLY names a different client by full name."* Move the per-client banner from a soft preference to the top of `NATHAN_TAVUS_SURFACE_RULES` / `NATHAN_TEAMS_CHAT_SURFACE_RULES`. Add a test that asserts Nathan called the tool with the bound client_id.
 
-**Status:** Not started. Small enough to bundle into the Teams-bot verification session.
+**Status:** Appears to be working in practice — 2026-05-27 smoke test in 3 real client channels (christshope/ramair/ulcannarbor) had Nathan correctly answering from the bound client's content. **But** none of those prompts cross-named another client, so the original failure mode isn't fully retested. Still worth adding the explicit cross-naming test (e.g. "@Nathan tell me about RamAir" in the Christ's Hope channel — should Nathan stay on christshope or follow the explicit name?) and pinning the bound client more firmly in the surface rules. Downgraded from blocker to follow-up.
 
-### Track 5: Cross-session memory (~4–6 hours)
+### Track 5: Cross-session memory (Phase A = Teams only, ~2 hr)
 
-**Goal:** Nathan remembers prior conversations across Tavus sessions and Teams chat threads. Today he's stateless per call — the only persistent memory is filed meeting notes + ingested reports.
+**Goal:** Nathan remembers prior conversations within a Teams channel thread. Today he's stateless per call — when David answers a question Nathan asked, Nathan has no memory he asked it. (Tavus has the same problem but the integration is subtler — its OpenAI chat-completions protocol means the caller already sends per-call history; deciding how to dedupe vs storing cross-session-only is a separate design call. Deferring Tavus to Phase B.)
 
-**Approach (lean — own the data, not vendor lock):**
-- New `conversation_turns` table in Neon Postgres keyed by `(client_id, conversation_id)`, storing last ~20 turns with TTL (~7 days).
-- On every Tavus + Teams call, load prior turns and prepend to the message list before calling Nathan.
-- After the response, append the new turn.
-- Works on **both** surfaces (Tavus + Teams) — that's why we own this instead of using Tavus's built-in cross-session memory feature (which only works on Tavus).
+**Phase A schema** — new table in [models.py](./app/models.py) mirroring the [`AgentEvent`](./app/models.py) pattern:
 
-**Status:** Not started. ~4–6 hr including schema migration + tests.
+| column | type | notes |
+|---|---|---|
+| `id` | int PK | |
+| `client_id` | str(64) indexed | |
+| `conversation_id` | str(256) indexed | Bot Framework conv id; stable per Teams channel/thread |
+| `surface` | str(32) | `"teams_chat"` for Phase A; `"tavus"` for Phase B |
+| `role` | str(16) | `"user"` or `"assistant"` |
+| `content` | Text | final text only — skip tool calls; the assistant's text already captures the gist |
+| `created_at` / `updated_at` | via TimestampMixin | |
+
+Composite index on `(client_id, conversation_id, created_at)`. Schema bootstraps via `Base.metadata.create_all()` in `initialize_database()`; no Alembic yet (per `app/database.py`).
+
+**Phase A integration points:**
+- New module `app/conversation_memory.py` with `load_recent_turns(client_id, conversation_id, limit=20, ttl_days=7)` + `append_turn(client_id, conversation_id, surface, role, content)`. Lazy TTL via `created_at >= now() - interval '7 days'` in the load query; periodic delete job later.
+- Wire into `_handle_teams_message` (around `app/main.py:739`): load → prepend to the user-only message list → call `run_nathan_conversation` → append both user and assistant turns to the store.
+- Test in `tests/test_teams_chat_nathan.py`: mock `load_recent_turns`, assert turns appear in the Nathan message array before the current text.
+
+**Phase B (Tavus, separate PR):** decide cross-session-only vs dedupe-with-per-call; resolve Tavus session/conversation id semantics. Defer until after Phase A is in use.
+
+**Status:** Phase A planned, not started. Estimate ~2 hr.
 
 ### Track 6: Phoenix-4 upgrade (~30 min when GA)
 

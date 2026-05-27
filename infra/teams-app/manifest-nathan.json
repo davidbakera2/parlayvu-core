@@ -1,0 +1,91 @@
+﻿{
+    "$schema":  "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+    "manifestVersion":  "1.17",
+    "version":  "1.0.1",
+    "id":  "b4b6b501-03eb-4d81-a888-ba001a752727",
+    "developer":  {
+                      "name":  "ParlayVU",
+                      "websiteUrl":  "https://parlayvu.ai",
+                      "privacyUrl":  "https://parlayvu.ai/privacy",
+                      "termsOfUseUrl":  "https://parlayvu.ai/terms"
+                  },
+    "icons":  {
+                  "color":  "color.png",
+                  "outline":  "outline.png"
+              },
+    "name":  {
+                 "short":  "Nathan",
+                 "full":  "Nathan (diagnostic install)"
+             },
+    "description":  {
+                        "short":  "Diagnostic install of the ParlayVU bot under a Nathan-branded entry.",
+                        "full":  "Same bot as ParlayVU - sideloaded under a new manifest id to isolate the org-catalog cache. Bot replies use the same Nathan Ellis persona."
+                    },
+    "accentColor":  "#1F2937",
+    "bots":  [
+                 {
+                     "botId":  "ea0775e7-a6ae-4f70-9f4b-3409a06a29a5",
+                     "scopes":  [
+                                    "team",
+                                    "personal",
+                                    "groupChat"
+                                ],
+                     "supportsFiles":  true,
+                     "isNotificationOnly":  false,
+                     "commandLists":  [
+                                          {
+                                              "scopes":  [
+                                                             "team",
+                                                             "groupChat"
+                                                         ],
+                                              "commands":  [
+                                                               {
+                                                                   "title":  "status",
+                                                                   "description":  "Summarize the bound client\u0027s current project status."
+                                                               },
+                                                               {
+                                                                   "title":  "what does the [report name] say",
+                                                                   "description":  "Pull a previously ingested report from project context and summarize."
+                                                               },
+                                                               {
+                                                                   "title":  "search [topic]",
+                                                                   "description":  "Web search via Tavily and return a synthesized answer."
+                                                               },
+                                                               {
+                                                                   "title":  "file notes",
+                                                                   "description":  "File a meeting summary to this channel as Word + Markdown."
+                                                               },
+                                                               {
+                                                                   "title":  "bind this channel to [client]",
+                                                                   "description":  "One-time setup: bind this Teams channel to a ParlayVU client so Nathan knows which client\u0027s context to load."
+                                                               }
+                                                           ]
+                                          },
+                                          {
+                                              "scopes":  [
+                                                             "personal"
+                                                         ],
+                                              "commands":  [
+                                                               {
+                                                                   "title":  "status",
+                                                                   "description":  "Summarize the bound client\u0027s current project status."
+                                                               },
+                                                               {
+                                                                   "title":  "what does the [report name] say",
+                                                                   "description":  "Pull a previously ingested report from project context and summarize."
+                                                               }
+                                                           ]
+                                          }
+                                      ]
+                 }
+             ],
+    "permissions":  [
+                        "identity",
+                        "messageTeamMembers"
+                    ],
+    "validDomains":  [
+                         "parlayvu-api.thankfulriver-96fed9c6.eastus.azurecontainerapps.io",
+                         "parlayvu.ai"
+                     ]
+}
+
