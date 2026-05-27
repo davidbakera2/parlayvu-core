@@ -5,6 +5,13 @@ teams:
   channel_id: "19:zg33ny8uEAYIO8-ljM5tZIXgGzyL9GPYm_dQhIVApUY1@thread.tacv2"
   # meeting_notes_folder and template_path use the standard defaults from
   # app/client_config.py — override here if this client needs a custom path.
+cloudflare:
+  # Override the bare-<client_id> default — the live Pages project for
+  # parlayvu.ai is named "parlayvu-ai-site" (legacy naming from before the
+  # convention was established). Preview project follows the convention;
+  # it auto-creates on first variations deploy.
+  production_project: "parlayvu-ai-site"
+  production_domain: "parlayvu.ai"
 preferences:
   pronunciation:
     ParlayVU: "Parlay-View"

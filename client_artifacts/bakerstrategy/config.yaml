@@ -5,6 +5,13 @@ teams:
   channel_id: "19:N9YY6n-CbcfeKujiDKN_JXfudMXg82Z1eP_a0QNEOhc1@thread.tacv2"
   # meeting_notes_folder and template_path use the standard defaults from
   # app/client_config.py — override here if this client needs a custom path.
+cloudflare:
+  # Override the bare-<client_id> default — the live Pages project for
+  # bakerstrategy.com is named "bakerstrategy-site" (legacy naming from
+  # before the convention was established). Preview project follows the
+  # convention; it auto-creates on first variations deploy.
+  production_project: "bakerstrategy-site"
+  production_domain: "bakerstrategy.com"
 preferences:
   pronunciation: {}
   # Holding-company / portfolio context — David engaging Nathan about Baker
