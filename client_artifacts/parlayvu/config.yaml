@@ -1,8 +1,8 @@
 client_id: parlayvu
 display_name: "ParlayVU (internal)"
 teams:
-  team_id: "0bf546ba-482f-42c8-92fc-ae65133b968b"
-  channel_id: "19:e-10upqSlPihlD5o-2eE1JoK5sQZ4TgBtXa6bhShNis1@thread.tacv2"
+  team_id: "f628c2b2-a597-45fa-beb1-cecb3a643469"
+  channel_id: "19:zg33ny8uEAYIO8-ljM5tZIXgGzyL9GPYm_dQhIVApUY1@thread.tacv2"
   # meeting_notes_folder and template_path use the standard defaults from
   # app/client_config.py — override here if this client needs a custom path.
 preferences:
