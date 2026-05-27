@@ -5,8 +5,16 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# curl: healthcheck + nodesource bootstrap.
+# nodejs + wrangler: required for Dylan's Cloudflare Pages deploy path
+# (deploy_static_directory_to_cloudflare shells out to `wrangler pages
+# deploy`). Wrangler is pre-installed globally so the first deploy
+# doesn't pay npx's cold-cache download tax inside the container.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g wrangler@latest \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

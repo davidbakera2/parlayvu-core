@@ -2,6 +2,7 @@
 from datetime import datetime
 from html import escape
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -1226,29 +1227,51 @@ def deploy_static_directory_to_cloudflare(
             "message": f"Not a directory: {directory}",
         }
 
+    # Prefer the globally-installed wrangler binary (baked into the prod
+    # container image); fall back to npx for dev machines where wrangler isn't
+    # global. The Windows fallback path covers local dev on this repo's
+    # primary author machine.
+    wrangler_cmd = shutil.which("wrangler") or shutil.which("wrangler.cmd")
     npx_cmd = shutil.which("npx") or shutil.which("npx.cmd") or r"C:\Program Files\nodejs\npx.cmd"
-    if not Path(npx_cmd).exists() and shutil.which(npx_cmd) is None:
+    has_npx = (
+        wrangler_cmd is not None
+        or (Path(npx_cmd).exists() if npx_cmd else False)
+        or shutil.which(npx_cmd) is not None
+    )
+    if not has_npx:
         return {
             "status": "manual_step_required",
             "message": (
-                f"npx was not found. Deploy manually with: "
+                f"Neither wrangler nor npx was found in PATH. Deploy manually with: "
                 f"npx wrangler pages deploy {directory} --project-name={project_name}"
             ),
             "project_name": project_name,
             "command": f"npx wrangler pages deploy {directory} --project-name={project_name}",
         }
 
+    if wrangler_cmd:
+        cmd = [wrangler_cmd, "pages", "deploy", str(directory), f"--project-name={project_name}"]
+    else:
+        cmd = [npx_cmd, "wrangler", "pages", "deploy", str(directory), f"--project-name={project_name}"]
+
+    # Wrangler authenticates non-interactively from CLOUDFLARE_API_TOKEN +
+    # CLOUDFLARE_ACCOUNT_ID env vars. The repo's existing convention names
+    # the token CLOUDFLARE_API (without _TOKEN), so we alias it for wrangler
+    # without forcing a Container App env-var rename.
+    subprocess_env = dict(os.environ)
+    if not subprocess_env.get("CLOUDFLARE_API_TOKEN"):
+        legacy_token = subprocess_env.get("CLOUDFLARE_API")
+        if legacy_token:
+            subprocess_env["CLOUDFLARE_API_TOKEN"] = legacy_token
+
     deploy = subprocess.run(
-        [
-            npx_cmd, "wrangler", "pages", "deploy",
-            str(directory),
-            f"--project-name={project_name}",
-        ],
+        cmd,
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
         shell=False,
+        env=subprocess_env,
     )
     if deploy.returncode != 0:
         stdout = deploy.stdout or ""
