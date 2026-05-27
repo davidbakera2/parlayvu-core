@@ -2,8 +2,39 @@
 
 > What's next, in plain language. Updated when we ship or commit to new work.
 
-**Last updated:** 2026-05-26 (end-of-session refresh)
+**Last updated:** 2026-05-26 (late-night refresh — bot auth fix in flight)
 **See also:** [ARCHITECTURE.md](./ARCHITECTURE.md) for current state, [DECISIONS.md](./DECISIONS.md) for the why.
+
+---
+
+## ⚠️ Active blocker — finish before anything else
+
+**Teams bot Bot Framework auth fix — server side DONE, Teams Admin Center upload PENDING.**
+
+The Azure Bot Service was created with `msaAppId = 2dc8aa66-...` carried over from the Baker Strategy tenant migration. That appId doesn't exist in the ParlayVU tenant, so every Bot Framework reply hit OAuth 400 at the token endpoint and returned 502 to Microsoft. Bot was silent in all 5 teams. (Track 4's "verify in real Teams" step was deferred and never actually ran, so this was never caught.)
+
+What's already done (this session):
+- ✅ New app registration `parlayvu-bot` (appId `ea0775e7-a6ae-4f70-9f4b-3409a06a29a5`) created in ParlayVU tenant with 2-year secret
+- ✅ Azure Bot Service deleted + recreated pointing at the new appId; MSTeams channel enabled
+- ✅ Container App env vars `TEAMS_APP_ID` + `TEAMS_APP_PASSWORD` updated → revision `parlayvu-api--0000019` active
+- ✅ Direct OAuth test confirmed: `client_credentials` grant returns valid Bot Framework token (3599s expiry)
+- ✅ `infra/teams-app/manifest.json` updated: kept `manifest.id` stable (`2dc8aa66-...`, the catalog identity) but changed `bots[0].botId` to `ea0775e7-...`. Bumped `version` to `1.0.1`. Zip rebuilt at `infra/teams-app/parlayvu-teams-app.zip`.
+- ✅ `scripts/Setup-ParlayvuBot.ps1` now requires `-TeamsAppId` (no hardcoded default) and refuses to run if the appId doesn't exist in the current tenant
+- ✅ `deploy-api.yml` triggers on `client_artifacts/**` so parlayvu/bakerstrategy scaffold actually deploys
+- ✅ Commits pushed: `8e190c8` (auth fix), `3fba08c` (restore stable manifest.id), `3b1d16c` (version bump)
+
+What David needs to do to finish the fix (~5 min):
+1. Open https://admin.teams.microsoft.com → **Teams apps** → **Manage apps**, search `ParlayVU`
+2. There should be **two** entries: the orphan from the first wrong upload (id `ea0775e7-...`, 0 installs) and the original (id `2dc8aa66-...`, 5 installs). **Delete the orphan first.**
+3. Click the original entry → **Update** → upload the rebuilt `infra/teams-app/parlayvu-teams-app.zip` (version 1.0.1)
+4. Wait 3-5 min for Microsoft to propagate the new manifest to the 5 existing team installs
+5. Test in any team channel: `@ParlayVU bind this channel to <client>`. Expected: bot replies *"This channel is now bound to ..."*.
+6. If still silent after 10 min: uninstall + reinstall the bot in one team (e.g., RamAir) to force-bust Teams' local manifest cache, then retry.
+
+Once verified, also worth a smoke test:
+- `@ParlayVU what's on the roadmap?` in the new ParlayVU team's General → expected: Nathan answers from synced repo docs in `client_artifacts/parlayvu/00_Client_Brief/`
+
+If Nathan answers but reads RamAir docs instead of ParlayVU docs (we saw this in diagnostic), it's the secondary tuning issue noted under **Next up**.
 
 ---
 
@@ -22,7 +53,8 @@
 
 **This session — infra + setup:**
 
-- ✅ **Azure Bot Service created** in ParlayVU tenant (gap left over from migration). Codified in `scripts/Setup-ParlayvuBot.ps1`; MIGRATION-PLAN.md Phase 7.5 documents it.
+- ✅ **Azure Bot Service created** in ParlayVU tenant (gap left over from migration). Codified in `scripts/Setup-ParlayvuBot.ps1`; MIGRATION-PLAN.md Phase 7.5 documents it. **Bot Framework auth bug** discovered + fixed late in session — see Active blocker section above. Setup script now mandates a real app reg (fail-fast) so the bug can't recur.
+- ✅ **Two internal Nathan tenants** scaffolded: `client_artifacts/parlayvu/` (Nathan-as-Chief-of-Staff for the product company; reads synced repo docs from `00_Client_Brief/`) and `client_artifacts/bakerstrategy/` (holding-company tenant). `scripts/Sync-ParlayvuClientArtifacts.ps1` keeps the synced product docs fresh.
 - ✅ **Teams app package** at `infra/teams-app/` — manifest + build script, installed in RamAir team and discoverable via `@ParlayVU` mention. CH + ULC team installs pending.
 - ✅ **Bind command extended** — `@ParlayVU bind this channel to <client>` now recognizes any active client (reads from `list_clients()` + `load_client_config()`), not just RamAir.
 - ✅ **Tavus persona registry** in [ARCHITECTURE.md §6](./ARCHITECTURE.md).
@@ -40,7 +72,17 @@
 
 ## Next up
 
-Two short tracks committed for the next session, both Tavus polish:
+Three short items committed for the next session — the first is small and unblocks proper Nathan behavior in the new internal tenants:
+
+### Track 4.5: Default to bound client_id in Nathan's tool calls (~30 min)
+
+**Goal:** When Nathan is invoked in a Teams channel bound to client X, his `get_project_context` / `read_client_file` calls default to client X without him having to extract the client name from the user's message.
+
+**Problem (observed in diagnostics):** Even though `_build_client_preferences_context("parlayvu")` injects the active client into the system prompt, Nathan still tried to extract "RamAir" from text and called `get_project_context(client_id="ramair")`. He answered as if reading RamAir docs even when he should be reading ParlayVU's.
+
+**Approach:** Strengthen the surface-rules system prompt to say *"You are operating in the context of client_id={X}. Use this client_id for every tool call unless the user EXPLICITLY names a different client by full name."* Move the per-client banner from a soft preference to the top of `NATHAN_TAVUS_SURFACE_RULES` / `NATHAN_TEAMS_CHAT_SURFACE_RULES`. Add a test that asserts Nathan called the tool with the bound client_id.
+
+**Status:** Not started. Small enough to bundle into the Teams-bot verification session.
 
 ### Track 5: Cross-session memory (~4–6 hours)
 

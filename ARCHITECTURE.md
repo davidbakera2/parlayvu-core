@@ -343,6 +343,8 @@ parlayvu-core/
 | `list_channel_files` returns 404 on subfolder | URL is built relative to channel folder root item, not drive root — see `app/microsoft365.py` `list_channel_files` |
 | Pre-ingested report content not in Nathan's context | Check `client_artifacts/<client>/01_Source_Material/reports/` exists. Re-run `python -m app.services.client_file_ingester <client> --force` |
 | Bind command says "client not found" | Bind reads from `list_clients()` — confirm `client_artifacts/<id>/config.yaml` exists with valid `team_id` + `channel_id` |
+| Bot is totally silent in Teams (no reply to `@ParlayVU` mention) | Most likely cause: Bot Framework auth fail. Tail logs: `az containerapp logs show --name parlayvu-api --resource-group rg-parlayvu-prod --tail 200`. Look for `Error sending Bot Framework reply: Client error '400 Bad Request' for url '.../oauth2/v2.0/token'` — that's the symptom of `TEAMS_APP_ID` / `TEAMS_APP_PASSWORD` not matching a live app reg in this tenant. Run `az ad app show --id <TEAMS_APP_ID>` to confirm. See DECISIONS.md §9 for the postmortem. |
+| Teams Admin Center upload creates a duplicate catalog entry instead of offering Update | `manifest.id` was changed. Restore it to the original GUID — only `bots[0].botId` should ever change. Bump `version` field too. See DECISIONS.md §10. |
 
 ---
 

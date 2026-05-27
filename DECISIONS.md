@@ -203,3 +203,54 @@ For files Nathan *hasn't* pre-ingested (or when he needs the verbatim text), he 
 - See Decision #2 (document-dumping) for the build trigger and approach
 
 **What this means for the Tavus comparison:** We deliberately don't adopt Tavus's KB or cross-session memory features. See ROADMAP.md "Why we're NOT adopting…" for the full reasoning. Short version: our knowledge layer needs to work across Tavus + Teams + future surfaces, and Tavus's features are Tavus-only.
+
+---
+
+## 9. Setup scripts must fail-fast on identity drift, not silently misconfigure
+
+**Chosen:** Any script that wires an Azure resource to an Entra app registration MUST verify the appId exists in the current tenant before proceeding. If it doesn't, fail loudly with a remediation hint, never with a default.
+
+**Considered and rejected:** Hardcoded sensible defaults (what `scripts/Setup-ParlayvuBot.ps1` originally had — `$TeamsAppId = "2dc8aa66-..."` as a parameter default).
+
+**Why this matters (the 2026-05-26 outage):**
+- We migrated tenants (Baker Strategy → ParlayVU) earlier in the week. The migration plan rebuilt the Container App + ACR + GitHub Actions but did not recreate the bot's app registration in the new tenant.
+- The orphaned `TEAMS_APP_ID=2dc8aa66-...` env var pointed at an app reg that existed in Baker Strategy but not ParlayVU.
+- `Setup-ParlayvuBot.ps1` accepted that orphaned appId as its hardcoded default and created the Azure Bot Service with it.
+- Azure Bot Service doesn't validate that msaAppId references a real app reg — it just stores the GUID.
+- Result: Bot looked configured. `/teams/status` returned `configured: true`. Tests passed. But every Bot Framework reply silently 400'd at `login.microsoftonline.com/.../oauth2/v2.0/token` because the appId didn't authenticate against anything in this tenant.
+- We didn't notice for ~24h because Track 4's "verify in real Teams" step was deferred and never actually run.
+
+**What we changed:**
+- `Setup-ParlayvuBot.ps1` now requires `-TeamsAppId` (no default) AND runs `az ad app show --id $TeamsAppId` before doing anything. If that 404s, the script throws with the remediation command (`az ad app create ...`).
+- Added an `infra/teams-app/README.md` troubleshooting row for the OAuth-400 symptom and the duplicate-catalog-entry symptom.
+
+**General principle:** Any operation that crosses an identity boundary (tenant, subscription, app reg, service principal, managed identity) needs a precondition check at the top of the script. Migrations leak orphaned identifiers more often than they leak data — and orphaned identifiers silently misroute calls instead of erroring on use.
+
+**What else would benefit from the same treatment:**
+- `Setup-ParlayvuAppRegistration.ps1` — could verify the Graph app permissions are admin-consented before exiting "success"
+- `Setup-ParlayvuGitHubActions.ps1` — could verify the federated credential subject matches the repo's actual `repository_owner/repository_name`
+- Any future cross-tenant or cross-subscription script
+
+**Migration cost when we don't do this:** ~24h of bot silence that nobody noticed until the user tried to actually use it.
+
+---
+
+## 10. Teams app `manifest.id` is the catalog identity — never change it
+
+**Chosen:** The Teams app manifest has two distinct identifiers; treat them as orthogonal:
+- `manifest.id` — the catalog identity. **Stable for the life of the app.** Changing it means Teams treats your upload as a brand-new app, and your existing team installations are orphaned.
+- `bots[0].botId` — the Bot Framework appId. Can change whenever the underlying bot's app reg changes.
+
+**Considered and rejected (the bug):** Doing a find-and-replace on the manifest to swap the old bot appId for the new one — without realizing both fields had been set to the same GUID at scaffold time and the find-and-replace would change both.
+
+**Why this matters (also from the 2026-05-26 outage):**
+- Original `manifest.json` had `id = botId = 2dc8aa66-...`. Common shortcut at scaffold time — reuse the bot's appId as the manifest id since you need a GUID anyway.
+- When we fixed the bot, a naive find-and-replace changed both → uploaded zip had `id = botId = ea0775e7-...`.
+- Teams Admin Center saw a new manifest.id and treated it as a brand-new app. Created a duplicate catalog entry. Existing team installs still pointed at the dead bot in the old entry. Bot stayed silent.
+- Fix: restored `manifest.id` to the original GUID, kept `botId` at the new one, bumped version `1.0.0 → 1.0.1` (Teams refuses to apply an Update if the version hasn't bumped).
+
+**What we changed:**
+- `infra/teams-app/README.md` now documents the two-id distinction prominently and warns against reusing the bot appId as the manifest id when scaffolding a new bot.
+- `manifest.json` has comments... actually JSON doesn't allow comments. The README is the comment.
+
+**General principle:** When scaffolding a Teams app, generate a fresh independent GUID for `manifest.id` (`uuidgen` / `[guid]::NewGuid()`) and never reuse another identifier for it.
