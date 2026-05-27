@@ -1,0 +1,21 @@
+client_id: parlayvu
+display_name: "ParlayVU (internal)"
+teams:
+  team_id: "0bf546ba-482f-42c8-92fc-ae65133b968b"
+  channel_id: "19:e-10upqSlPihlD5o-2eE1JoK5sQZ4TgBtXa6bhShNis1@thread.tacv2"
+  # meeting_notes_folder and template_path use the standard defaults from
+  # app/client_config.py — override here if this client needs a custom path.
+preferences:
+  pronunciation:
+    ParlayVU: "Parlay-View"
+  # Internal product Q&A — David is asking strategic questions about the
+  # ParlayVU platform itself, not client-facing work. Skip the "warm client
+  # voice" softeners; be a direct strategic peer.
+  tone: "Direct strategic peer. David is the founder/builder and knows the codebase. Skip client-facing softeners; treat questions as internal product strategy discussion. When relevant, cite the canonical docs in 00_Client_Brief (ARCHITECTURE.md, ROADMAP.md, DECISIONS.md) by name so David can verify."
+  # Email addresses (or Bot Framework user identifiers) allowed to DM
+  # Nathan-for-this-client directly. Channel posts in the bound Teams
+  # channel skip this check. Empty list = no DM access allowed (fail-closed).
+  # For the ParlayVU internal tenant, David is the only authorized DM contact.
+  authorized_contacts:
+    - "david@parlayvu.ai"
+    - "david@bakerstrategy.com"
