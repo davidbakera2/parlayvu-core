@@ -147,3 +147,59 @@
 - Set up the SP elevation + role-grant + re-login sequence as a single script upfront. We hit "AuthorizationFailed" three times because of token caching after role grant.
 - Test the JSON-quoting workaround for `az ad app federated-credential create` first. PowerShell + `az.cmd` quoting bit us.
 - Verify Bot Framework messaging endpoint and Tavus persona base_url get updated BEFORE decommissioning old infra. (We caught both; just risky.)
+- Azure Bot Service itself was a Phase 1-5 gap (Bot Framework messaging needs a Bot Service resource, not just an Entra app reg + Container App). Caught + closed in Phase 7.5 (`scripts/Setup-ParlayvuBot.ps1`).
+
+---
+
+## 7. One Nathan brain, parameterized by surface (Tavus voice vs Teams markdown)
+
+**Chosen:** A single `run_nathan_conversation(messages, *, client_id, surface)` function in `app/nathan_llm.py` runs the Anthropic tool-loop with the same role, the same tools, the same anti-hallucination rules — and a `surface: Literal["tavus", "teams_chat"]` parameter swaps only the response-style block of the system prompt.
+
+The system prompt is assembled from three pieces:
+- `NATHAN_BASE_SYSTEM` — role, team, tools, anti-hallucination, never-promise-writes-you-can't-do rules (identical everywhere)
+- `NATHAN_TAVUS_SURFACE_RULES` — voice rules (2-4 sentence responses, no markdown, narrate while tools run)
+- `NATHAN_TEAMS_CHAT_SURFACE_RULES` — async chat rules (markdown OK, bullets/headers/code-blocks fine, no live-meeting framing)
+
+`/v1/chat/completions` (Tavus) passes `surface="tavus"`. `/teams/messages` (Bot Framework) passes `surface="teams_chat"`. Default is `"tavus"` for backwards compat.
+
+**Considered and rejected:**
+- Separate Nathan implementations per surface — would have drifted within a sprint
+- One blob prompt that says "if voice then X, if chat then Y" — Claude weighs both rules even when one shouldn't apply; cleaner to physically include only the active block
+- Per-surface tool registries — no real reason to hide tools by surface; the same client questions come up in both places
+
+**Why this is the right shape:**
+- Adding a new surface (Slack, SMS, email) = write an inbound adapter + add one constant string to `nathan_llm.py`. Zero changes to the tool loop.
+- Prompt bug fixes apply everywhere automatically.
+- Tests pin both surface strings independently so neither can silently bleed into the other.
+
+**What this enabled in practice (Track 4, May 26):** Nathan-on-Teams now answers project questions, calls `web_search`, reads ingested reports, and saves meeting notes — the same brain that runs on Tavus calls. Before this, Teams chat went through the older LangGraph wrapper that could *route* to a specialist but couldn't directly answer.
+
+**When we'd revisit:** If a surface genuinely needs different memory semantics (async email threads spanning days, say), the right move is a sister entry-point with its own memory layer, not a fork of Nathan.
+
+---
+
+## 8. Pre-ingested markdown summaries beat on-demand RAG (for now)
+
+**Chosen:** When a client drops a PDF or .docx into their Teams channel, the `client_file_ingester` service pulls it through Sonnet 4.6 once and writes a structured markdown summary into `client_artifacts/<client>/01_Source_Material/reports/`. From then on, `get_project_context` includes the summary in Nathan's context at conversation start — zero retrieval latency.
+
+For files Nathan *hasn't* pre-ingested (or when he needs the verbatim text), he has two fallback tools: `list_client_files(client_id)` and `read_client_file(client_id, path)`, both routed through `app/tools/text_extractors.py` (pypdf + python-docx).
+
+**Considered and rejected (for today's scale):**
+- pgvector + embeddings + chunk retrieval on every turn — real engineering, real ops surface, and we have ~5 files per client
+- Tavus's built-in "30ms RAG" — Tavus-only; our Teams-chat Nathan would be blind to it
+- Read-on-every-call from Graph — Graph latency (300-800ms) on the hot path for every conversation
+
+**Why pre-ingest + markdown summaries:**
+- The summarization happens **once**, not every turn. At call time, reading the summary is sub-ms file I/O.
+- Summaries are version-controlled. `git diff` shows when Nathan's understanding of a report changed.
+- Cross-surface: Tavus Nathan and Teams Nathan read the same `.md` files. Tavus's KB only works on Tavus.
+- The on-demand tools cover the long tail without forcing us to ingest everything.
+- Sonnet 4.6 produces *better* structured summaries than naive chunking — it preserves decision context, not just text proximity.
+
+**When we'd reconsider (add real RAG on top, not replace this):**
+- Any client crosses ~30 markdown files
+- We accumulate >10 saved meeting notes per client
+- Nathan needs to answer specific historical questions ("what did we decide about subject lines in March?") and starts getting them wrong
+- See Decision #2 (document-dumping) for the build trigger and approach
+
+**What this means for the Tavus comparison:** We deliberately don't adopt Tavus's KB or cross-session memory features. See ROADMAP.md "Why we're NOT adopting…" for the full reasoning. Short version: our knowledge layer needs to work across Tavus + Teams + future surfaces, and Tavus's features are Tavus-only.

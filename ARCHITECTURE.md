@@ -2,7 +2,7 @@
 
 > A senior digital marketing agency, run by 13 AI agents, that joins client meetings and does the work in between.
 
-**Last updated:** 2026-05-25 (commit `9b53ee5`)
+**Last updated:** 2026-05-26 (end-of-session refresh — multi-client + ingestion + Teams unification shipped)
 **Maintained by:** the team. When something material changes, update this file in the same PR.
 
 > See also: [ROADMAP.md](./ROADMAP.md) for what's next, [DECISIONS.md](./DECISIONS.md) for the why behind key architectural calls.
@@ -143,7 +143,11 @@ Two sources, with priority:
    - `04_Approvals/` — approval packets
    - `05_Performance/` — KPIs and dashboards
 
-Currently only `ramair` is populated. The `get_project_context` tool tries the DB first, then falls back to the markdown files in this tree. **Both Postgres and the flat files ship in the Docker image** so production has access.
+Three clients are populated today: `ramair`, `christshope`, `ulcannarbor`. The `get_project_context` tool tries the DB first, then falls back to the markdown files in this tree. **Both Postgres and the flat files ship in the Docker image** so production has access.
+
+**File ingestion pipeline (May 26):** When a client drops a PDF or .docx into their Teams channel, `app/services/client_file_ingester.py` pulls it through Sonnet 4.6 once and writes a structured markdown summary into `01_Source_Material/reports/`. Pre-ingested reports flow into `get_project_context` automatically at conversation start — zero retrieval latency. For files Nathan hasn't pre-ingested he has `list_client_files` + `read_client_file` tools (`app/tools/text_extractors.py` handles PDF/.docx/markdown). Run on demand: `POST /clients/{id}/ingest-files` or `python -m app.services.client_file_ingester <client>`. See [DECISIONS.md §8](./DECISIONS.md).
+
+**Per-client config** lives at `client_artifacts/<client_id>/config.yaml` (`app/client_config.py`): Teams team_id, channel_id, meeting-notes folder, template path, and prompt-time preferences (pronunciation, tone, `authorized_contacts` allowlist for 1:1 DMs). This replaced singleton `M365_FILES_*` env vars and is what lets us serve more than one client at a time.
 
 ---
 
@@ -167,7 +171,15 @@ Currently only `ramair` is populated. The `get_project_context` tool tries the D
 ### Microsoft Graph
 - One **Entra app registration** with permissions: `Files.Read.All`, `Sites.Read.All`, `Mail.Send`, `Notes.ReadWrite.All` (and others)
 - Single `MicrosoftGraphClient` in `app/microsoft365.py` is the only thing that talks to Graph — every other module goes through it
-- Teams Bot Framework wraps this with `/teams/messages` for inbound bot conversations
+- New `list_channel_files()` helper drives the ingestion pipeline (uses `/drives/{drive}/items/{root_item_id}:/{path}:/children` — relative to the channel folder, not the drive root)
+
+### Teams chat (Bot Framework)
+- **Azure Bot Service** registered in the ParlayVU tenant (`scripts/Setup-ParlayvuBot.ps1`, idempotent). MIGRATION-PLAN.md Phase 7.5 documents the gap that drove it.
+- **Teams app package** at `infra/teams-app/` (manifest v1.17 + build script). Installed in client teams; bot is `@ParlayVU`.
+- **`/teams/messages`** routes through the **same Nathan tool-loop** as Tavus via `run_nathan_conversation(..., surface="teams_chat")` (May 26 — Track 4). Same brain, different response-style rules. See [DECISIONS.md §7](./DECISIONS.md).
+- **Channel binding:** `@ParlayVU bind this channel to <client>` recognizes any active client (reads from `list_clients()` + `load_client_config()`).
+- **1:1 DM gate:** `config.preferences.authorized_contacts` allowlist (fail-closed). Channel posts skip the check — anyone in the bound channel is implicitly authorized.
+- **Attachments:** Bot Framework attachments are downloaded via `download_bot_framework_attachment()`, saved under `client_artifacts/<client>/01_Source_Material/uploads/`, and the path is injected into Nathan's user message so he can `read_client_file` if useful.
 
 ### Approvals
 - Any write action that touches production (deploy site, send email) goes through `app/approvals.py` first
@@ -223,7 +235,7 @@ All scripts are idempotent — safe to re-run.
 ## 8. Development workflow
 
 1. **Branch:** work on `main` directly for now (no PR review process yet — solo dev)
-2. **Test locally:** `python -m unittest discover -s tests` (103+ tests as of `9b53ee5`)
+2. **Test locally:** `python -m unittest discover -s tests` (188 tests as of 2026-05-26)
 3. **Push to main:** triggers `deploy-api.yml` automatically (when changes touch `app/**`, `requirements.txt`, `Dockerfile`, or the workflow itself)
 4. **Watch CI:** github.com/davidbakera2/parlayvu-core/actions/workflows/deploy-api.yml
 5. **Verify deploy:** `az containerapp revision list --name parlayvu-api --resource-group rg-parlayvu-prod` — image SHA should match latest commit
@@ -244,7 +256,10 @@ All scripts are idempotent — safe to re-run.
 - **Multiple placeholder names per column** in action items table (`{{ACTION_DATE}}`, `{{DUE_DATE}}`, `{{ACTION_DUE}}` all work)
 - Outbound email drafts (with approval gate)
 - Astro site generation and Cloudflare Pages deploy (Dylan, via internal HTTP)
-- Teams bot dispatch (inbound messages → routed to the right agent via older agent graph — see ROADMAP.md for the "one Nathan, multiple surfaces" unification work)
+- **Teams chat = same Nathan brain as Tavus** (Track 4, May 26). `/teams/messages` calls `run_nathan_conversation(..., surface="teams_chat")` — markdown response, full tool access, per-client config awareness. The older LangGraph dispatch path is no longer on the hot path for conversational messages.
+- **File ingestion pipeline** — PDFs/.docx in a client's Teams channel get summarized once by Sonnet 4.6 into structured markdown; pre-ingested summaries flow into `get_project_context` with zero call-time latency
+- **Three live clients** — RamAir, Christ's Hope, ULC Ann Arbor — each with their own Tavus persona, bound Teams channel, and `client_artifacts/<id>/config.yaml`
+- **Dylan v2** — `POST /dylan/generate-variations` produces N visually-distinct single-file HTML+Tailwind homepage drafts from client reference sites + brand notes; auto-deploys to `<client>-previews.pages.dev`
 - OneNote and Teams Files meeting note publishing
 - 12-agent specialist team registered and callable via internal routes
 
@@ -323,6 +338,11 @@ parlayvu-core/
 | Action items table shows literal `{{ACTION_DATE}}` | Template uses an alias name; renderer accepts `{{ACTION_DUE}}`, `{{ACTION_DATE}}`, `{{DUE_DATE}}`, `{{DUE}}` — all should work since commit `768eb1f` |
 | Nathan goes silent during a save | Streaming or narration regression — check `nathan_llm.py:run_nathan_conversation_streaming` |
 | Nathan passes literal "Friday" as a due date | Date awareness regression — check that `_build_current_date_context()` is being prepended to the system prompt |
+| Teams Nathan answers like a voice assistant (terse, no markdown) | `surface="teams_chat"` not being passed in `_handle_teams_message` — should be picking `NATHAN_TEAMS_CHAT_SURFACE_RULES` |
+| 1:1 DM to the bot gets ignored / rejected | `config.preferences.authorized_contacts` allowlist (fail-closed). Empty list = ALL DMs rejected. Channel posts skip the check |
+| `list_channel_files` returns 404 on subfolder | URL is built relative to channel folder root item, not drive root — see `app/microsoft365.py` `list_channel_files` |
+| Pre-ingested report content not in Nathan's context | Check `client_artifacts/<client>/01_Source_Material/reports/` exists. Re-run `python -m app.services.client_file_ingester <client> --force` |
+| Bind command says "client not found" | Bind reads from `list_clients()` — confirm `client_artifacts/<id>/config.yaml` exists with valid `team_id` + `channel_id` |
 
 ---
 

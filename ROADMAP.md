@@ -2,77 +2,81 @@
 
 > What's next, in plain language. Updated when we ship or commit to new work.
 
-**Last updated:** 2026-05-26
+**Last updated:** 2026-05-26 (end-of-session refresh)
 **See also:** [ARCHITECTURE.md](./ARCHITECTURE.md) for current state, [DECISIONS.md](./DECISIONS.md) for the why.
 
 ---
 
 ## Recently shipped
 
-**This session (2026-05-25 / 26):**
+**This session (2026-05-25 / 26) — major:**
 
-- ✅ **Multi-client foundation** — per-client config at `client_artifacts/<client_id>/config.yaml` replaces singleton `M365_FILES_TEAM_ID`/`CHANNEL_ID` env vars. Tavus `/v1/chat/completions` reads `X-Parlayvu-Client-Id` header per persona; Nathan's system prompt gets per-client preferences (pronunciation, tone) injected at conversation start. (Track 2)
-- ✅ **Christ's Hope onboarded** as second live client (`p7017121a743` Tavus persona, full client_artifacts folder).
-- ✅ **ULC Ann Arbor onboarded** as third live client (`p577962cd534` Tavus persona, reference-sites + design notes already captured from visioning session).
-- ✅ **Teams-first templates** — `06_Templates/Meeting_Notes_Template.docx` in each client's Teams channel is the canonical, client-editable source. Repo copy is starter/fallback.
-- ✅ **Standardized template filename** — `Meeting_Notes_Template.docx` is the same path for every client; only docx content varies.
-- ✅ **Pronunciation fix bundled into config.yaml** — RamAir → "Ram-Air" lives in `preferences.pronunciation` rather than a one-off prompt edit. (Track 1)
-- ✅ **Tavus persona registry** documented in ARCHITECTURE.md §6 with onboarding steps for client N.
+- ✅ **Multi-client foundation (Track 2)** — per-client config at `client_artifacts/<client_id>/config.yaml` replaces singleton `M365_FILES_TEAM_ID`/`CHANNEL_ID` env vars. Tavus `/v1/chat/completions` reads `X-Parlayvu-Client-Id` header per persona; per-client pronunciation/tone injected into Nathan's system prompt.
+- ✅ **Three live clients** — RamAir (`p02372056aec`), Christ's Hope (`p7017121a743`), ULC Ann Arbor (`p577962cd534`). All have separate Tavus personas, bound Teams channels, scaffolded `client_artifacts/`.
+- ✅ **Dylan v2 (Track 3)** — `POST /dylan/generate-variations` produces N visually-distinct single-file HTML+Tailwind homepage drafts from a client's reference sites + brand notes; auto-deploys to `<client>-previews.pages.dev`. Five predefined design theses keep variations genuinely distinct.
+- ✅ **Teams chat unification (Track 4)** — `/teams/messages` routes through the same Nathan tool-loop as Tavus. New `surface` param ("tavus"|"teams_chat") parameterizes the response style (voice rules vs markdown rules). 1:1 DM authorized-contacts gate (fail-closed). Attachment download + save to client uploads/ + path injection into Nathan's context.
+- ✅ **File ingestion pipeline** — `POST /clients/{id}/ingest-files` or `python -m app.services.client_file_ingester <client>` pulls PDFs/.docx from a client's Teams channel, summarizes with Sonnet 4.6 into structured markdown under `01_Source_Material/reports/`. Pre-ingested reports flow into `get_project_context` with zero latency at call time.
+- ✅ **On-demand file reading** — `list_client_files` + `read_client_file` tools as the fallback path for files Nathan hasn't pre-ingested. Shared text extractors (`app/tools/text_extractors.py`) handle PDF/.docx/markdown.
+- ✅ **Teams-first templates** — `06_Templates/Meeting_Notes_Template.docx` (standardized filename) in each client's Teams channel is the canonical, client-editable source. Repo copy is starter/fallback.
+- ✅ **Pronunciation fix (Track 1)** — bundled into `preferences.pronunciation` in config.yaml ("RamAir" → "Ram-Air").
+
+**This session — infra + setup:**
+
+- ✅ **Azure Bot Service created** in ParlayVU tenant (gap left over from migration). Codified in `scripts/Setup-ParlayvuBot.ps1`; MIGRATION-PLAN.md Phase 7.5 documents it.
+- ✅ **Teams app package** at `infra/teams-app/` — manifest + build script, installed in RamAir team and discoverable via `@ParlayVU` mention. CH + ULC team installs pending.
+- ✅ **Bind command extended** — `@ParlayVU bind this channel to <client>` now recognizes any active client (reads from `list_clients()` + `load_client_config()`), not just RamAir.
+- ✅ **Tavus persona registry** in [ARCHITECTURE.md §6](./ARCHITECTURE.md).
+- ✅ **Native Teams video scoping doc** at [docs/scoping/native-teams-video-and-screen-share.md](./docs/scoping/native-teams-video-and-screen-share.md) (4–5 week build; deferred until forcing function).
 
 **Previous (last week):**
 
-- ✅ **Tenant migration complete** — all infra moved from Baker Strategy Group Azure/Entra to ParlayVU's own subscription + tenant
-- ✅ **`save_meeting_notes` tool** — Nathan files notes himself at end of meeting, no human in the loop
-- ✅ **10-field structured meeting notes** — title, date+time, project, attendees, summary, decisions, action items table, questions, next steps, source material
-- ✅ **DOCX template renderer with structural duplication** — bulleted-list paragraphs duplicate per item, action items table duplicates rows per action
-- ✅ **Multiple placeholder aliases** in action items table — `{{ACTION_DATE}}`, `{{DUE_DATE}}`, `{{ACTION_DUE}}` all work
-- ✅ **Streaming with mid-tool narration** — Nathan talks during long-running tool calls instead of going silent
-- ✅ **Date awareness in prompt** — Nathan resolves "tomorrow"/"Friday"/"next week" to specific dates
-- ✅ **Idempotent setup scripts** — full re-bootstrap of Azure + Entra + GitHub Actions in 4 PowerShell scripts
+- ✅ **Tenant migration** — all infra moved from Baker Strategy Group Azure/Entra to ParlayVU's own subscription + tenant.
+- ✅ **`save_meeting_notes` tool** with 10-field structured records + DOCX template renderer (bullet-list + table-row duplication, multiple placeholder aliases).
+- ✅ **Streaming with mid-tool narration** so Nathan doesn't go silent during long-running tool calls.
+- ✅ **Date awareness in prompt** — relative date references resolve to specific calendar dates.
+- ✅ **Idempotent setup scripts** — full re-bootstrap of Azure + Entra + GitHub Actions.
 
 ---
 
 ## Next up
 
-Two main tracks remaining from the original four. Order is driven by real-world deadlines (when do clients need these), not by code dependency. Some can ship in parallel.
+Two short tracks committed for the next session, both Tavus polish:
 
-### Track 3: Dylan v2 web design (~3-4 hours)
+### Track 5: Cross-session memory (~4–6 hours)
 
-**Goal:** Dylan can build 5-7 sample homepage variations for ULC Ann Arbor based on reference URLs + brand notes. Iterate based on client feedback.
+**Goal:** Nathan remembers prior conversations across Tavus sessions and Teams chat threads. Today he's stateless per call — the only persistent memory is filed meeting notes + ingested reports.
 
-**Approach (deliberately lean — see DECISIONS.md on "use Claude, don't build SaaS"):**
-- One new tool for Dylan: `write_site_file(client_id, relative_path, content)` — writes HTML/CSS/JSX into `client_artifacts/<client>/03_Deliverables/sites/<variation>/`
-- Update Dylan's system prompt: *"For design work, generate complete HTML/Tailwind pages and write them. For multiple variations, produce N visually distinct treatments of the same content. Fetch reference URLs first to understand the client's taste."*
-- Reuse existing `deploy_to_cloudflare` for multi-preview URLs
-- ULC Ann Arbor is the forcing function — reference sites and visioning notes already captured at `client_artifacts/ulcannarbor/01_Source_Material/reference-sites.md`.
+**Approach (lean — own the data, not vendor lock):**
+- New `conversation_turns` table in Neon Postgres keyed by `(client_id, conversation_id)`, storing last ~20 turns with TTL (~7 days).
+- On every Tavus + Teams call, load prior turns and prepend to the message list before calling Nathan.
+- After the response, append the new turn.
+- Works on **both** surfaces (Tavus + Teams) — that's why we own this instead of using Tavus's built-in cross-session memory feature (which only works on Tavus).
 
-**Status:** Not started. ~3-4 hrs including iteration on prompt. ULC fully scaffolded and ready to consume the output.
+**Status:** Not started. ~4–6 hr including schema migration + tests.
 
-**Open questions:**
-- Image sourcing: Unsplash API, AI-generated, or just placeholder boxes for v1?
-- Does Dylan need to read existing site files (edit mode), or always generate fresh? (Answer: both, once Track 4 lands — Matt-at-ULC wants edits.)
+### Track 6: Phoenix-4 upgrade (~30 min when GA)
+
+**Goal:** Better avatar fidelity. Phoenix-3 is fine; Phoenix-4 is meaningfully better at lip sync and micro-expressions.
+
+**Approach:**
+- Replace `default_replica_id` on all three personas (`p02372056aec`, `p7017121a743`, `p577962cd534`) from `ra534cde00e5` to the Phoenix-4 equivalent.
+- One-line patch via `Update-NathanPersonaLLM.ps1` (need to confirm whether replica swap requires a new script or can ride on the existing one).
+
+**Status:** Blocked on Phoenix-4 GA availability for our Tavus account. Check Tavus dashboard / docs.
 
 ---
 
-### Track 4: Teams chat with tools — one Nathan, multiple surfaces (~1 day)
+## Why we're NOT adopting Tavus's built-in knowledge base or cross-session memory
 
-**Goal:** Clients (Matt at ULC, contacts at Christ's Hope, etc.) chat with Nathan in MS Teams; Nathan can do real work — answer questions, ask Dylan to edit the site, file notes — same brain as Tavus Nathan.
+Tavus markets RAG ("30ms retrieval") and cross-session memory as built-in features. We deliberately implement our own equivalents because:
 
-**Why this matters:** Today Teams Nathan and Tavus Nathan are different brains. Tavus uses `/v1/chat/completions` with tools. Teams uses an older agent-graph path with no tools. Unifying them = one Nathan that's smart everywhere.
+- **Cross-surface knowledge** — our `.md` files in `client_artifacts/` are read by both Tavus Nathan AND Teams-chat Nathan. Tavus's KB only works on Tavus.
+- **Auditable + version-controlled** — every `.md` is in git; you can `cat` what Nathan knows, `git diff` what changed, rollback bad summaries. Tavus's KB is a black box.
+- **No vendor lock-in for client knowledge** — swap avatar providers tomorrow and our knowledge is intact.
+- **One LLM provider** (Anthropic) for ingestion + answers — simpler debugging.
+- **Speed parity in practice** — `get_project_context` is a file system read (sub-ms), faster than Tavus's "30ms retrieval" claim for the pre-ingested path.
 
-**Approach:**
-1. **Verify Teams bot end-to-end** in new ParlayVU tenant (Bot Framework messaging endpoint may still point at old Baker Strategy URL) — 30 min
-2. **Route `/teams/messages` through `/v1/chat/completions`** — Teams Nathan becomes a thin Bot Framework ↔ OpenAI Chat Completions adapter, full tool access — 2 hrs
-3. **Attachment handling** — when client attaches a photo/file, download via Bot Framework, save to `client_artifacts/<client>/01_Source_Material/uploads/`, include path in Nathan's context — 1-2 hrs
-4. **Add Dylan's `read_site_file` / `write_site_file` / `deploy_site` tools** (overlaps with Track 3) — 2 hrs
-5. **End-to-end test** with Matt-at-ULC: *"Can we make the buttons blue?"* → Nathan delegates to Dylan → preview URL replied in chat — 1-2 hrs
-
-**Total: ~one focused day** once Track 2 (multi-client) is in place.
-
-**Open architectural questions:**
-- **Who's authorized to talk to Nathan?** Channel posts: anyone in the bound channel. 1:1 DMs: needs allowlist per client (`authorized_contacts: [matt@ulcannarbor.org, ...]` in `config.yaml`). Anyone else gets a polite "I can only help you if you're on the authorized contacts list for one of our clients."
-- **What's auto vs gated?** Style tweaks (button color, font size) → auto-deploy to preview, ping client with URL. Content/copy changes → existing approvals system kicks in. Where exactly the line is needs explicit per-client setting.
-- **Sync vs async conversation?** When Nathan delegates a 90-second job to Dylan, does he reply immediately ("On it, will ping you in ~2 min") and follow up, or hold? Default: reply immediately + follow up. Feels more responsive.
+See [DECISIONS.md](./DECISIONS.md) for the full reasoning.
 
 ---
 
