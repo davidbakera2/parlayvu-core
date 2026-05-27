@@ -169,6 +169,38 @@ def is_channel_bind_request(text: str) -> bool:
     return "bind" in normalized and "channel" in normalized
 
 
+_RESET_PATTERNS = (
+    "start over",
+    "starting over",
+    "reset conversation",
+    "reset chat",
+    "reset memory",
+    "new conversation",
+    "new chat",
+    "forget that",
+    "forget everything",
+    "clear history",
+    "clear memory",
+    "fresh start",
+)
+
+
+def is_conversation_reset_request(text: str) -> bool:
+    """Detect explicit asks to clear Nathan's conversation memory.
+
+    Matches a small set of natural phrasings rather than a slash command
+    so users don't have to learn syntax. Case-insensitive, ignores the bot
+    mention. Conservative on purpose — false positives wipe history, so we
+    require a multi-word phrase rather than a single word like "reset"
+    (which could appear in legitimate questions like "what's our reset
+    policy on subscriptions?").
+    """
+    normalized = normalize_teams_message(text).lower().strip()
+    if not normalized:
+        return False
+    return any(pattern in normalized for pattern in _RESET_PATTERNS)
+
+
 def is_meeting_note_publish_request(text: str) -> bool:
     normalized = normalize_teams_message(text).lower()
     return (

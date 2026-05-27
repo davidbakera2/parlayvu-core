@@ -1,11 +1,20 @@
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
 from app.database import session_scope
-from app.models import AgentEvent, Client, GeneratedOutput, Project, SourceAsset, TeamsChannelBinding
+from app.models import (
+    AgentEvent,
+    Client,
+    ConversationTurn,
+    GeneratedOutput,
+    Project,
+    SourceAsset,
+    TeamsChannelBinding,
+)
 
 logger = logging.getLogger("parlayvu.project_memory")
 
@@ -230,6 +239,157 @@ def record_agent_event(
     except Exception as exc:
         logger.warning("Project memory event write skipped: %s", exc)
         return None
+
+
+# ---------------------------------------------------------------------------
+# Conversation memory
+# ---------------------------------------------------------------------------
+# Append-only turn log keyed by (conversation_id, client_id). Backs the Teams
+# multi-turn experience so Nathan can say "yes, regenerate variant 3" without
+# the user re-explaining what variant 3 is. Replay defaults intentionally
+# generous (20 turns, 72h) — David picked the looser end of the spec. Drop
+# oldest turns first when the char budget would be exceeded.
+
+CONVERSATION_MAX_TURNS = 20
+CONVERSATION_MAX_AGE_HOURS = 72
+CONVERSATION_MAX_CHARS = 60_000
+
+
+def save_conversation_turn(
+    *,
+    conversation_id: Optional[str],
+    role: str,
+    content: str,
+    client_id: Optional[str] = None,
+    surface: str = "teams_chat",
+) -> Optional[str]:
+    """Append a single turn (user or assistant) to the conversation log.
+
+    No-op when project memory is disabled or conversation_id is empty
+    (1:1 DMs without a stable conversation handle skip memory). Returns the
+    new row's id on success, None otherwise. Never raises — conversation
+    memory is best-effort; Nathan still works without it.
+    """
+    if not project_memory_enabled():
+        return None
+    if not conversation_id or not content:
+        return None
+    if role not in {"user", "assistant"}:
+        logger.warning("save_conversation_turn: unexpected role=%r", role)
+        return None
+
+    try:
+        with session_scope() as session:
+            turn = ConversationTurn(
+                conversation_id=conversation_id,
+                client_id=client_id,
+                surface=surface,
+                role=role,
+                content=content,
+            )
+            session.add(turn)
+            session.flush()
+            return turn.id
+    except Exception as exc:
+        logger.warning("Conversation turn write skipped: %s", exc)
+        return None
+
+
+def load_conversation_history(
+    *,
+    conversation_id: Optional[str],
+    client_id: Optional[str] = None,
+    max_turns: int = CONVERSATION_MAX_TURNS,
+    max_age_hours: int = CONVERSATION_MAX_AGE_HOURS,
+    max_chars: int = CONVERSATION_MAX_CHARS,
+) -> list[dict[str, Any]]:
+    """Load the recent conversation history for replay into a Nathan call.
+
+    Returns a list of {"role": "...", "content": "..."} dicts in
+    chronological order (oldest first), suitable for prepending to a fresh
+    user message before calling run_nathan_conversation.
+
+    Three bounds, applied in order:
+      1. Max age: ignore turns older than max_age_hours
+      2. Max turns: keep only the most recent max_turns
+      3. Max chars: if total content exceeds max_chars, drop oldest turns
+         until it fits. Newest turns are most relevant; trimming the tail
+         keeps the immediate context intact.
+
+    Scoped by conversation_id (and client_id when provided) so two clients
+    sharing a Teams tenant can never see each other's history. Returns []
+    when project memory is disabled, conversation_id is empty, or no rows
+    match — every caller path stays safe.
+    """
+    if not project_memory_enabled():
+        return []
+    if not conversation_id:
+        return []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+
+    try:
+        with session_scope() as session:
+            query = session.query(ConversationTurn).filter(
+                ConversationTurn.conversation_id == conversation_id,
+                ConversationTurn.created_at >= cutoff,
+            )
+            if client_id:
+                query = query.filter(ConversationTurn.client_id == client_id)
+            # Pull newest-first then reverse — lets us apply the turn cap on
+            # the most-recent end before we sort back into chronological order.
+            # Materialize as plain dicts INSIDE the session so we don't
+            # touch detached SQLAlchemy instances after __exit__ commits/closes.
+            recent_rows = (
+                query.order_by(ConversationTurn.created_at.desc())
+                .limit(max_turns)
+                .all()
+            )
+            turns = [
+                {"role": t.role, "content": t.content or ""}
+                for t in reversed(recent_rows)  # chronological order
+            ]
+    except Exception as exc:
+        logger.warning("Conversation history read skipped: %s", exc)
+        return []
+
+    # Char budget: drop oldest turns until total content fits. Newest turns
+    # are the highest-signal context — trimming the tail keeps them intact.
+    total_chars = sum(len(t["content"]) for t in turns)
+    while turns and total_chars > max_chars:
+        dropped = turns.pop(0)
+        total_chars -= len(dropped["content"])
+
+    return turns
+
+
+def reset_conversation_history(
+    *,
+    conversation_id: Optional[str],
+    client_id: Optional[str] = None,
+) -> int:
+    """Delete all turns for a (conversation_id, client_id) pair.
+
+    Returns the number of rows deleted. No-op (returns 0) when project
+    memory is disabled or conversation_id is empty. Never raises.
+    """
+    if not project_memory_enabled():
+        return 0
+    if not conversation_id:
+        return 0
+
+    try:
+        with session_scope() as session:
+            query = session.query(ConversationTurn).filter(
+                ConversationTurn.conversation_id == conversation_id,
+            )
+            if client_id:
+                query = query.filter(ConversationTurn.client_id == client_id)
+            deleted = query.delete(synchronize_session=False)
+            return int(deleted or 0)
+    except Exception as exc:
+        logger.warning("Conversation history reset skipped: %s", exc)
+        return 0
 
 
 def list_clients() -> list[dict[str, Any]]:

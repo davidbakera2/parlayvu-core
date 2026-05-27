@@ -165,6 +165,7 @@ from .teams import (
     grounded_project_reply,
     is_bot_framework_activity,
     is_channel_bind_request,
+    is_conversation_reset_request,
     is_meeting_note_publish_request,
     nathan_response_to_text,
     normalize_teams_message,
@@ -181,8 +182,11 @@ from .project_memory import (
     get_project_context,
     list_clients,
     list_projects,
+    load_conversation_history,
     record_agent_event,
     record_generated_output,
+    reset_conversation_history,
+    save_conversation_turn,
 )
 from .microsoft365 import (
     MicrosoftGraphClient,
@@ -762,9 +766,44 @@ async def _handle_teams_message(request: TeamsMessageRequest):
 
     _apply_teams_channel_binding(request)
 
+    # Explicit "start over" / "reset" / "new conversation" wipes Nathan's
+    # memory for this Teams thread before he even sees the message. Returns
+    # immediately with a short ack so the user knows it took effect.
+    if is_conversation_reset_request(normalized_text):
+        deleted = reset_conversation_history(
+            conversation_id=request.conversation_id,
+            client_id=request.client_id,
+        )
+        ack = (
+            f"Started fresh — cleared {deleted} prior turn(s) from this thread."
+            if deleted
+            else "Started fresh. (No prior history to clear.)"
+        )
+        return {
+            "status": "routed",
+            "channel": "teams",
+            "conversation_id": request.conversation_id,
+            "team_id": request.team_id,
+            "channel_id": request.channel_id,
+            "client_id": request.client_id,
+            "project_id": request.project_id,
+            "nathan_text": ack,
+        }
+
+    # Replay the recent conversation history (last 20 turns, 72h window,
+    # 60K char cap — see project_memory.CONVERSATION_MAX_*). Empty list
+    # when memory is disabled or this is the first turn. We append the new
+    # user message after the history so Nathan reads it in chronological
+    # order.
+    history = load_conversation_history(
+        conversation_id=request.conversation_id,
+        client_id=request.client_id,
+    )
+    nathan_messages = history + [{"role": "user", "content": normalized_text}]
+
     try:
         nathan_text = await run_nathan_conversation(
-            [{"role": "user", "content": normalized_text}],
+            nathan_messages,
             client_id=request.client_id,
             surface="teams_chat",
         )
@@ -773,6 +812,22 @@ async def _handle_teams_message(request: TeamsMessageRequest):
     except Exception as e:
         logger.error(f"Error in /teams/messages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+    # Persist BOTH sides of the turn so the next message in this thread can
+    # replay the full exchange. Saves are best-effort and never raise.
+    save_conversation_turn(
+        conversation_id=request.conversation_id,
+        client_id=request.client_id,
+        role="user",
+        content=normalized_text,
+    )
+    if nathan_text:
+        save_conversation_turn(
+            conversation_id=request.conversation_id,
+            client_id=request.client_id,
+            role="assistant",
+            content=nathan_text,
+        )
 
     # Keep audit parity with the previous LangGraph path — every Teams
     # turn produces one `nathan_replied` event tied to the conversation.
@@ -1103,6 +1158,24 @@ async def _handle_site_approval_card_action(
             deploy.get("message") or "Check wrangler output in logs.",
         ]
     await send_bot_framework_reply(payload, "\n".join(reply_lines))
+
+    # Site shipped — close out Nathan's conversation memory for this Teams
+    # thread. The next message in this channel starts a fresh ask, not a
+    # continuation of "which variant do we pick?". Best-effort; never raises.
+    if deploy.get("status") != "manual_step_required":
+        conv_id = (payload.get("conversation") or {}).get("id")
+        if conv_id:
+            cleared = reset_conversation_history(
+                conversation_id=conv_id,
+                client_id=client_id,
+            )
+            if cleared:
+                logger.info(
+                    "Cleared conversation memory after successful promote | "
+                    "conversation_id=%s client_id=%s turns=%s",
+                    conv_id, client_id, cleared,
+                )
+
     return {"status": "approved_and_deployed", "approval_id": approval_id, "deploy": deploy}
 
 

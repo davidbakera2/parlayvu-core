@@ -136,3 +136,27 @@ class TeamsChannelBinding(Base, TimestampMixin):
 
     client: Mapped[Client] = relationship()
     project: Mapped[Project] = relationship(back_populates="teams_channel_bindings")
+
+
+class ConversationTurn(Base, TimestampMixin):
+    """One user-or-assistant turn in a Teams (or future-surface) conversation.
+
+    Append-only, denormalized for fast replay. Not a foreign-key relationship
+    to clients/projects on purpose — conversation memory should never fail
+    because a parent row is missing. Scope-by-conversation_id is the primary
+    lookup; client_id is stored alongside so we can scope cross-checks and
+    enforce isolation between clients sharing a Teams tenant.
+
+    Replay defaults: 20 turns, 72h, 60K chars (see load_conversation_history
+    in app/project_memory.py). Reset clears all rows for a (conversation_id,
+    client_id) pair.
+    """
+
+    __tablename__ = "conversation_turns"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    conversation_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    client_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    surface: Mapped[str] = mapped_column(String(32), nullable=False, default="teams_chat")
+    role: Mapped[str] = mapped_column(String(16), nullable=False)  # "user" | "assistant"
+    content: Mapped[str] = mapped_column(Text, nullable=False)
