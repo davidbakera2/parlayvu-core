@@ -239,6 +239,37 @@ We need a new service principal in ParlayVU's tenant with OIDC federation to Git
 
 ---
 
+## Phase 7.5 — Recreate Azure Bot Service in ParlayVU tenant (~5 min) — *added 2026-05-26*
+
+**Gap discovered while shipping Track 4** (one-Nathan-across-surfaces). The original migration carried over the AAD app registration (`TEAMS_APP_ID = 2dc8aa66-9c5b-4ff5-9151-48408f1f6554`) but did not recreate the **Azure Bot Service** resource that wraps it and enables the Microsoft Teams channel. Without that resource, Teams Admin Center rejects the bot manifest upload with "Invalid bot" — Microsoft has no record of a bot with this app ID in the ParlayVU tenant.
+
+**Fix:** Run the idempotent script:
+
+```powershell
+.\scripts\Setup-ParlayvuBot.ps1
+```
+
+Or the equivalent two commands directly:
+
+```powershell
+az bot create `
+    --resource-group rg-parlayvu-prod `
+    --name parlayvu-bot `
+    --app-type SingleTenant `
+    --appid 2dc8aa66-9c5b-4ff5-9151-48408f1f6554 `
+    --tenant-id 45b63749-ebe1-48fa-928c-963050843179 `
+    --endpoint https://parlayvu-api.thankfulriver-96fed9c6.eastus.azurecontainerapps.io/teams/messages `
+    --sku F0
+
+az bot msteams create `
+    --resource-group rg-parlayvu-prod `
+    --name parlayvu-bot
+```
+
+After this lands, the Teams app manifest upload (via Teams Admin Center → Manage apps) succeeds and the bot can be installed in any team. See `infra/teams-app/README.md` for the install + verify checklist.
+
+---
+
 ## Phase 8 — Decommission Baker Strategy resources (~15 min, ONLY after Phase 7 passes)
 
 Don't delete anything in Baker Strategy's tenant until ParlayVU's version has been working for at least 24 hours. Then:
