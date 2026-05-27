@@ -33,6 +33,13 @@
     TEAMS_APP_ID env var on the parlayvu-api Container App and the `id`
     field in infra/teams-app/manifest.json.
 
+    REQUIRED. Pass the appId of an app registration that actually exists
+    in the ParlayVU tenant — verify with `az ad app show --id <appId>`
+    before running. There is no default because hardcoding the wrong ID
+    is what caused the 2026-05-26 outage where the bot pointed at a
+    Baker-Strategy-tenant appId that didn't exist in ParlayVU and every
+    Bot Framework reply failed with OAuth 400.
+
 .PARAMETER TenantId
     Entra tenant ID. Default: ParlayVU tenant.
 
@@ -59,7 +66,8 @@
 param(
     [string]$ResourceGroup     = "rg-parlayvu-prod",
     [string]$BotName           = "parlayvu-bot",
-    [string]$TeamsAppId        = "2dc8aa66-9c5b-4ff5-9151-48408f1f6554",
+    [Parameter(Mandatory = $true)]
+    [string]$TeamsAppId,
     [string]$TenantId          = "45b63749-ebe1-48fa-928c-963050843179",
     [string]$MessagingEndpoint = "https://parlayvu-api.thankfulriver-96fed9c6.eastus.azurecontainerapps.io/teams/messages",
     [ValidateSet("SingleTenant", "MultiTenant")]
@@ -68,6 +76,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Fail-fast guard: the AAD app must actually exist in the target tenant.
+# Without this check the bot can be created pointing at a phantom appId
+# (the 2026-05-26 outage) — Bot Service doesn't validate it, so every
+# OAuth token request silently fails for weeks until you check logs.
+$appExists = az ad app show --id $TeamsAppId --query "appId" -o tsv 2>$null
+if ($LASTEXITCODE -ne 0 -or -not $appExists) {
+    throw "App registration $TeamsAppId does not exist in the current tenant. " +
+          "Create it first: az ad app create --display-name 'parlayvu-bot' --sign-in-audience AzureADMyOrg"
+}
 
 function Write-Step($msg) {
     Write-Host ""

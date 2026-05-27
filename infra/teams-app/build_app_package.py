@@ -9,6 +9,7 @@ Run:
 """
 from __future__ import annotations
 
+import json
 import sys
 import zipfile
 from pathlib import Path
@@ -94,18 +95,29 @@ def _build_zip() -> Path:
     return out
 
 
+def _read_bot_id() -> str:
+    """Pull the live botId out of manifest.json so the print never lies."""
+    manifest = json.loads((HERE / "manifest.json").read_text(encoding="utf-8"))
+    bots = manifest.get("bots") or []
+    if bots and isinstance(bots[0], dict) and bots[0].get("botId"):
+        return bots[0]["botId"]
+    return manifest.get("id", "<unknown>")
+
+
 def main() -> int:
     _ensure_icons()
     out = _build_zip()
+    bot_id = _read_bot_id()
     print(f"\nBuilt Teams app package: {out}")
-    print(f"  Bot ID: 2dc8aa66-9c5b-4ff5-9151-48408f1f6554")
+    print(f"  Bot ID (from manifest.json): {bot_id}")
     print(
-        "\nNext steps (one-time per Teams tenant):\n"
+        "\nNext steps (one-time per Teams tenant; or to update an existing install):\n"
         "  1. Open https://admin.teams.microsoft.com -> Teams apps -> Manage apps\n"
-        f"  2. Click 'Upload new app' -> choose {out.name}\n"
+        f"  2. If 'ParlayVU' already exists: click it -> Update -> upload {out.name}\n"
+        f"     Otherwise: click 'Upload new app' -> choose {out.name}\n"
         "  3. Approve it for org-wide use (or scope to specific users)\n"
-        "  4. In the RamAir Team: ... -> Manage team -> Apps -> Add an app -> search 'ParlayVU' -> Add\n"
-        "  5. In any channel of that team, type @ParlayVU — Nathan should appear in the autocomplete\n"
+        "  4. In any client team that doesn't yet have it: ... -> Manage team -> Apps -> Add an app -> search 'ParlayVU' -> Add\n"
+        "  5. In any channel of that team, type @ParlayVU - Nathan should appear in the autocomplete\n"
         "\nSee infra/teams-app/README.md for the full install + verify checklist."
     )
     return 0

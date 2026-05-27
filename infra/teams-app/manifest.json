@@ -2,7 +2,7 @@
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
   "manifestVersion": "1.17",
   "version": "1.0.0",
-  "id": "2dc8aa66-9c5b-4ff5-9151-48408f1f6554",
+  "id": "ea0775e7-a6ae-4f70-9f4b-3409a06a29a5",
   "developer": {
     "name": "ParlayVU",
     "websiteUrl": "https://parlayvu.ai",
@@ -24,7 +24,7 @@
   "accentColor": "#1F2937",
   "bots": [
     {
-      "botId": "2dc8aa66-9c5b-4ff5-9151-48408f1f6554",
+      "botId": "ea0775e7-a6ae-4f70-9f4b-3409a06a29a5",
       "scopes": ["team", "personal", "groupChat"],
       "supportsFiles": true,
       "isNotificationOnly": false,
