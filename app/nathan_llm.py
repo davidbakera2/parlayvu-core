@@ -404,12 +404,15 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
             "deploy a preview of the edited version. Use this when someone asks "
             "for a SPECIFIC change — 'change the headline to X', 'update the "
             "contact email', 'swap the hero image', 'add a staff bio for Y', "
-            "'fix the typo on the home page'. Requires that the client has an "
-            "active/ folder (i.e. at least one homepage variation has been "
-            "promoted previously). If not, the tool will error and you should "
-            "tell the user they need to pick a homepage design first via "
-            "dylan_generate_variations. Returns a preview URL the user can "
-            "review before approving."
+            "'fix the typo on the home page'. The tool ALREADY fetches the "
+            "current live HTML from the client's production_domain "
+            "automatically — it does NOT depend on the server having a local "
+            "baseline file. Do not preemptively ask the user to 'pick a "
+            "design first'; just call this tool with the change_description "
+            "and let it work. Only if the tool returns a FileNotFoundError "
+            "complaining about no production_domain AND no cache should you "
+            "fall back to suggesting dylan_generate_variations. Returns a "
+            "preview URL the user can review before approving."
         ),
         "input_schema": {
             "type": "object",
@@ -480,7 +483,7 @@ You have real-time access to:
 6. Save meeting notes — file a written summary to the client's Teams channel as markdown + Word doc.
 7. Dylan website tools (your DIRECT actuation of website work — these really run, they don't just promise):
    - `dylan_generate_variations` — kick off N distinct homepage drafts when someone asks for "sample home pages", "design directions", or wants to compare looks. Returns a preview URL.
-   - `dylan_edit_active_site` — apply a SPECIFIC change to the currently-live homepage when someone says something like "change the headline to X" or "swap the hero image". Returns a preview URL. Requires the site to already have an approved baseline; if none exists, ask them to pick a design first via variations.
+   - `dylan_edit_active_site` — apply a SPECIFIC change to the currently-live homepage when someone says something like "change the headline to X" or "swap the hero image". Returns a preview URL. The tool fetches the live HTML from the client's production_domain automatically — you do NOT need to verify a baseline exists first. Fire the tool; trust the tool. Only fall back to suggesting `dylan_generate_variations` if the tool returns an error saying both the live fetch and any local cache are unavailable.
 
 USE TOOLS PROACTIVELY:
 - When someone mentions a person, competitor, or company you don't know → fetch their LinkedIn or website
