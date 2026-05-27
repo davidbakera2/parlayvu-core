@@ -159,6 +159,8 @@ from .graph import get_graph, ParlayVuState
 from .readiness import readiness_report
 from .teams import (
     approvals_to_teams_cards,
+    build_site_edit_approval_card,
+    build_site_variations_approval_card,
     graph_files_target_from_teams_activity,
     grounded_project_reply,
     is_bot_framework_activity,
@@ -168,6 +170,7 @@ from .teams import (
     normalize_teams_message,
     parse_meeting_note_publish_command,
     resolve_demo_bind_target,
+    send_bot_framework_card,
     send_bot_framework_reply,
     teams_message_from_activity,
     teams_status,
@@ -903,12 +906,224 @@ async def _save_teams_attachments(
     return saved
 
 
+async def _pending_site_approval_ids(client_id: Optional[str]) -> set[str]:
+    """Snapshot of pending deploy_site approvals for a client's website project.
+    Used by the Teams handler to compute the delta after Nathan runs (new
+    approvals → cards to post)."""
+    if not client_id:
+        return set()
+    project_id = f"{client_id}-website"
+    approvals = list_approvals(project_id=project_id, status="pending")
+    return {
+        a["id"]
+        for a in approvals
+        if (a.get("metadata") or {}).get("action_type") == "deploy_site"
+    }
+
+
+async def _post_new_site_approval_cards(
+    payload: dict[str, Any],
+    client_id: Optional[str],
+    before_ids: set[str],
+) -> list[str]:
+    """List pending deploy_site approvals NOT in `before_ids` and post a card
+    for each. Returns the approval IDs that were posted (for caller logs/audit).
+    Failures to post are logged but don't raise — the text reply already went out.
+    """
+    if not client_id:
+        return []
+    project_id = f"{client_id}-website"
+    try:
+        from .client_config import load_client_config
+        config = load_client_config(client_id)
+    except Exception:
+        logger.exception("client config lookup failed in approval-card poster")
+        return []
+
+    approvals = list_approvals(project_id=project_id, status="pending")
+    new_approvals = [
+        a for a in approvals
+        if a["id"] not in before_ids
+        and (a.get("metadata") or {}).get("action_type") == "deploy_site"
+    ]
+    posted: list[str] = []
+    for approval in new_approvals:
+        meta = approval.get("metadata") or {}
+        kind = meta.get("kind")
+        try:
+            if kind == "site_variations":
+                card = build_site_variations_approval_card(
+                    approval_id=approval["id"],
+                    client_display_name=config.display_name,
+                    target_domain=meta.get("target_domain") or config.cloudflare_config.production_domain,
+                    variations=meta.get("variations") or [],
+                    preview_index_url=meta.get("preview_url"),
+                )
+            elif kind == "site_edit":
+                card = build_site_edit_approval_card(
+                    approval_id=approval["id"],
+                    client_display_name=config.display_name,
+                    target_domain=meta.get("target_domain") or config.cloudflare_config.production_domain,
+                    change_description=meta.get("change_description") or "(no description)",
+                    preview_url=meta.get("preview_url"),
+                )
+            else:
+                # Unknown deploy_site sub-kind — skip rather than post a broken card.
+                continue
+            await send_bot_framework_card(payload, card)
+            posted.append(approval["id"])
+        except Exception:
+            logger.exception("Failed to post site approval card | approval_id=%s", approval["id"])
+    return posted
+
+
+async def _handle_site_approval_card_action(
+    payload: dict[str, Any],
+    value: dict[str, Any],
+) -> dict[str, Any]:
+    """Handle an Adaptive-Card button tap on a site approval card.
+
+    For approve actions: marks the approval approved, promotes the chosen
+    artifact to production via client_deploy.promote_to_production, and posts
+    a confirmation reply into the same Teams conversation.
+
+    For reject actions: marks the approval rejected and posts a 'no changes
+    made' reply.
+
+    Returns a small status dict (also handy for tests).
+    """
+    from .client_config import load_client_config
+    from .services.client_deploy import client_sites_root, promote_to_production
+
+    kind = value.get("kind")
+    approval_id = value.get("approval_id")
+    if not approval_id:
+        logger.warning("card action missing approval_id | kind=%s", kind)
+        return {"status": "error", "detail": "missing approval_id"}
+
+    # Resolve the approver from the activity 'from' if available.
+    from_user = (payload.get("from") or {})
+    approver = (
+        from_user.get("aadObjectId")
+        or from_user.get("id")
+        or from_user.get("name")
+        or "teams_user"
+    )
+
+    # Look up the approval first so we know which client + which artifact to promote.
+    approvals = list_approvals(status=None)  # full list; tiny scale today
+    approval = next((a for a in approvals if a["id"] == approval_id), None)
+    if approval is None:
+        await send_bot_framework_reply(payload, f"That approval ({approval_id[:8]}…) is no longer in the system.")
+        return {"status": "not_found"}
+
+    metadata = approval.get("metadata") or {}
+    if approval.get("status") != "pending":
+        await send_bot_framework_reply(
+            payload,
+            f"That approval was already {approval['status']} — no further action taken.",
+        )
+        return {"status": "already_decided", "approval_status": approval["status"]}
+
+    project_id = approval.get("project_id") or ""
+    # Derive client_id from project_id convention "<client_id>-website".
+    if not project_id.endswith("-website"):
+        await send_bot_framework_reply(payload, "I can't promote that approval — its project doesn't follow the website convention.")
+        return {"status": "unsupported_project"}
+    client_id = project_id[: -len("-website")]
+
+    # Rejection paths.
+    if kind in ("reject_site_variants", "reject_site_edit"):
+        decide_approval(
+            approval_id=approval_id,
+            status="rejected",
+            approver=str(approver),
+            decision_notes="Rejected via Teams approval card.",
+        )
+        await send_bot_framework_reply(
+            payload,
+            "Got it — no changes published. The preview drafts remain available for review.",
+        )
+        return {"status": "rejected", "approval_id": approval_id}
+
+    # Approve paths: resolve the source_dir to promote.
+    try:
+        config = load_client_config(client_id)
+    except Exception as exc:
+        await send_bot_framework_reply(payload, f"Couldn't load config for {client_id}: {exc}")
+        return {"status": "config_error", "detail": str(exc)}
+
+    sub_kind = metadata.get("kind")
+    sites_root = client_sites_root(client_id)
+    if kind == "approve_site_variant" and sub_kind == "site_variations":
+        selected_variant = value.get("selected_variant")
+        if selected_variant is None:
+            await send_bot_framework_reply(payload, "That card tap was missing a variant number; please try again.")
+            return {"status": "missing_variant"}
+        source_dir = sites_root / f"variation-{int(selected_variant)}"
+        decision_notes = f"Approved variant {selected_variant} via Teams."
+    elif kind == "approve_site_edit" and sub_kind == "site_edit":
+        edit_slug = metadata.get("edit_slug")
+        if not edit_slug:
+            await send_bot_framework_reply(payload, "That edit approval is missing its edit slug; can't promote.")
+            return {"status": "missing_edit_slug"}
+        source_dir = sites_root / "edits" / edit_slug
+        decision_notes = f"Approved edit {edit_slug} via Teams."
+    else:
+        await send_bot_framework_reply(payload, "I don't know how to apply that approval kind.")
+        return {"status": "kind_mismatch"}
+
+    # Decide first so the audit trail records who approved; then promote.
+    decide_approval(
+        approval_id=approval_id,
+        status="approved",
+        approver=str(approver),
+        decision_notes=decision_notes,
+    )
+    try:
+        deploy = promote_to_production(client_id=client_id, source_dir=source_dir)
+    except Exception as exc:
+        logger.exception("promote_to_production failed | client=%s source=%s", client_id, source_dir)
+        await send_bot_framework_reply(
+            payload,
+            f"Approval was recorded but the deploy step failed: {exc}. "
+            f"You may need to re-run the production deploy manually.",
+        )
+        return {"status": "promote_failed", "detail": str(exc)}
+
+    domain = config.cloudflare_config.production_domain
+    live_url = f"https://{domain}/" if domain else deploy.get("url")
+    reply_lines = [
+        "Approved and published — your site is now live.",
+        f"Live: {live_url}",
+    ]
+    if deploy.get("status") == "manual_step_required":
+        reply_lines = [
+            "Approval recorded. The deploy needs a manual step:",
+            deploy.get("message") or "Check wrangler output in logs.",
+        ]
+    await send_bot_framework_reply(payload, "\n".join(reply_lines))
+    return {"status": "approved_and_deployed", "approval_id": approval_id, "deploy": deploy}
+
+
 @app.post("/teams/messages")
 async def teams_message_endpoint(request: Request):
     payload = await request.json()
     if is_bot_framework_activity(payload):
         if payload.get("type") != "message":
             return {"status": "ignored", "activity_type": payload.get("type")}
+
+        # Adaptive-Card Action.Submit shows up as a message activity with empty
+        # `text` and a populated `value` containing our `kind` discriminator.
+        # Route it BEFORE the Nathan/binding/normal-message path.
+        submit_value = payload.get("value") if isinstance(payload.get("value"), dict) else None
+        if submit_value and submit_value.get("kind") in {
+            "approve_site_variant",
+            "reject_site_variants",
+            "approve_site_edit",
+            "reject_site_edit",
+        }:
+            return await _handle_site_approval_card_action(payload, submit_value)
 
         teams_request = TeamsMessageRequest(**teams_message_from_activity(payload))
         _apply_teams_channel_binding(teams_request)
@@ -1073,6 +1288,11 @@ async def teams_message_endpoint(request: Request):
                     lines.append("]")
                     teams_request.text = (teams_request.text or "") + "\n" + "\n".join(lines)
 
+        # Snapshot pending site-approvals BEFORE Nathan runs. Anything new
+        # afterwards is something Dylan created during this turn and needs a
+        # picker card posted into the channel.
+        before_ids = await _pending_site_approval_ids(teams_request.client_id)
+
         response = await _handle_teams_message(teams_request)
         reply_text = response["nathan_text"]
         try:
@@ -1080,11 +1300,18 @@ async def teams_message_endpoint(request: Request):
         except Exception as e:
             logger.error(f"Error sending Bot Framework reply: {e}")
             raise HTTPException(status_code=502, detail=str(e))
+
+        # Post any new deploy_site approval cards into this channel.
+        posted_cards = await _post_new_site_approval_cards(
+            payload, teams_request.client_id, before_ids
+        )
+
         return {
             "status": "replied",
             "channel": "teams",
             "conversation_id": teams_request.conversation_id,
             "attachments_saved": [a.get("saved_path") for a in saved_attachments if a.get("saved_path")],
+            "approval_cards_posted": posted_cards,
         }
 
     teams_request = TeamsMessageRequest(**payload)

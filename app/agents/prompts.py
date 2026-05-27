@@ -29,6 +29,45 @@ RouteDecision Schema:
   "confidence": 0.0-1.0,
   "needs_human_review": false
 }
+
+# Website work → route to dylan with a specific site_intent
+
+When the request is about a client's website, route to dylan AND set payload.site_intent to ONE of:
+
+- "variations" — the user wants to see multiple distinct homepage drafts to choose
+  from. Triggers: "5 sample home pages", "give us N design directions", "show me
+  N homepage ideas", "I want to explore some looks", "draft a few homepages".
+  Also set:
+    payload.variation_count = <integer N from the request, default 5 if unclear>
+    payload.deploy_target = "production" if the user named a live domain
+      (e.g. "update ulcannarbor.info") else "preview"
+
+- "edit" — the user wants to change something specific on the existing site.
+  Triggers: "change the headline to X", "update the contact email", "swap the
+  hero image", "add a staff bio for Y", "fix the typo on the About page",
+  "make the CTA say X". Also set:
+    payload.change_description = <verbatim or lightly-summarized description of
+      the requested change, including which page/section if mentioned>
+    payload.deploy_target = "production" (edits to a live site are
+      production-targeted by default; previews still get generated for review)
+
+- "new_marketing_site" — the user wants to scaffold a brand-new ParlayVU client
+  marketing site from the template. Triggers: "build us a marketing site at
+  <domain>", "scaffold a new site for <client>". This is rarer and applies to
+  initial onboarding, not redesigns or edits. Also set:
+    payload.domain = <domain the user named>
+
+If a website request fits NONE of the above, route to dylan without a
+site_intent and Dylan will fall back to single-site generation.
+
+# Channel-bound client_id wins
+
+The Teams channel the message came from already determines client_id (it's
+injected after you reply). Do NOT use a domain mentioned in the message to
+override client_id — but you MAY pass payload.target_domain = "<domain>" so
+Dylan has it for reply text. Example: a message in the ULC channel saying
+"update ulcannarbor.info" → client_id stays ulcannarbor (auto), and
+payload.target_domain = "ulcannarbor.info".
 """
 
 # ====================== SPECIALIST PROMPTS ======================
@@ -133,6 +172,34 @@ Constraints:
 - The HTML file is self-contained and opens correctly when double-clicked from the filesystem (no server-side requirements).
 
 Return only the HTML. Begin with `<!DOCTYPE html>`."""
+
+
+# ====================== DYLAN ACTIVE-SITE EDIT ======================
+#
+# Powers app/services/dylan_edit_service.py. Given the currently-live
+# index.html (from client_artifacts/<client>/03_Deliverables/sites/active/)
+# and a plain-English change description, produce the same HTML with ONLY
+# the requested change applied — no "improvements," no restyling, no extra
+# changes. Surgical replacement.
+
+DYLAN_EDIT_PROMPT_TEMPLATE = """You are Dylan Brooks, Web & Deployment specialist at ParlayVu.ai. You are editing the currently-live homepage of {client_display_name}.
+
+## The change requested
+
+{change_description}
+
+## Critical rules
+
+1. Apply ONLY the change described above. Do not "improve" anything else — no extra polish, no tweaks to layout, no restyling, no extra sections. The client approved everything else; preserve it exactly.
+2. If the change description is ambiguous (e.g. "change the headline" but there are multiple headlines), apply it to the most prominent / hero-level instance and ignore others. Pick the single best interpretation rather than asking — this is a non-interactive pipeline.
+3. Preserve all Tailwind classes, HTML structure, image placeholders, ARIA labels, scripts, and external links unless the change specifically targets them.
+4. Output a SINGLE complete HTML document starting with `<!DOCTYPE html>`. No code fences, no commentary, no markdown — just the modified HTML.
+
+## Current homepage HTML
+
+{current_html}
+
+Return only the modified HTML. Begin with `<!DOCTYPE html>`."""
 
 
 # ====================== CLIENT FILE INGESTION ======================

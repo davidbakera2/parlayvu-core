@@ -1,8 +1,29 @@
 """Per-client configuration loaded from client_artifacts/<client_id>/config.yaml.
 
-Replaces the singleton M365_FILES_TEAM_ID / M365_FILES_CHANNEL_ID env vars so
-ParlayVU can publish meeting notes and apply per-client preferences for more
-than one client.
+This is the contract every ParlayVU client honors. Onboarding a new client is
+a config + folder task — no code change required — as long as their YAML
+matches this schema:
+
+    client_id: <id>                  # required, must match folder name
+    display_name: "<Pretty Name>"    # required
+    teams:
+      team_id: "<guid>"              # required
+      channel_id: "<guid>"           # required
+      meeting_notes_folder: "..."    # optional, defaults to 03_Deliverables/Meeting Notes
+      template_path: "..."           # optional, defaults to 06_Templates/Meeting_Notes_Template.docx
+    cloudflare:                      # optional block; defaults to convention
+      preview_project: "<id>-previews"   # defaults to <client_id>-previews
+      production_project: "<id>"         # defaults to <client_id>
+      production_domain: "<host>"        # optional; used in Teams reply text
+    preferences:
+      pronunciation: { ... }
+      tone: "..."
+      authorized_contacts: [ ... ]
+
+The Cloudflare Pages naming convention (<client_id>-previews for staging,
+<client_id> for production) means a new client gets correct deploy bindings
+purely from their client_id — no config writes needed unless they want to
+deviate from the convention.
 """
 from __future__ import annotations
 
@@ -24,6 +45,14 @@ DEFAULT_MEETING_NOTES_FOLDER = "03_Deliverables/Meeting Notes"
 # leaving teams.template_path unset in their config.yaml.
 DEFAULT_MEETING_NOTES_TEMPLATE_PATH = "06_Templates/Meeting_Notes_Template.docx"
 
+# Cloudflare Pages naming convention for the ParlayVU client website workflow:
+#   prod    = <client_id>           (custom domain attached here)
+#   preview = <client_id>-previews  (auto-created on first deploy)
+# A client can override by setting cloudflare.production_project /
+# cloudflare.preview_project in their config.yaml, but defaults serve the
+# common case so onboarding a new client requires zero per-client code.
+CLOUDFLARE_PREVIEW_SUFFIX = "-previews"
+
 
 class ClientConfigError(Exception):
     """Raised when a client's config.yaml is missing or malformed."""
@@ -35,6 +64,13 @@ class TeamsConfig:
     channel_id: str
     meeting_notes_folder: str = DEFAULT_MEETING_NOTES_FOLDER
     template_path: str = DEFAULT_MEETING_NOTES_TEMPLATE_PATH
+
+
+@dataclass(frozen=True)
+class CloudflareConfig:
+    preview_project: str
+    production_project: str
+    production_domain: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -50,10 +86,27 @@ class ClientConfig:
     display_name: str
     teams: TeamsConfig
     preferences: ClientPreferences
+    cloudflare: Optional[CloudflareConfig] = None
 
     @property
     def artifacts_dir(self) -> Path:
         return CLIENT_ARTIFACTS_ROOT / self.client_id
+
+    @property
+    def cloudflare_config(self) -> CloudflareConfig:
+        """Return cloudflare config, deriving convention defaults if unset.
+
+        The YAML loader always populates `cloudflare`. Tests and ad-hoc
+        construction can leave it None — this property gives callers a single
+        accessor that always returns a usable config, so service code never
+        needs a None check.
+        """
+        if self.cloudflare is not None:
+            return self.cloudflare
+        return CloudflareConfig(
+            preview_project=f"{self.client_id}{CLOUDFLARE_PREVIEW_SUFFIX}",
+            production_project=self.client_id,
+        )
 
 
 def _config_path(client_id: str) -> Path:
@@ -114,6 +167,23 @@ def load_client_config(client_id: str) -> ClientConfig:
         ),
     )
 
+    cloudflare_raw = raw.get("cloudflare") or {}
+    if not isinstance(cloudflare_raw, dict):
+        raise ClientConfigError(f"{path}: 'cloudflare' must be a mapping")
+    production_domain_raw = cloudflare_raw.get("production_domain")
+    cloudflare = CloudflareConfig(
+        preview_project=str(
+            cloudflare_raw.get("preview_project")
+            or f"{client_id}{CLOUDFLARE_PREVIEW_SUFFIX}"
+        ),
+        production_project=str(
+            cloudflare_raw.get("production_project") or client_id
+        ),
+        production_domain=(
+            str(production_domain_raw).strip() if production_domain_raw else None
+        ),
+    )
+
     prefs_raw = raw.get("preferences") or {}
     if not isinstance(prefs_raw, dict):
         raise ClientConfigError(f"{path}: 'preferences' must be a mapping")
@@ -144,6 +214,7 @@ def load_client_config(client_id: str) -> ClientConfig:
         display_name=display_name,
         teams=teams,
         preferences=preferences,
+        cloudflare=cloudflare,
     )
 
 

@@ -3,12 +3,21 @@
 # meeting_notes_folder and template_path are inherited from the standard
 # defaults in app/client_config.py — only override here if ULC needs a
 # custom path (none currently do).
+#
+# cloudflare.preview_project and cloudflare.production_project also have
+# convention defaults (<client_id>-previews and <client_id>). Listing them
+# here makes the binding explicit and acts as documentation for what's
+# expected to exist in the Cloudflare account.
 
 client_id: ulcannarbor
 display_name: "ULC Ann Arbor"
 teams:
   team_id: "3833d060-b330-41b9-a0d4-42dfa9db529e"
   channel_id: "19:UeZIUG3kZWw2u6Tm0XfUFu7T2NrpHUy_OX5MWxhoe-w1@thread.tacv2"
+cloudflare:
+  preview_project: "ulcannarbor-previews"
+  production_project: "ulcannarbor"
+  production_domain: "ulcannarbor.info"
 preferences:
   pronunciation: {}
   tone: null

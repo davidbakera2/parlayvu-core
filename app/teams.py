@@ -418,3 +418,225 @@ def approval_to_teams_card(approval: dict[str, Any]) -> dict[str, Any]:
 
 def approvals_to_teams_cards(approvals: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [approval_to_teams_card(approval) for approval in approvals]
+
+
+# ── Adaptive Card builders for site-approval flow ─────────────────────────────
+
+
+def build_site_variations_approval_card(
+    *,
+    approval_id: str,
+    client_display_name: str,
+    target_domain: str | None,
+    variations: list[dict[str, Any]],
+    preview_index_url: str | None,
+) -> dict[str, Any]:
+    """Build an Adaptive Card 1.4 JSON payload for a variations-approval prompt.
+
+    The card lists each variation with its design thesis + a direct preview
+    link, and surfaces one "Approve variant N" Action.Submit per variant. Tap
+    posts back to the bot with `{ kind: "approve_site_variant", approval_id, selected_variant }`
+    in the activity value, which `/teams/messages` routes to the approvals
+    decision handler.
+
+    `variations` entries are expected to have keys: variation_number (int),
+    thesis (str). Preview URL per variant is composed from preview_index_url +
+    "/variation-{n}/".
+    """
+    domain_line = (
+        f"Approve to publish your pick to **{target_domain}**."
+        if target_domain
+        else "Approve to publish your pick to production."
+    )
+    body: list[dict[str, Any]] = [
+        {
+            "type": "TextBlock",
+            "text": f"{client_display_name} — homepage drafts",
+            "weight": "Bolder",
+            "size": "Large",
+            "wrap": True,
+        },
+        {
+            "type": "TextBlock",
+            "text": domain_line,
+            "wrap": True,
+            "isSubtle": True,
+            "spacing": "Small",
+        },
+    ]
+    if preview_index_url:
+        body.append(
+            {
+                "type": "TextBlock",
+                "text": f"[Browse all drafts]({preview_index_url})",
+                "wrap": True,
+                "spacing": "Small",
+            }
+        )
+
+    actions: list[dict[str, Any]] = []
+    for v in variations:
+        n = v["variation_number"]
+        thesis = str(v.get("thesis", "")).strip()
+        variant_url = (
+            preview_index_url.rstrip("/") + f"/variation-{n}/"
+            if preview_index_url
+            else None
+        )
+        # One row per variant: thesis + open-preview link.
+        row_text = f"**Variant {n}** — {thesis}" if thesis else f"**Variant {n}**"
+        if variant_url:
+            row_text += f"  ·  [open preview]({variant_url})"
+        body.append(
+            {
+                "type": "TextBlock",
+                "text": row_text,
+                "wrap": True,
+                "spacing": "Medium",
+            }
+        )
+        actions.append(
+            {
+                "type": "Action.Submit",
+                "title": f"Approve variant {n}",
+                "data": {
+                    "kind": "approve_site_variant",
+                    "approval_id": approval_id,
+                    "selected_variant": n,
+                },
+            }
+        )
+    actions.append(
+        {
+            "type": "Action.Submit",
+            "title": "Reject all",
+            "style": "destructive",
+            "data": {
+                "kind": "reject_site_variants",
+                "approval_id": approval_id,
+            },
+        }
+    )
+
+    return {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": body,
+        "actions": actions,
+    }
+
+
+def build_site_edit_approval_card(
+    *,
+    approval_id: str,
+    client_display_name: str,
+    target_domain: str | None,
+    change_description: str,
+    preview_url: str | None,
+) -> dict[str, Any]:
+    """Approval card for a single targeted edit (one Approve / Reject pair)."""
+    domain_line = (
+        f"Approve to publish this edit to **{target_domain}**."
+        if target_domain
+        else "Approve to publish this edit to production."
+    )
+    body: list[dict[str, Any]] = [
+        {
+            "type": "TextBlock",
+            "text": f"{client_display_name} — homepage edit",
+            "weight": "Bolder",
+            "size": "Large",
+            "wrap": True,
+        },
+        {
+            "type": "TextBlock",
+            "text": domain_line,
+            "wrap": True,
+            "isSubtle": True,
+            "spacing": "Small",
+        },
+        {
+            "type": "TextBlock",
+            "text": f"**Change:** {change_description}",
+            "wrap": True,
+            "spacing": "Medium",
+        },
+    ]
+    if preview_url:
+        body.append(
+            {
+                "type": "TextBlock",
+                "text": f"[Open preview]({preview_url})",
+                "wrap": True,
+                "spacing": "Small",
+            }
+        )
+    actions = [
+        {
+            "type": "Action.Submit",
+            "title": "Approve",
+            "style": "positive",
+            "data": {
+                "kind": "approve_site_edit",
+                "approval_id": approval_id,
+            },
+        },
+        {
+            "type": "Action.Submit",
+            "title": "Reject",
+            "style": "destructive",
+            "data": {
+                "kind": "reject_site_edit",
+                "approval_id": approval_id,
+            },
+        },
+    ]
+    return {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": body,
+        "actions": actions,
+    }
+
+
+async def send_bot_framework_card(
+    activity: dict[str, Any],
+    card: dict[str, Any],
+    settings: TeamsSettings | None = None,
+) -> None:
+    """Post an Adaptive Card attachment back to the same Teams channel/conversation
+    as the inbound `activity`. Generic — works for any card JSON, not just
+    site-approval cards.
+    """
+    service_url = (activity.get("serviceUrl") or "").rstrip("/")
+    conversation = activity.get("conversation") or {}
+    conversation_id = conversation.get("id")
+    activity_id = activity.get("id")
+    if not service_url or not conversation_id or not activity_id:
+        raise ValueError(
+            "Bot Framework activity is missing serviceUrl, conversation.id, or id"
+        )
+
+    token = await get_bot_framework_token(settings)
+    reply = {
+        "type": "message",
+        "from": activity.get("recipient"),
+        "recipient": activity.get("from"),
+        "conversation": conversation,
+        "replyToId": activity_id,
+        "attachments": [
+            {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": card,
+            }
+        ],
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"{service_url}/v3/conversations/{conversation_id}/activities/{activity_id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json=reply,
+        )
+        response.raise_for_status()

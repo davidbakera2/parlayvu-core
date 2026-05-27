@@ -21,6 +21,12 @@ generated_sites/**/*.log
 azure_build_context/
 parlayvu-azure-build.tar.gz
 
+# Dylan site outputs — regenerated per workflow run, not source content.
+client_artifacts/*/03_Deliverables/sites/variation-*/
+client_artifacts/*/03_Deliverables/sites/edits/
+client_artifacts/*/03_Deliverables/sites/active/
+client_artifacts/*/03_Deliverables/sites/index.html
+
 *.pem
 *.key
 *.pfx

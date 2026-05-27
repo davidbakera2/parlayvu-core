@@ -256,6 +256,19 @@ def get_project_context(project_id: str) -> Optional[dict[str, Any]]:
 
 
 def get_teams_channel_binding(*, team_id: Optional[str], channel_id: Optional[str]) -> Optional[dict[str, Any]]:
+    """Resolve a Teams team+channel to a (client_id, project_id) binding.
+
+    Two layers, in priority order:
+      1. TeamsChannelBinding row in the database (set via /teams/channels/bind
+         or a Teams "bind this channel to X" command at runtime).
+      2. Static binding declared in any client_artifacts/<id>/config.yaml under
+         `teams.team_id` / `teams.channel_id`. Onboarding a new client by
+         populating their config.yaml is enough — no bind command needed.
+
+    Layer 1 wins so runtime overrides are still possible. Layer 2 makes
+    onboarding-via-config the default and matches the ParlayVU design rule
+    that new clients land via config, never code.
+    """
     if not channel_id:
         return None
     try:
@@ -267,10 +280,41 @@ def get_teams_channel_binding(*, team_id: Optional[str], channel_id: Optional[st
             if team_id:
                 query = query.filter(TeamsChannelBinding.team_id == team_id)
             binding = query.one_or_none()
-            return serialize_teams_channel_binding(binding) if binding else None
+            if binding:
+                return serialize_teams_channel_binding(binding)
     except Exception as exc:
-        logger.warning("Teams channel binding lookup skipped: %s", exc)
-        return None
+        logger.warning("Teams channel binding DB lookup skipped: %s", exc)
+
+    # Fallback: scan every client config for a matching team+channel.
+    try:
+        from app.client_config import list_clients, load_client_config
+
+        for cid in list_clients():
+            try:
+                config = load_client_config(cid)
+            except Exception:
+                continue
+            if (
+                config.teams.channel_id == channel_id
+                and (not team_id or config.teams.team_id == team_id)
+            ):
+                # Project convention: the channel's "default" project is the
+                # client's website project. Callers that need a different
+                # project for this channel can override via the DB.
+                return {
+                    "team_id": config.teams.team_id,
+                    "channel_id": config.teams.channel_id,
+                    "channel_name": None,
+                    "client_id": config.client_id,
+                    "project_id": f"{config.client_id}-website",
+                    "project_name": f"{config.display_name} — Website",
+                    "bound_by": "config.yaml",
+                    "status": "active",
+                    "source": "client_config",
+                }
+    except Exception as exc:
+        logger.warning("Teams channel binding config fallback skipped: %s", exc)
+    return None
 
 
 def bind_teams_channel(

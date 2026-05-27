@@ -360,22 +360,15 @@ async def generate_homepage_variations(
     )
     index_info = _write_site_file(client_id, "index.html", index_html)
 
-    # Optional deploy. Imported lazily to avoid pulling subprocess deps into
-    # tests that don't exercise this path.
+    # Optional deploy via the canonical client_deploy spine, so the
+    # preview-project convention has a single source of truth.
     deploy_result: Optional[dict[str, Any]] = None
     preview_url: Optional[str] = None
     if deploy:
         try:
-            from app.agents.tools.dylan_tools import (
-                deploy_static_directory_to_cloudflare,
-            )
+            from app.services.client_deploy import deploy_preview
 
-            sites_dir = (CLIENT_ARTIFACTS_ROOT / client_id / SITES_SUBPATH).resolve()
-            project_name = f"{client_id}-previews"
-            deploy_result = deploy_static_directory_to_cloudflare(
-                directory=sites_dir,
-                project_name=project_name,
-            )
+            deploy_result = deploy_preview(client_id=client_id)
             preview_url = deploy_result.get("url")
         except Exception as exc:
             logger.exception("Dylan variations deploy step failed")

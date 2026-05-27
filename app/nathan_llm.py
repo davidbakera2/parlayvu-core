@@ -356,6 +356,83 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
             "required": ["title", "summary", "client_id"],
         },
     },
+    {
+        "name": "dylan_generate_variations",
+        "description": (
+            "Generate N distinct homepage drafts for the active client and deploy "
+            "them to a preview URL so the client can compare design directions. "
+            "Use this when someone asks for 'sample home pages', 'design "
+            "directions', 'N homepage variations', or wants to see multiple "
+            "drafts before picking one. Each variation follows a different "
+            "design thesis (typography-led, imagery-led, structured, community-"
+            "focused, architectural). Reads the client's brief + reference "
+            "sites + design notes automatically. Returns a preview URL the "
+            "user can browse immediately. Call only after you've inferred the "
+            "client_id (e.g. from the Teams channel binding or get_project_context)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_id": {
+                    "type": "string",
+                    "description": "Active client_id, e.g. 'ulcannarbor'. Same value used for get_project_context.",
+                },
+                "variation_count": {
+                    "type": "integer",
+                    "description": "Number of distinct drafts to produce. Clamped to [1, 10]. Default 5.",
+                    "minimum": 1,
+                    "maximum": 10,
+                },
+                "target_domain": {
+                    "type": "string",
+                    "description": (
+                        "Optional. The production domain the user mentioned "
+                        "(e.g. 'ulcannarbor.info'). Carried through to the "
+                        "approval flow so the eventual prod deploy URL is "
+                        "self-documenting. Do NOT use this to override "
+                        "client_id."
+                    ),
+                },
+            },
+            "required": ["client_id"],
+        },
+    },
+    {
+        "name": "dylan_edit_active_site",
+        "description": (
+            "Apply a targeted edit to the client's currently-live homepage and "
+            "deploy a preview of the edited version. Use this when someone asks "
+            "for a SPECIFIC change — 'change the headline to X', 'update the "
+            "contact email', 'swap the hero image', 'add a staff bio for Y', "
+            "'fix the typo on the home page'. Requires that the client has an "
+            "active/ folder (i.e. at least one homepage variation has been "
+            "promoted previously). If not, the tool will error and you should "
+            "tell the user they need to pick a homepage design first via "
+            "dylan_generate_variations. Returns a preview URL the user can "
+            "review before approving."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_id": {
+                    "type": "string",
+                    "description": "Active client_id, e.g. 'ulcannarbor'.",
+                },
+                "change_description": {
+                    "type": "string",
+                    "description": (
+                        "Plain-English description of the change. Quote or "
+                        "lightly paraphrase the user's request, including any "
+                        "page/section they named. Be specific: 'Change the "
+                        "hero headline from \"Welcome to ULC\" to \"Find Your "
+                        "Home in Ann Arbor\"' is good. 'Improve the homepage' "
+                        "is too vague — ask the user to clarify before calling."
+                    ),
+                },
+            },
+            "required": ["client_id", "change_description"],
+        },
+    },
 ]
 
 # ── System prompt assembly (split by surface) ─────────────────────────────────
@@ -400,7 +477,10 @@ You have real-time access to:
 3. Client files (list_client_files + read_client_file) — browse and READ any document in the active client's Teams channel: reports (PDF), Word docs, markdown. Use these when someone references a specific file — "Did you see the Q3 report?" → list_client_files to find it → read_client_file to read it → answer from what's actually in the file. NEVER guess the contents of a file you haven't read.
 4. Microsoft Teams files (raw Graph) — list_teams_files / read_teams_file for ad-hoc Teams channels outside the active client binding. Prefer list_client_files / read_client_file when you already know the client_id.
 5. Project context — pull a specific client's brief, deliverables, approvals, and strategy
-6. Save meeting notes — file a written summary to the client's Teams channel as markdown + Word doc. This is your ONE write tool.
+6. Save meeting notes — file a written summary to the client's Teams channel as markdown + Word doc.
+7. Dylan website tools (your DIRECT actuation of website work — these really run, they don't just promise):
+   - `dylan_generate_variations` — kick off N distinct homepage drafts when someone asks for "sample home pages", "design directions", or wants to compare looks. Returns a preview URL.
+   - `dylan_edit_active_site` — apply a SPECIFIC change to the currently-live homepage when someone says something like "change the headline to X" or "swap the hero image". Returns a preview URL. Requires the site to already have an approved baseline; if none exists, ask them to pick a design first via variations.
 
 USE TOOLS PROACTIVELY:
 - When someone mentions a person, competitor, or company you don't know → fetch their LinkedIn or website
@@ -409,6 +489,8 @@ USE TOOLS PROACTIVELY:
 - When someone references "our project", "the brief", "the timeline", or "what was agreed" → call get_project_context for the current client
 - When a file, report, or document is mentioned ("the Q3 report", "the brand guide", "what did the contract say") → call list_client_files (with `folder` if you can guess where it lives, e.g. 'Reports' for a quarterly report), then read_client_file with the exact path. Answer from the actual file contents, never guess.
 - When a meeting is wrapping up, OR when someone says "send the notes", "save what we discussed", "file this", "wrap it up" → build a STRUCTURED meeting record: title, summary (2-4 paragraphs), attendees, decisions, action_items (with owner + due_date), questions, next_steps, source_material. If anything is ambiguous — especially action item owners ("someone will do X") or due dates ("soon" / "next week" without a specific date) — ASK FOR CLARIFICATION before calling save_meeting_notes. Action items missing an owner or due date should be flagged as "TBD" rather than guessed. Do NOT call save_meeting_notes silently.
+- When someone asks Dylan to produce homepage drafts ("5 sample home pages", "show us a few design directions for [client].[domain]", "give us some homepage ideas") → call dylan_generate_variations with the channel-bound client_id and the count they named (default 5 if unclear). When the tool returns, share the preview URL in your reply and tell them you'll line up an approval card so they can pick the variant to ship. The user is in the client's Teams channel so the binding tells you the client_id — do NOT use a mentioned domain to override it, but DO pass it as target_domain.
+- When someone asks for a SPECIFIC change to the live site ("change the headline to X", "swap the hero image", "fix the typo on the About page", "add a staff bio for Y") → call dylan_edit_active_site with the channel-bound client_id and a clear change_description. When the tool returns, share the preview URL and tell them an approval card is coming so they can ship the change.
 
 CRITICAL ANTI-HALLUCINATION RULES:
 1. NEVER invent statistics, benchmarks, or data. If you don't have it, search for it or say you'll follow up.
@@ -416,7 +498,7 @@ CRITICAL ANTI-HALLUCINATION RULES:
 3. NEVER deny being an AI if someone sincerely asks.
 4. When uncertain, use a tool to find out, then answer with what you found.
 5. If a tool fails or returns no result, say so honestly rather than making something up.
-6. Your write access is LIMITED to ONE action: save_meeting_notes. You can file a meeting summary to the client's Teams channel using that tool, and only that tool. For everything else — sending emails, posting to social, deploying sites, creating approvals, scheduling meetings, modifying code, generating ad creative, anything else — you cannot do it yourself. Route those requests by name to the right specialist: "I'll have Ava draft that email", "I'll have Riley publish that", "I'll have Codey wire up the integration", "I'll have Dylan get the site updated", "I'll have Morgan adjust the ad spend". NEVER say "I've sent that" or "I've scheduled that" or "I've posted that" — those things did not happen. For meeting notes specifically: you ARE the one filing them, so it IS honest to say "Filing those notes now" — then call save_meeting_notes. Just don't claim other writes you can't perform.
+6. Your write access is currently LIMITED to these tools: save_meeting_notes, dylan_generate_variations, dylan_edit_active_site. For everything else — sending emails, posting to social, scheduling meetings, modifying code, generating ad creative, adjusting paid spend — you cannot do it yourself yet. Route those by name to the right specialist: "I'll have Ava draft that email", "I'll have Riley publish that", "I'll have Codey wire up the integration", "I'll have Morgan adjust the ad spend". For the things you CAN do — meeting notes, homepage variations, homepage edits — actually call the tool when asked. It's honest to say "Filing those notes now" / "Dylan's spinning up 5 drafts now — give me about a minute" → then call the tool. Don't say you've done something you haven't actually done, and don't say you can't do something you actually can.
 
 STYLE:
 - Warm, confident, executive tone — not robotic, not over-formal
@@ -515,6 +597,81 @@ async def _execute_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
                 next_steps=tool_input.get("next_steps"),
                 source_material=tool_input.get("source_material"),
             )
+        elif tool_name == "dylan_generate_variations":
+            from app.approvals import request_approval
+            from app.client_config import load_client_config
+            from app.services.dylan_variations_service import generate_homepage_variations
+
+            client_id = tool_input["client_id"]
+            result = await generate_homepage_variations(
+                client_id=client_id,
+                variation_count=int(tool_input.get("variation_count", 5)),
+                deploy=True,
+            )
+            target_domain = tool_input.get("target_domain")
+            if target_domain:
+                result["target_domain"] = target_domain
+            # Create the deploy_site approval so /teams/messages can post the
+            # picker card. We use the <client_id>-website project convention.
+            try:
+                config = load_client_config(client_id)
+                approval = request_approval(
+                    client_id=client_id,
+                    project_id=f"{client_id}-website",
+                    project_name=f"{config.display_name} — Website",
+                    requested_by_agent="dylan",
+                    action_type="deploy_site",
+                    title=f"Pick a homepage for {config.display_name}",
+                    summary=(
+                        f"Dylan generated {len(result.get('variations') or [])} drafts. "
+                        f"Approve one to publish."
+                    ),
+                    metadata={
+                        "kind": "site_variations",
+                        "variations": result.get("variations") or [],
+                        "preview_url": result.get("preview_url"),
+                        "target_domain": target_domain or config.cloudflare_config.production_domain,
+                        "production_project": config.cloudflare_config.production_project,
+                    },
+                )
+                result["approval_id"] = approval["id"]
+            except Exception:
+                logger.exception("Failed to create variations approval for %s", client_id)
+        elif tool_name == "dylan_edit_active_site":
+            from app.approvals import request_approval
+            from app.client_config import load_client_config
+            from app.services.dylan_edit_service import edit_active_site
+
+            client_id = tool_input["client_id"]
+            change_description = tool_input["change_description"]
+            result = await edit_active_site(
+                client_id=client_id,
+                change_description=change_description,
+                deploy=True,
+            )
+            try:
+                config = load_client_config(client_id)
+                approval = request_approval(
+                    client_id=client_id,
+                    project_id=f"{client_id}-website",
+                    project_name=f"{config.display_name} — Website",
+                    requested_by_agent="dylan",
+                    action_type="deploy_site",
+                    title=f"Site edit for {config.display_name}",
+                    summary=change_description,
+                    metadata={
+                        "kind": "site_edit",
+                        "edit_slug": result.get("edit_slug"),
+                        "edit_dir": result.get("edit_dir"),
+                        "preview_url": result.get("preview_url"),
+                        "change_description": change_description,
+                        "target_domain": config.cloudflare_config.production_domain,
+                        "production_project": config.cloudflare_config.production_project,
+                    },
+                )
+                result["approval_id"] = approval["id"]
+            except Exception:
+                logger.exception("Failed to create edit approval for %s", client_id)
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
 
