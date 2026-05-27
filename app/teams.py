@@ -227,13 +227,61 @@ def parse_meeting_note_publish_command(text: str) -> dict[str, str]:
 
 
 def resolve_demo_bind_target(text: str) -> dict[str, str] | None:
-    if "ramair" not in text.lower():
+    """Match a `@ParlayVU bind this channel to <client>` chat command against
+    any active client's id or display_name in client_artifacts/.
+
+    Reads the live client roster from list_clients() and load_client_config()
+    so adding a new client (drop a config.yaml, no code change) automatically
+    becomes bindable from chat. Falls back to nothing if no client matches.
+
+    Matching is case-insensitive and tolerates a few variants:
+      - "RamAir" or "ramair" → ramair
+      - "Christ's Hope" or "Christs Hope" or "christshope" → christshope
+      - "ULC" or "ULC Ann Arbor" or "ulcannarbor" → ulcannarbor
+    Apostrophes and whitespace are stripped before comparison.
+    """
+    from app.client_config import ClientConfigError, list_clients, load_client_config
+
+    if not text:
         return None
+    needle = _normalize_for_match(text)
+
+    best_match: tuple[str, str, str] | None = None  # (client_id, display_name, matched_token)
+    for client_id in list_clients():
+        try:
+            config = load_client_config(client_id)
+        except ClientConfigError:
+            continue
+        # Build the set of strings that count as a match for this client.
+        candidates = {client_id, config.display_name}
+        for cand in list(candidates):
+            candidates.add(_normalize_for_match(cand))
+        for cand in candidates:
+            cand_norm = _normalize_for_match(cand)
+            if cand_norm and cand_norm in needle:
+                # Prefer the longest match if multiple clients hit (e.g.
+                # "ulc" would match a hypothetical "ulc" prefix in another
+                # client's display name).
+                if best_match is None or len(cand_norm) > len(best_match[2]):
+                    best_match = (client_id, config.display_name, cand_norm)
+                break
+
+    if not best_match:
+        return None
+    client_id, display_name, _ = best_match
     return {
-        "client_id": "ramair",
-        "project_id": "ramair-straight-from-the-hart",
-        "project_name": "Straight from the Hart Content Engine",
+        "client_id": client_id,
+        # No project_id concept per-client yet — keep stable for the bind row
+        # but don't fabricate one. The caller stores client_id; project_id is
+        # informational metadata for now.
+        "project_id": f"{client_id}-default",
+        "project_name": display_name,
     }
+
+
+def _normalize_for_match(value: str) -> str:
+    """Strip punctuation + whitespace and lowercase for fuzzy client matching."""
+    return re.sub(r"[^a-z0-9]+", "", (value or "").lower())
 
 
 async def get_bot_framework_token(settings: TeamsSettings | None = None) -> str:

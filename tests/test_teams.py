@@ -18,6 +18,7 @@ from app.teams import (
     nathan_response_to_text,
     normalize_teams_message,
     parse_meeting_note_publish_command,
+    resolve_demo_bind_target,
     strip_bot_mentions,
     teams_message_from_activity,
     teams_status,
@@ -368,7 +369,12 @@ class TeamsTests(unittest.TestCase):
         self.assertEqual(response.json()["status"], "bound")
         bind_channel.assert_called_once()
         self.assertEqual(bind_channel.call_args.kwargs["channel_name"], "RamAir")
-        self.assertEqual(bind_channel.call_args.kwargs["project_id"], "ramair-straight-from-the-hart")
+        # After the multi-client refactor of resolve_demo_bind_target, the
+        # project_id is derived as <client_id>-default rather than the legacy
+        # hardcoded "ramair-straight-from-the-hart" mapping. project_id is
+        # informational metadata on the binding row; client_id is what drives
+        # routing behavior.
+        self.assertEqual(bind_channel.call_args.kwargs["client_id"], "ramair")
         self.assertIn("now bound", send_reply.call_args.args[1])
 
     def test_teams_message_endpoint_publishes_onenote_from_command(self):
@@ -650,6 +656,49 @@ class TeamsTests(unittest.TestCase):
         response = client.post("/teams/messages", json={"text": "   "})
 
         self.assertEqual(response.status_code, 400)
+
+    def test_resolve_bind_target_matches_any_active_client(self):
+        # The bind command now reads live client_artifacts/, not a hardcoded
+        # list. Patch list_clients + load_client_config to a tight fake roster.
+        from unittest.mock import patch as _patch
+
+        from app.client_config import ClientConfig, ClientPreferences, TeamsConfig
+
+        def _fake_load(client_id):
+            display = {
+                "ramair": "RamAir International",
+                "christshope": "Christ's Hope International",
+                "ulcannarbor": "ULC Ann Arbor",
+            }.get(client_id, client_id)
+            return ClientConfig(
+                client_id=client_id,
+                display_name=display,
+                teams=TeamsConfig(team_id="t", channel_id="c"),
+                preferences=ClientPreferences(),
+            )
+
+        # list_clients + load_client_config are imported inside
+        # resolve_demo_bind_target's body (lazy import) — patch at the source
+        # module so the resolved-at-call-time lookup picks up the mock.
+        with _patch("app.client_config.list_clients",
+                    return_value=["ramair", "christshope", "ulcannarbor"]), \
+             _patch("app.client_config.load_client_config", side_effect=_fake_load):
+            # RamAir — by client_id
+            r = resolve_demo_bind_target("@ParlayVU bind this channel to ramair")
+            self.assertEqual(r["client_id"], "ramair")
+            self.assertEqual(r["project_name"], "RamAir International")
+            # Christ's Hope — by display name with apostrophe
+            r = resolve_demo_bind_target("bind this channel to Christ's Hope")
+            self.assertEqual(r["client_id"], "christshope")
+            # ULC — by short or full display name
+            r = resolve_demo_bind_target("bind this channel to ULC Ann Arbor")
+            self.assertEqual(r["client_id"], "ulcannarbor")
+            r = resolve_demo_bind_target("bind this channel to ulcannarbor")
+            self.assertEqual(r["client_id"], "ulcannarbor")
+            # Unknown — returns None
+            self.assertIsNone(resolve_demo_bind_target("bind to UnknownCorp"))
+            # Empty string — returns None
+            self.assertIsNone(resolve_demo_bind_target(""))
 
     def test_approval_to_teams_card(self):
         card = approval_to_teams_card(
