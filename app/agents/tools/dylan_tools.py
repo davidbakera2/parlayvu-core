@@ -1249,10 +1249,13 @@ def deploy_static_directory_to_cloudflare(
             "command": f"npx wrangler pages deploy {directory} --project-name={project_name}",
         }
 
-    if wrangler_cmd:
-        cmd = [wrangler_cmd, "pages", "deploy", str(directory), f"--project-name={project_name}"]
-    else:
-        cmd = [npx_cmd, "wrangler", "pages", "deploy", str(directory), f"--project-name={project_name}"]
+    def _wrangler_argv(*tail: str) -> list[str]:
+        if wrangler_cmd:
+            return [wrangler_cmd, *tail]
+        return [npx_cmd, "wrangler", *tail]
+
+    deploy_cmd = _wrangler_argv("pages", "deploy", str(directory), f"--project-name={project_name}")
+    create_cmd = _wrangler_argv("pages", "project", "create", project_name, "--production-branch=main")
 
     # Wrangler authenticates non-interactively from CLOUDFLARE_API_TOKEN +
     # CLOUDFLARE_ACCOUNT_ID env vars. The repo's existing convention names
@@ -1264,23 +1267,38 @@ def deploy_static_directory_to_cloudflare(
         if legacy_token:
             subprocess_env["CLOUDFLARE_API_TOKEN"] = legacy_token
 
-    deploy = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        shell=False,
-        env=subprocess_env,
-    )
+    def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            shell=False,
+            env=subprocess_env,
+        )
+
+    deploy = _run(deploy_cmd)
+
+    # Self-heal once: if the deploy failed (most commonly because the Pages
+    # project doesn't exist yet — wrangler does NOT auto-create on deploy),
+    # try creating the project and retrying. Creating an existing project
+    # returns a non-zero exit code with an "already exists" message, which
+    # is harmless — we ignore the create result and let the retry tell us
+    # whether the actual deploy now works.
+    if deploy.returncode != 0:
+        _run(create_cmd)
+        deploy = _run(deploy_cmd)
+
     if deploy.returncode != 0:
         stdout = deploy.stdout or ""
         stderr = deploy.stderr or ""
         return {
             "status": "manual_step_required",
             "message": (
-                "Cloudflare deployment did not complete. You may need to run "
-                "`npx wrangler login` or create/configure the Pages project."
+                "Cloudflare deployment did not complete after auto-create retry. "
+                "Check that CLOUDFLARE_API_TOKEN has Pages:Edit scope and "
+                "CLOUDFLARE_ACCOUNT_ID is correct."
             ),
             "project_name": project_name,
             "stdout": stdout[-4000:],
