@@ -1122,7 +1122,22 @@ async def _handle_site_approval_card_action(
         if not edit_slug:
             await send_bot_framework_reply(payload, "That edit approval is missing its edit slug; can't promote.")
             return {"status": "missing_edit_slug"}
-        source_dir = sites_root / "edits" / edit_slug
+        # The container disk may have been wiped between the edit being
+        # generated and this approval click; if so, recover the edit HTML
+        # from the preview deploy before promoting.
+        from .services.dylan_edit_service import ensure_edit_dir_on_disk
+        try:
+            source_dir = await ensure_edit_dir_on_disk(
+                client_id=client_id,
+                edit_slug=edit_slug,
+                preview_url=metadata.get("preview_url"),
+            )
+        except FileNotFoundError as exc:
+            await send_bot_framework_reply(
+                payload,
+                f"Couldn't promote that edit: {exc}",
+            )
+            return {"status": "edit_recovery_failed", "detail": str(exc)}
         decision_notes = f"Approved edit {edit_slug} via Teams."
     else:
         await send_bot_framework_reply(payload, "I don't know how to apply that approval kind.")

@@ -172,6 +172,64 @@ async def _apply_edit_with_llm(
     return raw.strip()
 
 
+async def ensure_edit_dir_on_disk(
+    *,
+    client_id: str,
+    edit_slug: str,
+    preview_url: Optional[str],
+) -> Path:
+    """Make sure `sites/edits/<edit_slug>/index.html` exists on disk.
+
+    If it's already there, returns the resolved edit dir.
+
+    If it's missing — typically because the container disk was wiped between
+    the edit being generated and the approval being clicked — fetch the HTML
+    from the preview deploy (`preview_url`) and write it back. The preview
+    Pages project lives on Cloudflare, so it's a reliable recovery source.
+
+    Raises FileNotFoundError if recovery isn't possible (no preview_url given,
+    or the fetch fails).
+    """
+    edit_dir = client_sites_root(client_id) / EDITS_SUBDIR / edit_slug
+    edit_index = edit_dir / "index.html"
+    if edit_index.is_file():
+        return edit_dir
+
+    if not preview_url:
+        raise FileNotFoundError(
+            f"Edit directory {edit_dir} is missing and no preview_url is "
+            f"available to recover it from. The edit may need to be "
+            f"regenerated."
+        )
+
+    logger.info(
+        "Recovering edit from preview | client=%s slug=%s url=%s",
+        client_id, edit_slug, preview_url,
+    )
+    try:
+        async with httpx.AsyncClient(
+            timeout=LIVE_FETCH_TIMEOUT_SECONDS,
+            follow_redirects=True,
+        ) as http:
+            response = await http.get(preview_url)
+            response.raise_for_status()
+            html = response.text
+    except (httpx.HTTPError, httpx.TimeoutException) as exc:
+        raise FileNotFoundError(
+            f"Edit directory {edit_dir} is missing and recovery from preview "
+            f"{preview_url} failed ({type(exc).__name__}: {exc}). The edit "
+            f"may need to be regenerated."
+        ) from exc
+
+    edit_dir.mkdir(parents=True, exist_ok=True)
+    edit_index.write_text(html, encoding="utf-8")
+    logger.info(
+        "Recovered edit to disk | client=%s slug=%s bytes=%s",
+        client_id, edit_slug, len(html),
+    )
+    return edit_dir
+
+
 async def edit_active_site(
     *,
     client_id: str,
