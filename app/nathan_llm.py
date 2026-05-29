@@ -540,6 +540,9 @@ NATHAN_TEAMS_CHAT_SURFACE_RULES = """RESPONSE SURFACE: You are replying in a Mic
 - For wrap-up notes: when calling save_meeting_notes, summarize what you'll file in the reply (so the user knows what landed in the channel) but you don't need to "read it out loud" before — they can see it.
 - If you delegate to a specialist, say so plainly: "I'll have Dylan take this — he'll post the preview link back here when it's ready." (When the underlying delegation tools exist; today you note the routing and the human follows up.)
 - 1:1 DM context: be especially concise and direct. Channel context: assume a wider audience may read; tone slightly more formal.
+
+CONVERSATION HISTORY:
+When previous turns from this conversation are provided before the current user message, treat them as ongoing context. Refer to earlier points naturally ("As we discussed earlier...", "You mentioned that...", "Following up on what we covered..."). Do not act like this is the first message in the thread. The final message in the list is always the current user input.
 """
 
 
@@ -549,6 +552,12 @@ def _build_surface_rules(surface: str) -> str:
     if surface == "teams_chat":
         return NATHAN_TEAMS_CHAT_SURFACE_RULES
     return NATHAN_TAVUS_SURFACE_RULES
+
+
+# Dedicated guidance injected when conversation history is present
+CONVERSATION_HISTORY_GUIDANCE = """CONVERSATION HISTORY CONTEXT:
+The messages immediately below contain previous turns from this ongoing conversation (oldest first). Use them to maintain continuity, remember decisions, avoid repetition, and reference prior discussion naturally. The very last message in the input is the current user question or request."""
+
 
 # ── Tool execution ─────────────────────────────────────────────────────────────
 
@@ -774,9 +783,15 @@ def _openai_messages_to_anthropic(
         system_parts.append(client_prefs)
     system_parts.append(NATHAN_BASE_SYSTEM)
     system_parts.append(_build_surface_rules(surface))
+
+    # === NEW: Inject explicit conversation history guidance when prior turns exist ===
+    if len(messages) > 1:
+        system_parts.append(CONVERSATION_HISTORY_GUIDANCE)
+
     anthropic_msgs: list[dict[str, Any]] = []
 
-    for msg in messages:
+    history_label_added = False
+    for i, msg in enumerate(messages):
         role = msg.get("role", "")
         content = msg.get("content", "")
 
@@ -785,6 +800,14 @@ def _openai_messages_to_anthropic(
             # Append it after our base prompt so persona context is preserved
             if content and content.strip():
                 system_parts.append(f"\n\n[ADDITIONAL CONTEXT FROM PERSONA SETUP]\n{content}")
+            continue
+
+        # === NEW: Label the start of conversation history for clarity ===
+        if len(messages) > 1 and not history_label_added and i == 0:
+            # First message in a multi-turn list is the oldest history turn
+            labeled_content = f"[Previous conversation context begins here]\n{content}"
+            anthropic_msgs.append({"role": role, "content": labeled_content})
+            history_label_added = True
             continue
 
         if role == "user":

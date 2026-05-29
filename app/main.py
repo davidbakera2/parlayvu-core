@@ -36,6 +36,7 @@ class NathanRequest(BaseModel):
     client_id: Optional[str] = "default-client"
     project_id: Optional[str] = None
     brand_voice_summary: Optional[str] = None
+    conversation_id: Optional[str] = None   # NEW: enables conversation memory across calls
 
 
 class DylanGenerateSiteRequest(BaseModel):
@@ -198,7 +199,7 @@ from .microsoft365 import (
     render_meeting_notes_template_docx,
     sanitize_file_stem,
 )
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 
 
 def _endpoint_response(agent: str, route_decision=None, final_output=None, client_id: Optional[str] = None, **extra):
@@ -390,8 +391,37 @@ async def _run_nathan_request(
         if project_context is None:
             raise HTTPException(status_code=404, detail=f"Project not found: {request.project_id}")
 
+    # === NEW: Load conversation history if conversation_id is provided ===
+    history_messages: list = []
+    if request.conversation_id:
+        # Support reset commands on the API path (same as Teams)
+        if is_conversation_reset_request(request.message):
+            deleted = reset_conversation_history(
+                conversation_id=request.conversation_id,
+                client_id=request.client_id,
+            )
+            ack = (
+                f"Started fresh — cleared {deleted} prior turn(s) from this conversation."
+                if deleted
+                else "Started fresh. (No prior history to clear.)"
+            )
+            return _endpoint_response("Nathan", final_output={"message": ack}, client_id=request.client_id)
+
+        history = load_conversation_history(
+            conversation_id=request.conversation_id,
+            client_id=request.client_id,
+        )
+        for turn in history:
+            if turn["role"] == "user":
+                history_messages.append(HumanMessage(content=turn["content"]))
+            else:
+                history_messages.append(AIMessage(content=turn["content"]))
+
+    # Build final messages list: history + current user message
+    messages = history_messages + [HumanMessage(content=request.message)]
+
     initial_state = ParlayVuState(
-        messages=[HumanMessage(content=request.message)],
+        messages=messages,
         client_id=request.client_id,
         project_id=request.project_id,
         project_context=project_context,
@@ -417,6 +447,31 @@ async def _run_nathan_request(
             **(event_payload or {}),
         },
     )
+
+    # === NEW: Persist turns if conversation_id is present ===
+    if request.conversation_id:
+        try:
+            save_conversation_turn(
+                conversation_id=request.conversation_id,
+                client_id=request.client_id,
+                role="user",
+                content=request.message,
+            )
+            # Best-effort extraction of assistant text for saving
+            assistant_text = None
+            if isinstance(result, dict):
+                fo = result.get("final_output")
+                if isinstance(fo, dict):
+                    assistant_text = fo.get("message") or fo.get("content")
+            if assistant_text:
+                save_conversation_turn(
+                    conversation_id=request.conversation_id,
+                    client_id=request.client_id,
+                    role="assistant",
+                    content=assistant_text,
+                )
+        except Exception as exc:
+            logger.warning("Failed to persist conversation turns for /nathan: %s", exc)
 
     return _endpoint_response(
         "Nathan",
