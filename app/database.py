@@ -44,9 +44,23 @@ def session_scope() -> Iterator[Session]:
 
 
 def initialize_database(target_engine: Engine | None = None) -> None:
-    """Create database tables for early deployments and demos.
+    """Create database tables using SQLAlchemy metadata.create_all().
 
-    Production migrations should replace this once Alembic is introduced.
+    This is a **development and test helper only**.
+
+    - Fast and convenient for in-memory SQLite unit tests.
+    - Acceptable for very early local demos on a fresh database.
+
+    **Production and real client work must use Alembic migrations instead:**
+        alembic upgrade head
+
+    See:
+    - alembic/ for the migration history
+    - README.md "Local Setup" section
+    - SETUP.md for Azure Container App production path
+    - The initial migration (conversation_turns etc. included)
+
+    Never rely on this function to evolve a production schema.
     """
     Base.metadata.create_all(bind=target_engine or get_engine())
 
