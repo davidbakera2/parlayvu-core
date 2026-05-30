@@ -1,0 +1,86 @@
+﻿---
+/**
+ * TeamGrid - Rich version
+ * Supports: photo, name, role, bio (optional), linkedin, contact
+ */
+
+export interface TeamMember {
+  name: string;
+  role: string;
+  bio?: string;
+  image?: string;
+  linkedin?: string;
+  contact?: string;
+}
+
+interface Props {
+  title?: string;
+  members: TeamMember[];
+  columns?: 2 | 3 | 4;
+}
+
+const { 
+  title = "Our Team", 
+  members, 
+  columns = 3 
+} = Astro.props;
+---
+
+<section class="py-16 md:py-20">
+  <div class="max-w-6xl mx-auto px-6">
+    {title && (
+      <h2 class="text-3xl md:text-4xl font-semibold tracking-tight mb-12 text-center">
+        {title}
+      </h2>
+    )}
+
+    <div class={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${columns} gap-x-8 gap-y-12`}>
+      {members.map((member) => (
+        <div class="group">
+          {member.image && (
+            <div class="aspect-square w-full overflow-hidden rounded-2xl bg-zinc-900 mb-5">
+              <img 
+                src={member.image} 
+                alt={member.name}
+                class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                loading="lazy"
+              />
+            </div>
+          )}
+          
+          <div>
+            <h3 class="font-semibold text-xl tracking-tight">{member.name}</h3>
+            <p class="text-sm text-zinc-400 mt-0.5">{member.role}</p>
+            
+            {member.bio && (
+              <p class="mt-3 text-[15px] leading-relaxed text-zinc-300">
+                {member.bio}
+              </p>
+            )}
+
+            <div class="flex gap-4 mt-4 text-sm">
+              {member.linkedin && (
+                <a 
+                  href={member.linkedin} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  class="text-zinc-400 hover:text-white transition-colors"
+                >
+                  LinkedIn
+                </a>
+              )}
+              {member.contact && (
+                <a 
+                  href={member.contact.startsWith('http') ? member.contact : `mailto:${member.contact}`}
+                  class="text-zinc-400 hover:text-white transition-colors"
+                >
+                  Contact
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

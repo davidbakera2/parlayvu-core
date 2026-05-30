@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from langchain_core.tools import tool
+from app.services.dylan_edit_service import compose_section_edit as _compose_section_edit
 
 
 GENERATED_SITES_DIR = Path("generated_sites")
@@ -1082,6 +1083,46 @@ export default defineConfig({
         "message": f"Dylan generated an Astro site for {client_id} at {site_dir}",
         "deployment_hint": f"Run: cd {site_dir} && npm install && npm run build",
     }
+
+
+@tool
+async def compose_section_edit(
+    client_id: str,
+    section_name: str,
+    section_data: dict,
+    target_location: str = "after:hero",
+    deploy: bool = True,
+) -> Dict[str, Any]:
+    """
+    Compose an approved design system section (e.g. TeamGrid, Features3Col, CTA)
+    and insert it into the client's homepage.
+
+    This is the preferred tool for structural changes.
+    Use this instead of free-form editing when the client wants to add sections, team grids, etc.
+
+    section_name must be one of the approved sections (TeamGrid, Features3Col, TestimonialGrid, etc.).
+    section_data should be structured data matching the section.
+    """
+    try:
+        return await _compose_section_edit(
+            client_id=client_id,
+            section_name=section_name,
+            section_data=section_data,
+            target_location=target_location,
+            deploy=deploy,
+        )
+    except ValueError as e:
+        # Surface validation errors clearly to Nathan
+        return {
+            "status": "validation_error",
+            "message": str(e),
+            "allowed_sections": ["Hero", "Features3Col", "TeamGrid", "TestimonialGrid", "ContentWithImage", "LogoCloud", "FAQ", "CTA"],
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to compose section: {str(e)}",
+        }
 
 
 @tool

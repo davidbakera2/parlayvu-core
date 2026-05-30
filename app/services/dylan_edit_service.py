@@ -375,3 +375,206 @@ async def edit_active_site(
         "memory_output_id": memory_output_id,
         "event_id": event_id,
     }
+
+
+# =============================================================================
+# NEW: Component-based section editing (v1 — homepage only)
+# This is the preferred tool going forward for structural changes.
+# =============================================================================
+
+async def compose_section_edit(
+    *,
+    client_id: str,
+    section_name: str,
+    section_data: dict[str, Any],
+    target_location: str | None = "after:hero",
+    deploy: bool = True,
+) -> dict[str, Any]:
+    """
+    Compose an approved design system section and insert it into the client's homepage.
+
+    This is the new primary tool for structural edits (TeamGrid, Features3Col, etc.).
+    It is intended to replace free-form HTML patching for anything beyond small tweaks.
+
+    Homepage-only in v1.
+    """
+    # Validation
+    allowed_sections = {
+        "Hero", "Features3Col", "TeamGrid", "TestimonialGrid",
+        "ContentWithImage", "LogoCloud", "FAQ", "CTA"
+    }
+    
+    if section_name not in allowed_sections:
+        raise ValueError(
+            f"Unknown section_name '{section_name}'. "
+            f"Approved sections (v1): {', '.join(sorted(allowed_sections))}"
+        )
+
+    if not section_data or not isinstance(section_data, dict):
+        raise ValueError("section_data must be a non-empty dictionary")
+
+    config = load_client_config(client_id)
+
+    active_index = client_active_dir(client_id) / "index.html"
+    current_html = await _resolve_active_html(
+        client_id=client_id,
+        config=config,
+        active_index=active_index,
+    )
+
+    logger.info(
+        "Composing section | client=%s section=%s",
+        client_id, section_name,
+    )
+
+    section_html = await _generate_section_html(
+        client_display_name=config.display_name,
+        section_name=section_name,
+        section_data=section_data,
+    )
+
+    updated_html = _insert_section(
+        current_html=current_html,
+        section_html=section_html,
+        target_location=target_location or "after:hero",
+    )
+
+    slug = f"edit-{_timestamp_slug()}"
+    edit_dir = client_sites_root(client_id) / EDITS_SUBDIR / slug
+    edit_dir.mkdir(parents=True, exist_ok=True)
+    (edit_dir / "index.html").write_text(updated_html, encoding="utf-8")
+
+    def _repo_rel(p: Path) -> str:
+        try:
+            return str(p.relative_to(Path.cwd())).replace("\\", "/")
+        except ValueError:
+            return str(p).replace("\\", "/")
+
+    deploy_result = None
+    preview_url = None
+    if deploy:
+        try:
+            deploy_result = deploy_preview(client_id=client_id)
+            preview_url = deploy_result.get("url")
+            if preview_url:
+                preview_url = preview_url.rstrip("/") + f"/{EDITS_SUBDIR}/{slug}/"
+        except Exception as exc:
+            logger.exception("compose_section_edit deploy failed")
+            deploy_result = {"status": "error", "message": str(exc)}
+
+    status = (deploy_result or {}).get("status", "generated")
+
+    memory_output_id = record_generated_output(
+        client_id=client_id,
+        project_id=None,
+        agent_name="dylan",
+        output_type="section_edit",
+        title=f"{config.display_name} — {section_name}",
+        uri=preview_url,
+        status=status,
+        metadata={
+            "section_name": section_name,
+            "section_data": section_data,
+            "edit_slug": slug,
+        },
+    )
+
+    return {
+        "status": status,
+        "client_id": client_id,
+        "section_name": section_name,
+        "section_data": section_data,
+        "target_location": target_location,
+        "edit_slug": slug,
+        "edit_dir": _repo_rel(edit_dir),
+        "preview_url": preview_url,
+        "deploy": deploy_result,
+        "memory_output_id": memory_output_id,
+    }
+
+
+async def _generate_section_html(
+    *,
+    client_display_name: str,
+    section_name: str,
+    section_data: dict[str, Any],
+) -> str:
+    """Generate section HTML guided by the design system (v1)."""
+    client = anthropic.AsyncAnthropic()
+
+    prompt = f"""You are Dylan Brooks composing a clean, accessible section from the ParlayVU Design System.
+
+Section: {section_name}
+Client: {client_display_name}
+
+Data:
+{json.dumps(section_data, indent=2)}
+
+Rules:
+- Output ONLY the HTML for this one section (no full page wrapper).
+- Use semantic Tailwind classes.
+- Make it responsive and accessible.
+- Return just the section markup.
+"""
+
+    response = await client.messages.create(
+        model=SONNET_MODEL,
+        max_tokens=4000,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    parts = [block.text for block in response.content if hasattr(block, "text")]
+    html = "".join(parts).strip()
+
+    if html.startswith("```"):
+        html = re.sub(r"^```[a-zA-Z]*\n?", "", html)
+        html = re.sub(r"\n?```$", "", html)
+
+    return html.strip()
+
+
+def _insert_section(
+    *,
+    current_html: str,
+    section_html: str,
+    target_location: str,
+) -> str:
+    """
+    Improved insertion logic for v1 (homepage only).
+    Tries to be smarter about common insertion points.
+    """
+    loc = target_location.lower().strip()
+
+    # Common smart insertion points
+    if "after:hero" in loc or loc == "after hero":
+        # Look for the end of the first major hero-like section
+        # Try to find common patterns
+        patterns = [
+            '</section>',           # After first section
+            '</header>',            # After header
+            'id="contact"',         # Before contact section
+        ]
+        
+        for pattern in patterns:
+            if pattern in current_html:
+                # Insert after the first occurrence of the pattern
+                idx = current_html.find(pattern)
+                if idx != -1:
+                    insert_pos = idx + len(pattern)
+                    return current_html[:insert_pos] + "\n" + section_html + "\n" + current_html[insert_pos:]
+        
+        # Fallback: insert near the top of main content
+        if "<main" in current_html:
+            main_start = current_html.find("<main")
+            # Insert after the opening main tag + some content
+            insert_pos = main_start + current_html[main_start:].find(">") + 1
+            return current_html[:insert_pos] + "\n" + section_html + "\n" + current_html[insert_pos:]
+
+    if "before:footer" in loc or "before footer" in loc:
+        if "</footer>" in current_html:
+            return current_html.replace("</footer>", section_html + "\n</footer>")
+
+    # Ultimate fallback
+    if "</body>" in current_html:
+        return current_html.replace("</body>", section_html + "\n</body>")
+
+    return current_html + "\n" + section_html
