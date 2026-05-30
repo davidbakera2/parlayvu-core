@@ -27,6 +27,13 @@ COPY app ./app
 # when the database has no row for the requested client.
 COPY client_artifacts ./client_artifacts
 
+# Alembic is required to run database migrations in production
+# (e.g. `alembic upgrade head`). These files were previously missing
+# from the production image, which is why the conversation_turns table
+# was never created.
+COPY alembic.ini .
+COPY alembic ./alembic
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
