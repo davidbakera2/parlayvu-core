@@ -567,8 +567,8 @@ NATHAN_TEAMS_CHAT_SURFACE_RULES = """RESPONSE SURFACE: You are replying in a Mic
 - If you delegate to a specialist, say so plainly: "I'll have Dylan take this — he'll post the preview link back here when it's ready." (When the underlying delegation tools exist; today you note the routing and the human follows up.)
 - 1:1 DM context: be especially concise and direct. Channel context: assume a wider audience may read; tone slightly more formal.
 
-CONVERSATION HISTORY:
-When previous turns from this conversation are provided before the current user message, treat them as ongoing context. Refer to earlier points naturally ("As we discussed earlier...", "You mentioned that...", "Following up on what we covered..."). Do not act like this is the first message in the thread. The final message in the list is always the current user input.
+CONVERSATION HISTORY (CRITICAL):
+Previous turns from this exact Teams thread are provided above. When the user gives short follow-ups like "yes, please do", "go ahead", "that one", or "the variations", they are referring to a specific offer or pending action you made in the history. Use the prior turns to understand the request instead of asking the user to repeat what they want.
 """
 
 
@@ -581,8 +581,8 @@ def _build_surface_rules(surface: str) -> str:
 
 
 # Dedicated guidance injected when conversation history is present
-CONVERSATION_HISTORY_GUIDANCE = """CONVERSATION HISTORY CONTEXT:
-The messages immediately below contain previous turns from this ongoing conversation (oldest first). Use them to maintain continuity, remember decisions, avoid repetition, and reference prior discussion naturally. The very last message in the input is the current user question or request."""
+CONVERSATION_HISTORY_GUIDANCE = """CONVERSATION HISTORY CONTEXT (IMPORTANT):
+The messages below are previous turns from THIS SAME TEAMS THREAD (oldest first). The user is continuing the exact conversation we were just having. You MUST use this context to understand what the user is referring to (e.g. "yes, please do", "go ahead", "that one", "the variations"). Do not ask the user to repeat what they want — the prior turns contain the specific offer or request. The final message is the user's new input."""
 
 
 # ── Tool execution ─────────────────────────────────────────────────────────────
@@ -831,7 +831,10 @@ def _openai_messages_to_anthropic(
         # === NEW: Label the start of conversation history for clarity ===
         if len(messages) > 1 and not history_label_added and i == 0:
             # First message in a multi-turn list is the oldest history turn
-            labeled_content = f"[Previous conversation context begins here]\n{content}"
+            labeled_content = (
+                "[PREVIOUS CONVERSATION CONTEXT - This is what was discussed earlier in this thread. "
+                "The user is referring back to this.]\n" + content
+            )
             anthropic_msgs.append({"role": role, "content": labeled_content})
             history_label_added = True
             continue

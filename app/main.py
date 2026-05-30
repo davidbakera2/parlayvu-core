@@ -854,6 +854,22 @@ async def _handle_teams_message(request: TeamsMessageRequest):
         conversation_id=request.conversation_id,
         client_id=request.client_id,
     )
+
+    # DIAGNOSTIC LOGGING - Conversation memory in Teams
+    logger.info(
+        "TEAMS_MEMORY_LOAD | conv_id=%s | client_id=%s | turns_loaded=%d | text_preview=%s",
+        request.conversation_id,
+        request.client_id,
+        len(history),
+        (normalized_text[:80] + "...") if len(normalized_text) > 80 else normalized_text,
+    )
+    if history:
+        logger.info(
+            "TEAMS_MEMORY_FIRST_TURN | role=%s | content=%s",
+            history[0].get("role"),
+            history[0].get("content", "")[:200],
+        )
+
     nathan_messages = history + [{"role": "user", "content": normalized_text}]
 
     try:
@@ -883,6 +899,15 @@ async def _handle_teams_message(request: TeamsMessageRequest):
             role="assistant",
             content=nathan_text,
         )
+
+    # DIAGNOSTIC LOGGING - Confirm saves
+    logger.info(
+        "TEAMS_MEMORY_SAVE | conv_id=%s | client_id=%s | user_saved=True | assistant_saved=%s | nathan_text_preview=%s",
+        request.conversation_id,
+        request.client_id,
+        bool(nathan_text),
+        (nathan_text[:80] + "...") if nathan_text and len(nathan_text) > 80 else nathan_text,
+    )
 
     # Keep audit parity with the previous LangGraph path — every Teams
     # turn produces one `nathan_replied` event tied to the conversation.
@@ -1270,6 +1295,16 @@ async def teams_message_endpoint(request: Request):
 
         teams_request = TeamsMessageRequest(**teams_message_from_activity(payload))
         _apply_teams_channel_binding(teams_request)
+
+        # DIAGNOSTIC LOGGING - Raw conversation ID from Bot Framework
+        raw_conv_id = (payload.get("conversation") or {}).get("id")
+        logger.info(
+            "TEAMS_RAW_ACTIVITY | raw_conv_id=%s | resolved_conv_id=%s | resolved_client_id=%s | text=%s",
+            raw_conv_id,
+            teams_request.conversation_id,
+            teams_request.client_id,
+            (teams_request.text or "")[:100],
+        )
         if is_channel_bind_request(teams_request.text):
             target = resolve_demo_bind_target(teams_request.text)
             if not target:
