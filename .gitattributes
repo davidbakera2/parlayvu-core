@@ -1,0 +1,153 @@
+# =============================================================================
+# .gitattributes
+# Line ending and binary handling for parlayvu-core
+# =============================================================================
+#
+# This ensures consistent behavior across Windows, macOS, and Linux
+# contributors, and prevents CRLF/LF churn in the repository.
+#
+# See: https://docs.github.com/en/get-started/getting-started-with-git/configuring-git-to-handle-line-endings
+#
+# Recommended: keep core.autocrlf=true on Windows (the default), or false
+# when this file provides explicit control. Attributes take precedence.
+# =============================================================================
+
+# Default: automatically detect text files and normalize line endings to LF
+# in the repository (CRLF on Windows checkout if core.autocrlf is on).
+* text=auto
+
+# -------------------------------------------------------------------
+# Explicit text files (force LF in repo for portability and diff cleanliness)
+# -------------------------------------------------------------------
+*.md            text eol=lf
+*.rst           text eol=lf
+*.txt           text eol=lf
+*.py            text eol=lf
+*.pyi           text eol=lf
+*.ps1           text eol=lf
+*.psm1          text eol=lf
+*.sh            text eol=lf
+*.bash          text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.toml          text eol=lf
+*.ini           text eol=lf
+*.cfg           text eol=lf
+*.conf          text eol=lf
+*.json          text eol=lf
+*.jsonc         text eol=lf
+*.json5         text eol=lf
+*.xml           text eol=lf
+*.html          text eol=lf
+*.css           text eol=lf
+*.js            text eol=lf
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.jsx           text eol=lf
+Dockerfile*     text eol=lf
+Makefile        text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+.editorconfig   text eol=lf
+.pre-commit-config.yaml text eol=lf
+
+# -------------------------------------------------------------------
+# Binary files (never convert line endings, store as-is)
+# -------------------------------------------------------------------
+# Images
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.webp          binary
+*.tiff          binary
+*.tif           binary
+*.bmp           binary
+
+# SVGs are text (XML-based), so normalize line endings
+*.svg           text eol=lf
+
+# Video & Audio (even small template ones)
+*.mp4           binary
+*.mov           binary
+*.mkv           binary
+*.avi           binary
+*.webm          binary
+*.m4v           binary
+*.wmv           binary
+*.flv           binary
+*.wav           binary
+*.mp3           binary
+*.aac           binary
+*.flac          binary
+*.aif           binary
+*.aiff          binary
+*.ogg           binary
+
+# Documents & spreadsheets (opaque formats)
+*.pdf           binary
+*.xlsx          binary
+*.xls           binary
+*.xlsm          binary
+*.docx          binary
+*.pptx          binary
+*.zip           binary
+*.tar           binary
+*.gz            binary
+*.7z            binary
+*.rar           binary
+
+# Resolve / video editing project files (large + path dependent)
+*.drp           binary
+*.resolve       binary
+*.aep           binary
+*.prproj        binary
+*.aepx          binary
+*.ppj           binary
+
+# Other common binaries
+*.exe           binary
+*.dll           binary
+*.so            binary
+*.dylib         binary
+*.pyd           binary
+*.pyc           binary
+*.pyo           binary
+*.db            binary
+*.sqlite        binary
+*.sqlite3       binary
+*.pem           binary
+*.key           binary
+*.pfx           binary
+*.p12           binary
+
+# -------------------------------------------------------------------
+# Diff and merge settings for common types
+# -------------------------------------------------------------------
+*.json  diff=json
+*.md    diff=markdown
+
+# -------------------------------------------------------------------
+# Linguist overrides (GitHub language stats)
+# -------------------------------------------------------------------
+# Treat JSONC etc as JSON for stats if desired
+# *.json linguist-language=JSON
+
+# Note: If you add new file types (e.g. new template formats), declare
+# them here as text eol=lf or binary as appropriate.
+
+# -------------------------------------------------------------------
+# video_system specific relaxations
+# -------------------------------------------------------------------
+# Captions, transcripts, and planning files come from external recorders
+# (e.g. Riverside) and editors. They commonly have trailing spaces at
+# phrase ends and specific EOF newlines. Do not treat these as errors.
+video_system/**/planning/*.srt      whitespace=-trailing-space,-blank-at-eof
+video_system/**/planning/*.vtt      whitespace=-trailing-space,-blank-at-eof
+video_system/**/planning/*.txt      whitespace=-trailing-space,-blank-at-eof
+video_system/**/planning/*.ass      whitespace=-trailing-space,-blank-at-eof
+video_system/**/captions.*          whitespace=-trailing-space,-blank-at-eof
+video_system/**/david-*.txt         whitespace=-trailing-space,-blank-at-eof
+video_system/**/stfh-*.txt          whitespace=-trailing-space,-blank-at-eof
+video_system/**/stfh-*.srt          whitespace=-trailing-space,-blank-at-eof

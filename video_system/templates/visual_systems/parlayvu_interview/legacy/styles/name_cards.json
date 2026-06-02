@@ -1,0 +1,18 @@
+{
+  "default_duration": 5,
+  "font": "Arial",
+  "font_size": 34,
+  "bold": true,
+  "color": "white",
+  "background": {
+    "color": "black",
+    "alpha": 0.55
+  },
+  "placements": {
+    "1cam": "top_right",
+    "2cam": "top_right",
+    "2cam_broll": "top_right_over_broll",
+    "3cam": "top_right",
+    "3cam_broll": "top_right_over_broll"
+  }
+}

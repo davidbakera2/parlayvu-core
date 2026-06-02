@@ -1,0 +1,19 @@
+{
+  "visual_system": "parlayvu_interview",
+  "version": "1.0",
+  "description": "The standard ParlayVU interview/podcast visual system (reusable across clients with light overrides).",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 24
+  },
+  "legacy": {
+    "config": "legacy/template_config.json",
+    "layouts_dir": "legacy/layouts",
+    "styles_dir": "legacy/styles"
+  },
+  "resolve": {
+    "template_dir": "resolve",
+    "notes": "Primary home for the modern DaVinci Resolve template."
+  }
+}

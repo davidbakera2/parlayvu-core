@@ -1,0 +1,102 @@
+{
+  "visual_system": "parlayvu_interview",
+  "version": "0.1",
+  "description": "Style parameters for the Resolve-native implementation. These values are derived from the Visual Specification and are intended to guide both manual template building and future scripting.",
+
+  "project": {
+    "resolution": {
+      "width": 1920,
+      "height": 1080
+    },
+    "frame_rate": 24.0,
+    "color_management": "DaVinci YRGB Color Managed (Rec.709 Gamma 2.4)",
+    "notes": "Locked decisions - May 2026"
+  },
+
+  "lower_third": {
+    "standard": {
+      "top_row": {
+        "font": "Arial",
+        "font_style": "Bold",
+        "size_pt": 40,
+        "color": "#FFFFFF",
+        "background": "#062442",
+        "case": "upper",
+        "alignment": "center"
+      },
+      "bottom_row": {
+        "font": "Arial",
+        "font_style": "Bold",
+        "size_pt": 56,
+        "color": "#000000",
+        "background": "#FFFFFF",
+        "case": "upper",
+        "alignment": "left"
+      },
+      "branding_plates": {
+        "left": "show_image_lower_third.png",
+        "right": "logo_square.png",
+        "right_fit": "cover_slight_overlap"
+      }
+    },
+    "one_cam_special": {
+      "notes": "Smaller framed treatment with explicit white border around the lower third area.",
+      "border_color": "#FFFFFF",
+      "border_width_px": 2
+    }
+  },
+
+  "broll_cards": {
+    "background": {
+      "color": "#062442",
+      "alpha": 0.72
+    },
+    "accent_bar": {
+      "color": "#2C84C6",
+      "width": 12
+    },
+    "main_text": {
+      "font": "Arial",
+      "font_style": "Bold",
+      "size_pt": 32,
+      "color": "#FFFFFF",
+      "alignment": "right"
+    },
+    "secondary_text": {
+      "font": "Arial",
+      "font_style": "Regular",
+      "size_pt": 16,
+      "color": "#EBF5FF",
+      "alignment": "right"
+    }
+  },
+
+  "name_cards": {
+    "background": {
+      "color": "#000000",
+      "alpha": 0.55
+    },
+    "text": {
+      "font": "Arial",
+      "font_style": "Bold",
+      "size_pt": 34,
+      "color": "#FFFFFF"
+    }
+  },
+
+  "subtitles": {
+    "font": "Arial",
+    "font_style": "Bold",
+    "size_pt": 42,
+    "color": "#FFFFFF",
+    "outline_color": "#000000",
+    "outline_width": 2.4,
+    "background": {
+      "color": "#000000",
+      "alpha": 0.35
+    },
+    "max_lines": 2,
+    "max_chars_per_line": 44,
+    "case": "upper"
+  }
+}

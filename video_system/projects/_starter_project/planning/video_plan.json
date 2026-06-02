@@ -1,0 +1,203 @@
+{
+  "project": "_starter_project",
+  "scenes": [
+    {
+      "enabled": true,
+      "scene_id": "S001",
+      "start": "00:00:00.000",
+      "end": "00:00:06.000",
+      "duration": "00:00:06.000",
+      "layout": "intro",
+      "primary_camera": "",
+      "host_source": "intro.mp4",
+      "guest_01_source": "",
+      "guest_02_source": "",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "",
+      "bottom_row_text": "",
+      "notes": "Opening clip"
+    },
+    {
+      "enabled": true,
+      "scene_id": "S002",
+      "start": "00:00:06.000",
+      "end": "00:00:11.000",
+      "duration": "00:00:05.000",
+      "layout": "show_image",
+      "primary_camera": "",
+      "host_source": "",
+      "guest_01_source": "",
+      "guest_02_source": "",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "",
+      "bottom_row_text": "",
+      "notes": "Animated show image"
+    },
+    {
+      "enabled": true,
+      "scene_id": "S003",
+      "start": "00:00:11.000",
+      "end": "00:01:10.000",
+      "duration": "00:00:59.000",
+      "layout": "1cam",
+      "primary_camera": "host",
+      "host_source": "host.mp4",
+      "guest_01_source": "",
+      "guest_02_source": "",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "DAVID BAKER | HOST",
+      "bottom_row_text": "LAUNCHING STRAIGHT FROM THE HART",
+      "notes": ""
+    },
+    {
+      "enabled": true,
+      "scene_id": "S004",
+      "start": "00:01:10.000",
+      "end": "00:03:30.000",
+      "duration": "00:02:20.000",
+      "layout": "2cam",
+      "primary_camera": "",
+      "host_source": "host.mp4",
+      "guest_01_source": "guest_01.mp4",
+      "guest_02_source": "",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "DAVID HART | FOUNDER AND CEO, RAMAIR INTERNATIONAL",
+      "bottom_row_text": "WHY POSITIVE AIR DUCT CLEANING MATTERS",
+      "notes": ""
+    },
+    {
+      "enabled": true,
+      "scene_id": "S005",
+      "start": "00:03:30.000",
+      "end": "00:04:20.000",
+      "duration": "00:00:50.000",
+      "layout": "2cam_broll",
+      "primary_camera": "",
+      "host_source": "host.mp4",
+      "guest_01_source": "guest_01.mp4",
+      "guest_02_source": "",
+      "broll_id": "broll_01",
+      "broll_file": "",
+      "broll_source_start": "00:00:15.000",
+      "top_row_text": "DAVID HART | FOUNDER AND CEO, RAMAIR INTERNATIONAL",
+      "bottom_row_text": "POSITIVE AIR DUCT CLEANING IN ACTION",
+      "notes": ""
+    }
+  ],
+  "graphics": [
+    {
+      "enabled": true,
+      "graphic_id": "G001",
+      "type": "name_card",
+      "start": "00:01:10.000",
+      "end": "00:01:15.000",
+      "text_line_1": "David Hart",
+      "text_line_2": "Founder and CEO, RamAir International",
+      "position": "",
+      "style": "",
+      "linked_scene_id": "S004",
+      "notes": ""
+    },
+    {
+      "enabled": true,
+      "graphic_id": "G002",
+      "type": "broll_card",
+      "start": "00:03:30.000",
+      "end": "00:03:36.000",
+      "text_line_1": "Positive Air Duct Cleaning",
+      "text_line_2": "",
+      "position": "",
+      "style": "",
+      "linked_scene_id": "S005",
+      "notes": ""
+    }
+  ],
+  "broll": [
+    {
+      "broll_id": "broll_01",
+      "file_name": "broll_01.mp4",
+      "description": "Positive air duct cleaning",
+      "default_source_start": "00:00:15.000",
+      "notes": ""
+    },
+    {
+      "broll_id": "broll_02",
+      "file_name": "broll_02.mp4",
+      "description": "SaniJet decontaminant application",
+      "default_source_start": "00:00:00.000",
+      "notes": ""
+    }
+  ],
+  "assets": [
+    {
+      "asset_key": "show_image",
+      "file_name": "show_image.png",
+      "purpose": "Main show image / outro"
+    },
+    {
+      "asset_key": "show_image_lower_third",
+      "file_name": "show_image_lower_third.png",
+      "purpose": "Left lower-third image"
+    },
+    {
+      "asset_key": "logo_square",
+      "file_name": "logo_square.png",
+      "purpose": "Right lower-third logo"
+    },
+    {
+      "asset_key": "intro",
+      "file_name": "intro.mp4",
+      "purpose": "Opening video"
+    },
+    {
+      "asset_key": "music",
+      "file_name": "music.wav",
+      "purpose": "Intro/outro music"
+    },
+    {
+      "asset_key": "host",
+      "file_name": "host.mp4",
+      "purpose": "Host camera"
+    },
+    {
+      "asset_key": "guest_01",
+      "file_name": "guest_01.mp4",
+      "purpose": "Guest camera"
+    }
+  ],
+  "settings": [
+    {
+      "setting": "template_name",
+      "value": "ramair_interview",
+      "notes": ""
+    },
+    {
+      "setting": "render_width",
+      "value": "1920",
+      "notes": ""
+    },
+    {
+      "setting": "render_height",
+      "value": "1080",
+      "notes": ""
+    },
+    {
+      "setting": "fps",
+      "value": "24",
+      "notes": ""
+    },
+    {
+      "setting": "subtitle_style",
+      "value": "template_default",
+      "notes": "See templates/ramair_interview/styles/subtitles.json"
+    }
+  ]
+}
