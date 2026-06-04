@@ -41,7 +41,9 @@ async def main() -> None:
     print(json.dumps(init, indent=2)[:600], flush=True)
 
     banner("STEP 2 — generate_video_plan (AI cut from transcript)")
-    plan = await v.generate_video_plan(client_id=CLIENT, episode_slug=EPISODE, episode_caption=CAPTION)
+    plan = await v.generate_video_plan(
+        client_id=CLIENT, episode_slug=EPISODE, episode_caption=CAPTION, show_start="00:22:01",
+    )
     print("status:", plan.get("status"), "| scenes:", plan.get("scene_count"), flush=True)
     print("speaker_map:", json.dumps(plan.get("speaker_map", {})), flush=True)
     if plan.get("status") != "planned":

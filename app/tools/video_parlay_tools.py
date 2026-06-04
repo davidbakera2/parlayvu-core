@@ -55,20 +55,21 @@ _RENDER_TASKS: "set[asyncio.Task]" = set()
 # --- Planner (transcript -> video_plan.json) -----------------------------------
 PLAN_MODEL = "claude-sonnet-4-6"
 PLAN_MAX_TOKENS = 8000
-PLAN_TRANSCRIPT_CAP = 60_000   # chars of transcript fed to the planner
+PLAN_TRANSCRIPT_CAP = 150_000   # chars of transcript fed to the planner (full-episode transcripts run large)
 PLAN_BRIEF_CAP = 6_000
 
 # Interview camera angles (role -> conventional source filename).
 _ROLE_FILES = {"host": "host.mp4", "guest_01": "guest_01.mp4", "guest_02": "guest_02.mp4"}
-# Branding/system assets (filename -> asset_key the renderer expects), not footage/b-roll.
-_BRANDING_KEYS = {
-    "intro.mp4": "intro",
-    "show_image.png": "show_image",
-    "show_image_lower_third.png": "show_image_lower_third",
-    "logo_square.png": "logo_square",
-    "music.wav": "music",
-    "music.mp3": "music",
-    "background.mp4": "background",  # full-frame background layer, not foreground b-roll
+# Branding/system assets identified by FILENAME STEM (extension-agnostic, so the
+# corrected show_image.jpg / background.mov / music.mp3 are recognized too). These
+# are never footage or b-roll. stem -> asset role.
+_BRANDING_STEMS = {
+    "intro": "intro",
+    "show_image": "show_image",
+    "show_image_lower_third": "show_image_lower_third",
+    "logo_square": "logo_square",
+    "music": "music",
+    "background": "background",  # full-frame background layer, not foreground b-roll
 }
 _VALID_LAYOUTS = {"1cam", "2cam", "2cam_broll", "3cam", "3cam_broll"}
 _LAYOUT_ROLE_COUNT = {"1cam": 1, "2cam": 2, "2cam_broll": 2, "3cam": 3, "3cam_broll": 3}
@@ -523,18 +524,55 @@ def _load_brief(client_id: str, *, cap: int = PLAN_BRIEF_CAP) -> str:
 
 
 def _classify_assets(project_dir: Path) -> dict[str, Any]:
-    """Sort the project's media into cameras / branding / b-roll."""
+    """Sort the project's media into cameras / branding / b-roll (by stem + ext)."""
     assets_dir = project_dir / "assets"
     present = sorted(p.name for p in assets_dir.glob("*") if p.is_file()) if assets_dir.exists() else []
     cameras = [n for n in present if n in _ROLE_FILES.values()]
-    branding = {name: key for name, key in _BRANDING_KEYS.items() if name in present}
+    branding = {n: _BRANDING_STEMS[Path(n).stem.lower()] for n in present if Path(n).stem.lower() in _BRANDING_STEMS}
     broll = [
         n for n in present
-        if Path(n).suffix.lower() in _BROLL_EXT
-        and n not in _ROLE_FILES.values()
-        and n not in _BRANDING_KEYS
+        if Path(n).suffix.lower() in _BROLL_EXT and n not in cameras and n not in branding
     ]
     return {"present": present, "cameras": cameras, "branding": branding, "broll": broll}
+
+
+def _pick_asset(branding: dict[str, str], key: str, ext_pref: tuple[str, ...]) -> str:
+    """Pick the branding file for `key`, preferring the given extensions in order
+    (so the new show_image.jpg wins over a stale show_image.png)."""
+    files = [name for name, k in branding.items() if k == key]
+    for ext in ext_pref:
+        for f in files:
+            if Path(f).suffix.lower() == ext:
+                return f
+    return sorted(files)[0] if files else ""
+
+
+def _tc_to_secs(value: str) -> float:
+    """Parse 'HH:MM:SS.mmm' / 'MM:SS.mmm' / 'SS' (minutes may exceed 59) to seconds."""
+    value = (value or "").strip().replace(",", ".")
+    if not value:
+        return 0.0
+    parts = value.split(":")
+    try:
+        nums = [float(p) for p in parts]
+    except ValueError:
+        return 0.0
+    secs = 0.0
+    for n in nums:
+        secs = secs * 60 + n
+    return secs
+
+
+def _trim_transcript_to_show(text: str, show_start_secs: float) -> str:
+    """Drop pre-show chatter: return the transcript from the first speaker header
+    whose timestamp is at/after `show_start_secs`. Headers look like
+    'Speaker Name (MM:SS.mmm)' where minutes may exceed 59. No-op if none match."""
+    header = re.compile(r'^.*?\((\d+):(\d+(?:\.\d+)?)\)\s*$', re.M)
+    for m in header.finditer(text):
+        secs = int(m.group(1)) * 60 + float(m.group(2))
+        if secs >= show_start_secs:
+            return text[m.start():]
+    return text
 
 
 def _strip_json_fence(raw: str) -> str:
@@ -553,6 +591,7 @@ async def _draft_scenes_with_llm(
     assets: dict[str, Any],
     speaker_map: Optional[dict[str, str]],
     notes: Optional[str],
+    show_start: Optional[str] = None,
 ) -> dict[str, Any]:
     """Ask Sonnet to segment the transcript into a scene plan. Returns the parsed
     JSON {speaker_map, scenes:[...]}. Raises RuntimeError if the API key is absent."""
@@ -566,6 +605,14 @@ async def _draft_scenes_with_llm(
     roles_available = [r for r, f in _ROLE_FILES.items() if f in assets.get("cameras", [])] or ["host"]
 
     fixed_map = json.dumps(speaker_map) if speaker_map else "null"
+    show_start_block = ""
+    if show_start:
+        show_start_block = (
+            f"\nSHOW START: The actual episode begins at {show_start} (the host's "
+            "\"Welcome to Straight From the Hart\"). EVERYTHING BEFORE THAT is pre-show "
+            "setup/chatter (mic checks, \"can you hear me\", waiting) — IGNORE it completely. "
+            f"Your FIRST scene must start at {show_start}.\n"
+        )
     prompt = f"""You are Alex, ParlayVU's video editor, drafting the scene-by-scene plan for an
 interview episode. You turn a speaker-labeled transcript into a structured cut.
 
@@ -574,11 +621,13 @@ EPISODE CAPTION (use verbatim as every scene's bottom_row_text): {episode_captio
 CAMERA ROLES available (you may place these on screen): {roles_available}
 B-ROLL available (reference by broll_id = these exact ids, else leave ""): {broll_ids}
 PROVIDED SPEAKER MAP (use as-is if not null): {fixed_map}
-
+{show_start_block}
 CLIENT BRIEF (for correct names, titles, topic, brand voice):
 {brief or "(none provided)"}
 
-TRANSCRIPT (speaker-labeled, timestamps look like "Name (MM:SS)"):
+TRANSCRIPT (speaker-labeled; timestamps look like "Name (MM:SS.mmm)" and are ABSOLUTE
+recording times — minutes may exceed 59, e.g. "(63:12.450)" = 1:03:12.450. These are the
+exact positions in the camera footage, so use them directly as scene start/end):
 {transcript}
 
 TASK: Output ONE JSON object, nothing else:
@@ -602,9 +651,11 @@ TASK: Output ONE JSON object, nothing else:
 RULES:
 - speaker_map: the show host/interviewer is "host"; map remaining speakers to
   "guest_01" then "guest_02" in order of first appearance. Honor the provided map if given.
-- Segment by topic/turn into scenes of roughly 20s-120s. Use the transcript
-  timestamps for start/end (convert "MM:SS" to "HH:MM:SS.000"); make scenes
-  sequential and non-overlapping.
+- Segment by topic/turn into scenes of roughly 20s-120s, covering the whole show
+  through to the end of the transcript. Use the transcript timestamps for start/end,
+  output as "HH:MM:SS.mmm" (convert the transcript's MINUTES:SECONDS, where minutes
+  may exceed 59 — e.g. transcript (63:12.450) -> "01:03:12.450"). Scenes must be
+  sequential and non-overlapping, and never start before the SHOW START.
 - layout: "1cam" when one person holds the floor (monologue/cold open);
   "2cam" for two-person dialogue; "3cam" when all three are engaged. Use the
   "*_broll" variants only when a listed broll_id genuinely illustrates the moment.
@@ -694,13 +745,36 @@ def _assemble_video_plan(episode_slug: str, episode_caption: str, llm_out: dict[
         })
 
     broll_section = [{"broll_id": Path(b).stem, "file_name": b, "default_source_start": ""} for b in assets.get("broll", [])]
-    assets_section = [{"asset_key": key, "file_name": name, "purpose": key} for name, key in assets.get("branding", {}).items()]
+    branding = assets.get("branding", {})
+    assets_section = [{"asset_key": key, "file_name": name, "purpose": key} for name, key in branding.items()]
+
+    intro_file = _pick_asset(branding, "intro", (".mp4", ".mov", ".m4v"))
+    show_image_file = _pick_asset(branding, "show_image", (".jpg", ".jpeg", ".png", ".webp"))
+    background_file = _pick_asset(branding, "background", (".mp4", ".mov", ".m4v"))
+    music_file = _pick_asset(branding, "music", (".wav", ".mp3"))
+
     settings_section = [
-        {"setting": "auto_intro", "value": "true" if "intro" in assets.get("branding", {}).values() else "false"},
-        {"setting": "auto_opening_show_image", "value": "true"},
-        {"setting": "auto_outro_show_image", "value": "true"},
-        {"setting": "background_video", "value": ""},
+        {"setting": "auto_intro", "value": "true" if intro_file else "false"},
+        {"setting": "intro_asset", "value": intro_file},
+        {"setting": "auto_opening_show_image", "value": "true" if show_image_file else "false"},
+        {"setting": "show_image_asset", "value": show_image_file},
+        {"setting": "auto_outro_show_image", "value": "true" if show_image_file else "false"},
+        # Background plays behind multi-box layouts (2cam/3cam) only — the renderer
+        # never applies it to intro / show_image / 1cam.
+        {"setting": "background_video", "value": background_file},
     ]
+
+    # Music bed over the intro + opening show image + a few seconds into the show,
+    # then fades out (anchored to intro_start). Mirrors the gold plan's intro_music.
+    audio_section: list[dict[str, Any]] = []
+    if music_file:
+        audio_section.append({
+            "enabled": True, "audio_id": "intro_music", "anchor": "intro_start",
+            "file": music_file, "start": "00:00:00.000", "end": "",
+            "duration": "00:00:40.000", "source_start": "00:00:00.000",
+            "volume": "0.2", "fade_in": "00:00:01.000", "fade_out": "00:00:10.000",
+        })
+
     return {
         "project": episode_slug,
         "_generated_by": "generate_video_plan (Nathan/Alex draft — review before rendering)",
@@ -709,6 +783,7 @@ def _assemble_video_plan(episode_slug: str, episode_caption: str, llm_out: dict[
         "graphics": [],
         "broll": broll_section,
         "assets": assets_section,
+        "audio": audio_section,
         "settings": settings_section,
     }
 
@@ -719,6 +794,7 @@ async def generate_video_plan(
     episode_slug: str,
     episode_caption: Optional[str] = None,
     transcript_path: Optional[str] = None,
+    show_start: Optional[str] = None,
     speaker_map: Optional[dict[str, str]] = None,
     notes: Optional[str] = None,
 ) -> dict[str, Any]:
@@ -735,18 +811,25 @@ async def generate_video_plan(
     planning = project_dir / "planning"
     project_id = ps.parlay_project_id(client_id, episode_slug)
 
-    transcript_file = _find_transcript(planning, transcript_path)
+    # Look in planning/ first, then assets/ (clients sometimes drop the transcript
+    # alongside the footage).
+    transcript_file = _find_transcript(planning, transcript_path) or _find_transcript(project_dir / "assets", None)
     if transcript_file is None:
         return {
             "status": "error",
             "episode_slug": episode_slug,
             "message": (
-                f"No transcript found in {_repo_rel(planning)}/. Drop a speaker-labeled "
-                "transcript (e.g. the Riverside .txt) into planning/, or pass transcript_path."
+                f"No transcript found in {_repo_rel(planning)}/ or the assets/ folder. Drop a "
+                "speaker-labeled transcript (e.g. the Riverside .txt), or pass transcript_path."
             ),
         }
 
-    transcript = transcript_file.read_text(encoding="utf-8", errors="replace")[:PLAN_TRANSCRIPT_CAP]
+    transcript = transcript_file.read_text(encoding="utf-8", errors="replace")
+    # Drop pre-show setup chatter so the cut starts at the show (keep a little lead;
+    # the LLM is also told the exact show start).
+    if show_start:
+        transcript = _trim_transcript_to_show(transcript, max(0.0, _tc_to_secs(show_start) - 10))
+    transcript = transcript[:PLAN_TRANSCRIPT_CAP]
     caption = (episode_caption or episode_slug.replace("_", " ")).strip()
     brief = _load_brief(client_id)
     assets = _classify_assets(project_dir)
@@ -754,7 +837,7 @@ async def generate_video_plan(
     try:
         llm_out = await _draft_scenes_with_llm(
             episode_caption=caption, transcript=transcript, brief=brief,
-            assets=assets, speaker_map=speaker_map, notes=notes,
+            assets=assets, speaker_map=speaker_map, notes=notes, show_start=show_start,
         )
     except Exception as exc:
         logger.exception("Video plan drafting failed for %s", episode_slug)

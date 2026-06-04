@@ -486,7 +486,8 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
                 "client_id": {"type": "string", "description": "Active client_id, e.g. 'ramair'."},
                 "episode_slug": {"type": "string", "description": "Episode slug matching the project folder."},
                 "episode_caption": {"type": "string", "description": "Lower-third episode caption used on every scene, e.g. 'EP06: ...'. Defaults to a readable form of the slug."},
-                "transcript_path": {"type": "string", "description": "Optional explicit transcript file; otherwise auto-detected in planning/."},
+                "transcript_path": {"type": "string", "description": "Optional explicit transcript file; otherwise auto-detected in planning/ then assets/."},
+                "show_start": {"type": "string", "description": "Optional camera timecode where the actual show begins (e.g. '00:22:01'), when the recording has pre-show setup. Scenes before it are dropped and the cut starts there."},
                 "notes": {"type": "string", "description": "Optional director guidance for the cut (pacing, what to feature, b-roll emphasis)."},
             },
             "required": ["client_id", "episode_slug"],
@@ -885,6 +886,7 @@ async def _execute_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
                 episode_slug=tool_input["episode_slug"],
                 episode_caption=tool_input.get("episode_caption"),
                 transcript_path=tool_input.get("transcript_path"),
+                show_start=tool_input.get("show_start"),
                 notes=tool_input.get("notes"),
             )
         elif tool_name == "generate_video_draft":
