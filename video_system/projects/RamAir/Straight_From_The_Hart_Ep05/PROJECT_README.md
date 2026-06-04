@@ -48,3 +48,14 @@ video_system\docs\PODCAST_PARLAY_FULL_WORKFLOW.md
 (and the nice HTML viewer: video_system\docs\Podcast_Parlay_Workflow.html)
 
 Edit this README as we make progress on Ep05.
+
+[Nathan re-entered the project]
+
+
+[Nathan re-entered the project]
+
+
+[Nathan re-entered the project]
+
+
+[Nathan re-entered the project]
