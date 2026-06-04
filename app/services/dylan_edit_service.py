@@ -16,16 +16,18 @@ Recent reliability work (to address "small edits like photo updates come out bro
 
 Source of truth for "what's currently live" is the production domain itself,
 not the container's local disk. On every edit, we fetch the live HTML from
-`https://<production_domain>/`, write it back to
+`https://<production_domain>/` (SSRF-guarded and size-capped — see
+_get_html_capped / _validate_public_http_url), write it back to
 `client_artifacts/<client>/03_Deliverables/sites/active/index.html` as a cache,
-then apply the plain-English change... (rest of original behavior preserved).
+then apply the plain-English change.
 
-Live-as-source means the workflow survives container restarts, ephemeral disk
-wipes... (original text continues below).
+Live-as-source means the workflow survives container restarts and ephemeral
+disk wipes: the cache self-heals on the next call.
 """
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -33,6 +35,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import anthropic
 import httpx
@@ -51,6 +54,8 @@ logger = logging.getLogger("parlayvu.services.dylan_edit")
 
 EDITS_SUBDIR = "edits"
 MAX_HTML_CHARS = 200_000  # cap so we never blow the context window on a bizarre file
+MAX_FETCH_BYTES = 4 * MAX_HTML_CHARS  # ~800 KB hard cap on any fetched body (memory guard)
+REPAIR_MAX_CHARS = 30_000  # above this, the repair LLM's output would be truncated by max_tokens — skip repair instead of corrupting
 SONNET_MODEL = "claude-sonnet-4-6"
 SONNET_MAX_TOKENS = 8_000
 
@@ -62,6 +67,64 @@ def _timestamp_slug(now: Optional[datetime] = None) -> str:
 
 
 LIVE_FETCH_TIMEOUT_SECONDS = 10.0
+
+
+def _validate_public_http_url(url: str) -> None:
+    """Guard against SSRF before we fetch a URL.
+
+    Only allow http(s) to public hosts. Rejects non-http(s) schemes, embedded
+    credentials, localhost, and literal private/loopback/link-local/reserved/
+    multicast IPs. Used for the initial fetch URL and, via an httpx request
+    event hook, for every redirect hop as well. Raises ValueError if unsafe.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Refusing to fetch non-http(s) URL: {url!r}")
+    if parsed.username or parsed.password:
+        raise ValueError("Refusing to fetch a URL that embeds credentials")
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise ValueError(f"URL has no host: {url!r}")
+    if host == "localhost" or host.endswith(".localhost"):
+        raise ValueError(f"Refusing to fetch localhost: {url!r}")
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None  # not a literal IP — a DNS name, which is the normal case
+    if ip is not None and (
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
+    ):
+        raise ValueError(f"Refusing to fetch private/internal address: {url!r}")
+
+
+async def _ssrf_request_guard(request: "httpx.Request") -> None:
+    """httpx 'request' event hook — validates every outgoing request (including
+    redirect targets) before it is sent, so an open redirect can't reach an
+    internal host."""
+    _validate_public_http_url(str(request.url))
+
+
+async def _get_html_capped(
+    http: httpx.AsyncClient, url: str, *, max_bytes: int = MAX_FETCH_BYTES
+) -> str:
+    """GET `url`, streaming the body and aborting if it exceeds `max_bytes`.
+
+    Prevents a misconfigured or hostile origin from exhausting memory: we never
+    buffer more than `max_bytes` before bailing with ValueError. Returns the
+    decoded text (utf-8, replacing undecodable bytes).
+    """
+    chunks: list[bytes] = []
+    total = 0
+    async with http.stream("GET", url) as response:
+        response.raise_for_status()
+        async for chunk in response.aiter_bytes():
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError(
+                    f"Refusing to read {url!r}: body exceeds {max_bytes:,}-byte cap"
+                )
+            chunks.append(chunk)
+    return b"".join(chunks).decode("utf-8", errors="replace")
 
 
 async def _resolve_active_html(
@@ -91,13 +154,13 @@ async def _resolve_active_html(
     if domain:
         url = f"https://{domain}/"
         try:
+            _validate_public_http_url(url)
             async with httpx.AsyncClient(
                 timeout=LIVE_FETCH_TIMEOUT_SECONDS,
                 follow_redirects=True,
+                event_hooks={"request": [_ssrf_request_guard]},
             ) as http:
-                response = await http.get(url)
-                response.raise_for_status()
-                html = response.text
+                html = await _get_html_capped(http, url)
             # Best-effort cache write — don't fail the edit if disk write fails.
             try:
                 active_index.parent.mkdir(parents=True, exist_ok=True)
@@ -112,7 +175,8 @@ async def _resolve_active_html(
                 client_id, url, len(html),
             )
             return html
-        except (httpx.HTTPError, httpx.TimeoutException) as exc:
+        except (httpx.HTTPError, httpx.TimeoutException, ValueError) as exc:
+            # ValueError covers SSRF-guard rejection and the body-size cap.
             fetch_error = f"{type(exc).__name__}: {exc}"
             logger.warning(
                 "Live-fetch failed, will try disk cache | client=%s url=%s err=%s",
@@ -269,7 +333,7 @@ def _basic_html_validation(html: str, original: str, change_description: str) ->
         return False, "output too short"
 
     lower = html.lower()
-    if "<!doctype html>" not in lower and not lower.startswith("<!doctype"):
+    if not lower.lstrip().startswith("<!doctype"):
         return False, "missing doctype"
 
     required = ["<html", "<head", "<body", "</html>"]
@@ -277,16 +341,22 @@ def _basic_html_validation(html: str, original: str, change_description: str) ->
         if tag not in lower:
             return False, f"missing required tag {tag}"
 
-    # Reasonable size change for a small edit
+    # Content-loss guard. Losing more than half the page is the signature of a
+    # truncated or over-deleted edit (the exact failure this service was hardened
+    # against) — fail closed rather than deploy a gutted page.
     orig_len = len(original)
     new_len = len(html)
+    if orig_len > 0 and new_len < orig_len * 0.5:
+        return False, (
+            f"output lost over half its content ({orig_len} -> {new_len} chars) "
+            f"— likely truncated or over-deleted"
+        )
+    # Large *growth* is usually intentional (added a section); flag but allow.
     if abs(new_len - orig_len) > max(2000, orig_len * 0.3):
-        # Large change on what was supposed to be a small edit — suspicious
         logger.warning(
             "Large size delta after edit (%d -> %d) for '%s' — possible over-editing",
             orig_len, new_len, change_description[:60]
         )
-        # Still allow, but flag
 
     # Check that at least the change description keywords appear, or some new content
     # (very loose heuristic)
@@ -295,6 +365,17 @@ def _basic_html_validation(html: str, original: str, change_description: str) ->
         logger.info("Change keywords not obviously present in output; may still be ok")
 
     return True, ""
+
+
+def _inject_attr(open_tag: str, name: str, value: str) -> str:
+    """Insert `name="value"` into an opening tag that lacks it.
+
+    `open_tag` is a full opening tag like `<div ...>` or a self-closing
+    `<img ... />`. The attribute is added just before the closing `>` / `/>`.
+    """
+    if re.search(r'/\s*>\s*$', open_tag):  # self-closing <img ... />
+        return re.sub(r'\s*/\s*>\s*$', f' {name}="{value}" />', open_tag, count=1)
+    return re.sub(r'>\s*$', f' {name}="{value}">', open_tag, count=1)
 
 
 def _try_direct_image_patch(current_html: str, change_description: str) -> str:
@@ -336,13 +417,20 @@ def _try_direct_image_patch(current_html: str, change_description: str) -> str:
 
     html = current_html
 
-    # 1. <img> tags
+    # 1. <img> tags — update the attribute if present, otherwise inject it.
     def _replace_img(m: re.Match) -> str:
         tag = m.group(0)
         if new_src:
-            tag = re.sub(r'(?i)\bsrc\s*=\s*["\'][^"\']*["\']', f'src="{new_src}"', tag, count=1)
+            if re.search(r'(?i)\bsrc\s*=', tag):
+                tag = re.sub(r'(?i)\bsrc\s*=\s*["\'][^"\']*["\']', f'src="{new_src}"', tag, count=1)
+            else:
+                tag = _inject_attr(tag, "src", new_src)
         if new_alt:
-            tag = re.sub(r'(?i)\balt\s*=\s*["\'][^"\']*["\']', f'alt="{new_alt}"', tag, count=1)
+            if re.search(r'(?i)\balt\s*=', tag):
+                tag = re.sub(r'(?i)\balt\s*=\s*["\'][^"\']*["\']', f'alt="{new_alt}"', tag, count=1)
+            else:
+                tag = _inject_attr(tag, "alt", new_alt)
+            # Keep an existing aria-label in sync; don't add a redundant one (alt suffices).
             tag = re.sub(r'(?i)\baria-label\s*=\s*["\'][^"\']*["\']', f'aria-label="{new_alt}"', tag, count=1)
         return tag
 
@@ -352,11 +440,19 @@ def _try_direct_image_patch(current_html: str, change_description: str) -> str:
     def _replace_role_img(m: re.Match) -> str:
         tag = m.group(0)
         if new_alt:
-            tag = re.sub(r'(?i)\baria-label\s*=\s*["\'][^"\']*["\']', f'aria-label="{new_alt}"', tag, count=1)
+            if re.search(r'(?i)\baria-label\s*=', tag):
+                tag = re.sub(r'(?i)\baria-label\s*=\s*["\'][^"\']*["\']', f'aria-label="{new_alt}"', tag, count=1)
+            else:
+                tag = _inject_attr(tag, "aria-label", new_alt)
         if new_src:
-            # If it has a background or data-src, update the most likely one
-            tag = re.sub(r'(?i)(background-image\s*:\s*url\([^)]*\))', f'background-image: url({new_src})', tag, count=1)
-            tag = re.sub(r'(?i)\bdata-(?:src|image)\s*=\s*["\'][^"\']*["\']', f'data-src="{new_src}"', tag, count=1)
+            # Update an existing background-image or data-src if present;
+            # otherwise inject a data-src so the new image is actually applied.
+            if re.search(r'(?i)background-image\s*:\s*url\([^)]*\)', tag):
+                tag = re.sub(r'(?i)background-image\s*:\s*url\([^)]*\)', f'background-image: url({new_src})', tag, count=1)
+            elif re.search(r'(?i)\bdata-(?:src|image)\s*=', tag):
+                tag = re.sub(r'(?i)\bdata-(?:src|image)\s*=\s*["\'][^"\']*["\']', f'data-src="{new_src}"', tag, count=1)
+            else:
+                tag = _inject_attr(tag, "data-src", new_src)
         return tag
 
     html = re.sub(r'<div[^>]*role=["\']img["\'][^>]*>', _replace_role_img, html, flags=re.I)
@@ -412,14 +508,14 @@ async def ensure_edit_dir_on_disk(
         client_id, edit_slug, preview_url,
     )
     try:
+        _validate_public_http_url(preview_url)
         async with httpx.AsyncClient(
             timeout=LIVE_FETCH_TIMEOUT_SECONDS,
             follow_redirects=True,
+            event_hooks={"request": [_ssrf_request_guard]},
         ) as http:
-            response = await http.get(preview_url)
-            response.raise_for_status()
-            html = response.text
-    except (httpx.HTTPError, httpx.TimeoutException) as exc:
+            html = await _get_html_capped(http, preview_url)
+    except (httpx.HTTPError, httpx.TimeoutException, ValueError) as exc:
         raise FileNotFoundError(
             f"Edit directory {edit_dir} is missing and recovery from preview "
             f"{preview_url} failed ({type(exc).__name__}: {exc}). The edit "
@@ -507,10 +603,19 @@ async def edit_active_site(
     ok, reason = _basic_html_validation(edited_html, current_html, change_description)
     if not ok:
         logger.error("Post-edit validation failed: %s", reason)
-        # Attempt a lightweight repair: ask LLM to fix the broken HTML while preserving intent
+        # Attempt a lightweight repair: ask the LLM to fix the broken HTML while
+        # preserving intent. Only when the page is small enough that the repair
+        # output fits within max_tokens — otherwise the repair itself would be
+        # silently truncated and could deploy an incomplete page.
+        if len(edited_html) > REPAIR_MAX_CHARS:
+            logger.error(
+                "Skipping repair: edited HTML is %d chars (> %d cap); cannot repair "
+                "without truncating the output.",
+                len(edited_html), REPAIR_MAX_CHARS,
+            )
         try:
             repair_api_key = os.getenv("ANTHROPIC_API_KEY", "")
-            if repair_api_key:
+            if repair_api_key and len(edited_html) <= REPAIR_MAX_CHARS:
                 repair_client = anthropic.AsyncAnthropic(api_key=repair_api_key)
                 repair_prompt = (
                     f"The following HTML was produced by an edit for this request: {change_description}\n\n"
@@ -522,7 +627,7 @@ async def edit_active_site(
                     model=SONNET_MODEL,
                     max_tokens=SONNET_MAX_TOKENS,
                     temperature=0.1,
-                    messages=[{"role": "user", "content": repair_prompt + "\n\nBROKEN HTML:\n" + edited_html[:50000]}],
+                    messages=[{"role": "user", "content": repair_prompt + "\n\nBROKEN HTML:\n" + edited_html}],
                 )
                 repaired = "".join([b.text for b in repair_response.content if hasattr(b, "text")]).strip()
                 if repaired.startswith("```"):

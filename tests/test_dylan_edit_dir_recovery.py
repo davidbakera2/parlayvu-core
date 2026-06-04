@@ -28,6 +28,31 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+def _mock_stream_client(*, body: str = "", enter_exc: Exception | None = None):
+    """Mock httpx.AsyncClient whose `.stream("GET", url)` yields `body`.
+
+    `ensure_edit_dir_on_disk` now uses the streaming, size-capped fetch helper
+    (`_get_html_capped`) instead of `.get(...).text`.
+    """
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+
+    async def _aiter_bytes():
+        if body:
+            yield body.encode("utf-8")
+    mock_response.aiter_bytes = _aiter_bytes
+
+    stream_cm = MagicMock()
+    if enter_exc is not None:
+        stream_cm.__aenter__ = AsyncMock(side_effect=enter_exc)
+    else:
+        stream_cm.__aenter__ = AsyncMock(return_value=mock_response)
+    stream_cm.__aexit__ = AsyncMock(return_value=False)
+    mock_client.stream = MagicMock(return_value=stream_cm)
+    return mock_client
+
+
 class EnsureEditDirOnDiskTests(unittest.TestCase):
     def setUp(self):
         self._tmp = TemporaryDirectory()
@@ -71,11 +96,7 @@ class EnsureEditDirOnDiskTests(unittest.TestCase):
         preview_url = "https://ulcannarbor-previews.pages.dev/edits/edit-2026-05-27T200640Z/"
 
         with patch("app.services.dylan_edit_service.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_response = MagicMock()
-            mock_response.text = "<html>recovered from preview</html>"
-            mock_response.raise_for_status = MagicMock()
-            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_client = _mock_stream_client(body="<html>recovered from preview</html>")
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
             result = _run(ensure_edit_dir_on_disk(
@@ -91,7 +112,7 @@ class EnsureEditDirOnDiskTests(unittest.TestCase):
             (expected_dir / "index.html").read_text(encoding="utf-8"),
             "<html>recovered from preview</html>",
         )
-        mock_client.get.assert_awaited_once_with(preview_url)
+        mock_client.stream.assert_called_once_with("GET", preview_url)
 
     def test_missing_dir_with_no_preview_url_raises(self):
         slug = "edit-2026-05-27T200640Z"
@@ -110,8 +131,7 @@ class EnsureEditDirOnDiskTests(unittest.TestCase):
         preview_url = "https://ulcannarbor-previews.pages.dev/edits/edit-2026-05-27T200640Z/"
 
         with patch("app.services.dylan_edit_service.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.get = AsyncMock(side_effect=httpx.ConnectError("dns failure"))
+            mock_client = _mock_stream_client(enter_exc=httpx.ConnectError("dns failure"))
             mock_client_cls.return_value.__aenter__.return_value = mock_client
 
             with self.assertRaises(FileNotFoundError) as ctx:
