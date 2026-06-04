@@ -753,9 +753,12 @@ def _assemble_video_plan(episode_slug: str, episode_caption: str, llm_out: dict[
     background_file = _pick_asset(branding, "background", (".mp4", ".mov", ".m4v"))
     music_file = _pick_asset(branding, "music", (".wav", ".mp3"))
 
+    # Show the first scene's lower third (the host's name) over the intro too.
+    intro_lt_scene = scenes[0]["scene_id"] if scenes else ""
     settings_section = [
         {"setting": "auto_intro", "value": "true" if intro_file else "false"},
         {"setting": "intro_asset", "value": intro_file},
+        {"setting": "intro_lower_third_scene_id", "value": intro_lt_scene},
         {"setting": "auto_opening_show_image", "value": "true" if show_image_file else "false"},
         {"setting": "show_image_asset", "value": show_image_file},
         {"setting": "auto_outro_show_image", "value": "true" if show_image_file else "false"},

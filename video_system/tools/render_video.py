@@ -551,6 +551,10 @@ class Renderer:
             host_input, guest_input = "1", "2"
             filters.append("[0:v]fps=24,format=yuv420p[bg]")
 
+        # Input indices that carry camera audio — we mix ALL of them so every
+        # on-screen speaker is heard, not just one box.
+        cam_audio_inputs: list[str] = []
+
         if layout == "2cam":
             cameras: list[tuple[str, Path]] = []
             for camera_key in ["host", "guest_01", "guest_02"]:
@@ -562,14 +566,16 @@ class Renderer:
                     f"2cam scene {scene.get('scene_id')} must populate exactly two camera source fields; "
                     f"found {len(cameras)}"
                 )
-            primary = scene.get("primary_camera") or cameras[0][0]
-            left_key, left_path = next(((key, path) for key, path in cameras if key == primary), cameras[0])
-            right_key, right_path = next((key, path) for key, path in cameras if key != left_key)
+            # Deterministic placement independent of primary_camera: cameras are
+            # collected in [host, guest_01, guest_02] order, so the first (the host
+            # when present) goes LEFT and the second goes RIGHT.
+            left_key, left_path = cameras[0]
+            right_key, right_path = cameras[1]
             inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", left_path])
             inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", right_path])
             left_input = str(sum(1 for item in inputs if str(item) == "-i") - 2)
             right_input = str(sum(1 for item in inputs if str(item) == "-i") - 1)
-            host_input = left_input
+            cam_audio_inputs = [left_input, right_input]
             filters.append(self.vf_scale_to_box(left_input, sx(612), sy(564)) + "[hostv]")
             filters.append(self.vf_scale_to_box(right_input, sx(611), sy(564)) + "[guestv]")
             hx, hy = spos(28, 26)
@@ -578,6 +584,7 @@ class Renderer:
         elif layout == "2cam_broll":
             inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", host])
             inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", guest])
+            cam_audio_inputs = [host_input, guest_input]
             broll_file = scene.get("broll_file") or self.broll_index.get(scene.get("broll_id"), {}).get("file_name")
             broll_start = parse_time(scene.get("broll_source_start") or self.broll_index.get(scene.get("broll_id"), {}).get("default_source_start"))
             broll_input = self.add_broll_input(inputs, self.asset_path(broll_file), broll_start, duration)
@@ -592,10 +599,12 @@ class Renderer:
         elif layout == "3cam":
             inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", host])
             inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", guest])
+            cam_audio_inputs = [host_input, guest_input]
             guest_02 = self.asset_path(scene.get("guest_02_source") or "guest_02.mp4")
             if guest_02.exists():
                 inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", guest_02])
                 guest2_input = str(sum(1 for item in inputs if str(item) == "-i") - 1)
+                cam_audio_inputs.append(guest2_input)
                 filters.append(self.vf_scale_to_box(host_input, sx(407), sy(564)) + "[hostv]")
                 filters.append(self.vf_scale_to_box(guest_input, sx(406), sy(564)) + "[guestv]")
                 filters.append(self.vf_scale_to_box(guest2_input, sx(407), sy(564)) + "[guest2v]")
@@ -612,12 +621,14 @@ class Renderer:
         elif layout == "3cam_broll":
             inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", host])
             inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", guest])
+            cam_audio_inputs = [host_input, guest_input]
             guest_02 = self.asset_path(scene.get("guest_02_source") or "guest_02.mp4")
             broll_file = scene.get("broll_file") or self.broll_index.get(scene.get("broll_id"), {}).get("file_name")
             broll_start = parse_time(scene.get("broll_source_start") or self.broll_index.get(scene.get("broll_id"), {}).get("default_source_start"))
             if guest_02.exists():
                 inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", guest_02])
                 guest2_input = str(sum(1 for item in inputs if str(item) == "-i") - 1)
+                cam_audio_inputs.append(guest2_input)
             broll_input = self.add_broll_input(inputs, self.asset_path(broll_file), broll_start, duration)
             filters.append(self.vf_scale_to_box(host_input, sx(217), sy(186)) + "[hostv]")
             filters.append(self.vf_scale_to_box(guest_input, sx(217), sy(186)) + "[guestv]")
@@ -660,7 +671,23 @@ class Renderer:
                 current_label = next_label
             video_label = current_label
 
-        filters.append(f"[{host_input}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.35,alimiter=limit=0.96[a]")
+        # Mix audio from ALL on-screen cameras so no speaker's mic is dropped
+        # (a 2cam/3cam dialogue needs everyone's audio, not just one box).
+        if not cam_audio_inputs:
+            cam_audio_inputs = [host_input]
+        if len(cam_audio_inputs) == 1:
+            filters.append(
+                f"[{cam_audio_inputs[0]}:a]aformat=sample_rates=44100:channel_layouts=stereo,"
+                "volume=1.35,alimiter=limit=0.96[a]"
+            )
+        else:
+            for ci in cam_audio_inputs:
+                filters.append(f"[{ci}:a]aformat=sample_rates=44100:channel_layouts=stereo[ca{ci}]")
+            mix_in = "".join(f"[ca{ci}]" for ci in cam_audio_inputs)
+            filters.append(
+                f"{mix_in}amix=inputs={len(cam_audio_inputs)}:normalize=0,"
+                "volume=1.35,alimiter=limit=0.96[a]"
+            )
         self.encode(out, inputs, ";".join(filters), duration, video_label=video_label)
         return out
 
