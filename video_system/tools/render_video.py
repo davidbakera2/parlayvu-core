@@ -21,6 +21,17 @@ STILL_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".ti
 FONT_BOLD = Path(r"C:\Windows\Fonts\arialbd.ttf")
 FONT_REG = Path(r"C:\Windows\Fonts\arial.ttf")
 
+# Best-effort "podcast voice" cleanup applied per-mic when the `voice_cleanup`
+# setting is on: cut sub-80Hz rumble, FFT denoise, level/compress, a touch of
+# presence EQ. NOT a substitute for Riverside Magic Audio (ML enhancement) —
+# turn it OFF (voice_cleanup=false) when the source already has Magic Audio.
+VOICE_CLEANUP = (
+    "highpass=f=80,"
+    "afftdn=nr=12:nf=-25,"
+    "acompressor=threshold=-18dB:ratio=3:attack=5:release=120:makeup=2,"
+    "equalizer=f=3200:t=q:w=2:g=2"
+)
+
 
 def sx(value: int | float) -> int:
     return round(value * W / BASE_W)
@@ -685,14 +696,15 @@ class Renderer:
         # (a 2cam/3cam dialogue needs everyone's audio, not just one box).
         if not cam_audio_inputs:
             cam_audio_inputs = [host_input]
+        cleanup = ("," + VOICE_CLEANUP) if self.setting_bool("voice_cleanup", False) else ""
         if len(cam_audio_inputs) == 1:
             filters.append(
-                f"[{cam_audio_inputs[0]}:a]aformat=sample_rates=44100:channel_layouts=stereo,"
+                f"[{cam_audio_inputs[0]}:a]aformat=sample_rates=44100:channel_layouts=stereo{cleanup},"
                 "volume=1.35,alimiter=limit=0.96[a]"
             )
         else:
             for ci in cam_audio_inputs:
-                filters.append(f"[{ci}:a]aformat=sample_rates=44100:channel_layouts=stereo[ca{ci}]")
+                filters.append(f"[{ci}:a]aformat=sample_rates=44100:channel_layouts=stereo{cleanup}[ca{ci}]")
             mix_in = "".join(f"[ca{ci}]" for ci in cam_audio_inputs)
             filters.append(
                 f"{mix_in}amix=inputs={len(cam_audio_inputs)}:normalize=0,"

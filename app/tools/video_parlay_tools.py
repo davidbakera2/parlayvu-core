@@ -784,6 +784,9 @@ def _assemble_video_plan(
         # Background plays behind multi-box layouts (2cam/3cam) only — the renderer
         # never applies it to intro / show_image / 1cam.
         {"setting": "background_video", "value": background_file},
+        # Best-effort FFmpeg voice cleanup per mic. Turn OFF when the source audio
+        # is already enhanced (Riverside Magic Audio) to avoid double-processing.
+        {"setting": "voice_cleanup", "value": "true"},
     ]
 
     # Music bed over the intro + opening show image + a few seconds into the show,
