@@ -123,6 +123,25 @@ class AssembleVideoPlanTests(unittest.TestCase):
         self.assertIn("music", keys)
 
 
+class ClassifyAssetsTests(unittest.TestCase):
+    """B-roll must be visual only — audio + background + branding excluded."""
+
+    def test_excludes_audio_and_branding_from_broll(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "Ep"
+            (proj / "assets").mkdir(parents=True)
+            for name in ("host.mp4", "guest_01.mp4", "intro.mp4", "show_image.png",
+                         "music.mp3", "music.wav", "background.mp4",
+                         "ciri1.JPG", "duct1.jpg", "clip.mp4", "notes.txt"):
+                (proj / "assets" / name).write_bytes(b"x")
+            a = v._classify_assets(proj)
+        self.assertEqual(a["cameras"], ["guest_01.mp4", "host.mp4"])
+        # audio, background, branding, and non-visual files are NOT b-roll
+        self.assertEqual(sorted(a["broll"]), ["ciri1.JPG", "clip.mp4", "duct1.jpg"])
+        for bad in ("music.mp3", "music.wav", "background.mp4", "intro.mp4", "notes.txt"):
+            self.assertNotIn(bad, a["broll"])
+
+
 class GenerateVideoPlanTests(unittest.TestCase):
     def setUp(self):
         engine = create_engine("sqlite:///:memory:")

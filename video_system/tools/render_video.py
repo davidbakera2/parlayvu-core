@@ -529,8 +529,13 @@ class Renderer:
         overlay = self.make_overlay(overlay_name, template_name, top_text, topic)
         host = self.asset_path(scene.get("host_source") or "host.mp4")
         guest = self.asset_path(scene.get("guest_01_source") or "guest_01.mp4")
-        background = self.asset_path(self.setting_text("background_video", ""))
-        has_background = background.exists()
+        # Only use a background layer when one is explicitly configured. An empty
+        # setting must NOT fall through to asset_path("") — that resolves to the
+        # assets directory, which .exists() reports True and ffmpeg then chokes on
+        # (a directory is not a valid input).
+        bg_name = self.setting_text("background_video", "")
+        background = self.asset_path(bg_name) if bg_name else None
+        has_background = bool(bg_name) and background is not None and background.is_file()
         if has_background:
             inputs.extend(["-stream_loop", "-1", "-t", f"{duration:.3f}", "-i", background])
             inputs.extend(["-loop", "1", "-t", f"{duration:.3f}", "-i", overlay])
@@ -909,17 +914,22 @@ class Renderer:
                 duration = parse_time(scene.get("duration"))
                 if duration <= 0:
                     continue
-                if layout == "intro":
-                    self.timeline_anchors["intro_start"] = parse_time(scene.get("start"))
-                    paths.append(self.render_intro(idx, scene))
-                elif layout == "show_image":
-                    paths.append(self.render_show_image(idx, scene))
-                elif layout == "outro":
-                    self.timeline_anchors["outro_start"] = parse_time(scene.get("start"))
-                    paths.append(self.render_show_image(idx, scene, outro=True))
-                elif layout in program_layouts:
-                    paths.append(self.render_program(idx, scene))
-                else:
+                try:
+                    if layout == "intro":
+                        self.timeline_anchors["intro_start"] = parse_time(scene.get("start"))
+                        paths.append(self.render_intro(idx, scene))
+                    elif layout == "show_image":
+                        paths.append(self.render_show_image(idx, scene))
+                    elif layout == "outro":
+                        self.timeline_anchors["outro_start"] = parse_time(scene.get("start"))
+                        paths.append(self.render_show_image(idx, scene, outro=True))
+                    elif layout in program_layouts:
+                        paths.append(self.render_program(idx, scene))
+                    else:
+                        continue
+                except Exception as exc:
+                    print(f"WARNING: skipping scene {scene.get('scene_id')} "
+                          f"({layout}) — render failed: {exc}", flush=True)
                     continue
                 final_time += duration
                 idx += 1
@@ -955,7 +965,13 @@ class Renderer:
 
         self.timeline_anchors["interview_start"] = final_time
         for scene in scenes:
-            paths.append(self.render_program(idx, scene))
+            try:
+                segment = self.render_program(idx, scene)
+            except Exception as exc:
+                print(f"WARNING: skipping scene {scene.get('scene_id')} "
+                      f"({scene.get('layout')}) — render failed: {exc}", flush=True)
+                continue
+            paths.append(segment)
             final_time += parse_time(scene.get("duration"))
             idx += 1
 

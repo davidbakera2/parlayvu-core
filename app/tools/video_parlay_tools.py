@@ -67,9 +67,17 @@ _BRANDING_KEYS = {
     "show_image_lower_third.png": "show_image_lower_third",
     "logo_square.png": "logo_square",
     "music.wav": "music",
+    "music.mp3": "music",
+    "background.mp4": "background",  # full-frame background layer, not foreground b-roll
 }
 _VALID_LAYOUTS = {"1cam", "2cam", "2cam_broll", "3cam", "3cam_broll"}
 _LAYOUT_ROLE_COUNT = {"1cam": 1, "2cam": 2, "2cam_broll": 2, "3cam": 3, "3cam_broll": 3}
+# B-roll must be VISUAL — a video or image. Audio files (music.wav/.mp3) are never
+# b-roll; feeding one to a *_broll layout makes ffmpeg fail ([N:v] matches no streams).
+_BROLL_EXT = {
+    ".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v",
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff",
+}
 
 
 def _repo_rel(p: Path) -> str:
@@ -520,7 +528,12 @@ def _classify_assets(project_dir: Path) -> dict[str, Any]:
     present = sorted(p.name for p in assets_dir.glob("*") if p.is_file()) if assets_dir.exists() else []
     cameras = [n for n in present if n in _ROLE_FILES.values()]
     branding = {name: key for name, key in _BRANDING_KEYS.items() if name in present}
-    broll = [n for n in present if n not in _ROLE_FILES.values() and n not in _BRANDING_KEYS]
+    broll = [
+        n for n in present
+        if Path(n).suffix.lower() in _BROLL_EXT
+        and n not in _ROLE_FILES.values()
+        and n not in _BRANDING_KEYS
+    ]
     return {"present": present, "cameras": cameras, "branding": branding, "broll": broll}
 
 
