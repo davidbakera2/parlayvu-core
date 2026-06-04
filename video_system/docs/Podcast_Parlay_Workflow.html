@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Podcast Parlay Workflow — Current</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+        
+        :root {
+            --primary: #0f172a;
+        }
+        
+        body {
+            font-family: 'Inter', system_ui, sans-serif;
+        }
+        
+        .heading-font {
+            font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif;
+            font-weight: 600;
+        }
+
+        .mermaid {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .section {
+            scroll-margin-top: 80px;
+        }
+
+        .workflow-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .workflow-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+
+        .phase-header {
+            background: linear-gradient(90deg, #0f172a, #1e2937);
+            color: white;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        pre {
+            background: #0f172a;
+            color: #e0f2fe;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.8rem;
+        }
+
+        .nav-link {
+            transition: color 0.1s ease;
+        }
+        
+        .nav-link:hover {
+            color: #0ea5e9;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+    <!-- Header -->
+    <div class="bg-slate-900 text-white border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-6 py-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="flex items-center gap-x-3">
+                        <div class="w-10 h-10 bg-sky-500 rounded-2xl flex items-center justify-center">
+                            <span class="text-white font-bold text-2xl">P</span>
+                        </div>
+                        <div>
+                            <h1 class="text-3xl font-semibold tracking-tight heading-font">Podcast Parlay</h1>
+                            <p class="text-slate-400 text-sm">Current Workflow • June 2026</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-x-3 text-sm">
+                    <div class="px-4 py-1.5 bg-slate-800 rounded-3xl flex items-center gap-x-2">
+                        <div class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                        <span class="text-emerald-400 font-medium">Live Spec</span>
+                    </div>
+                    <a href="PODCAST_PARLAY_FULL_WORKFLOW.md" 
+                       class="px-4 py-2 bg-slate-800 hover:bg-slate-700 transition-colors rounded-3xl text-sm font-medium flex items-center gap-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        <span>Edit .md Source</span>
+                    </a>
+                    <a href="Parlays_Dashboard.html" class="px-4 py-2 bg-white text-slate-900 border border-slate-300 hover:bg-slate-100 transition-colors rounded-3xl text-sm font-medium">← View All Parlays Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-6 pt-8 pb-16">
+        
+        <!-- Status Banner -->
+        <div class="mb-8 bg-white border border-slate-200 rounded-3xl p-4 flex items-center gap-4 shadow-sm">
+            <div class="flex-1">
+                <div class="flex items-center gap-x-2">
+                    <span class="font-semibold text-lg">Current Status</span>
+                    <span class="inline-flex items-center px-3 py-1 rounded-3xl text-xs font-medium bg-amber-100 text-amber-700">v1 — Updated for Captions-First Order</span>
+                </div>
+                <p class="text-slate-600 text-sm mt-1">Captions approval is now the explicit gate <strong>before</strong> final video production approval.</p>
+                <p class="text-xs text-emerald-700 mt-1">Mermaid diagram fixed for v10.9.6+ (escaped breaks, dedent, modern run API, error display with source if still fails).</p>
+            </div>
+            <div class="text-right text-xs text-slate-500">
+                Source: <code class="bg-slate-100 px-1.5 py-0.5 rounded">video_system/docs/PODCAST_PARLAY_FULL_WORKFLOW.md</code>
+            </div>
+        </div>
+
+        <!-- Mermaid Diagram -->
+        <div class="mb-10">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-2xl font-semibold heading-font">High-Level Flow</h2>
+                <div class="text-xs px-3 py-1 bg-slate-100 text-slate-600 rounded-2xl flex items-center gap-x-1.5">
+                    <span>Click nodes to highlight • Drag to pan</span>
+                </div>
+            </div>
+            
+            <div class="bg-white border border-slate-200 shadow-sm rounded-3xl p-6 overflow-auto">
+                <div class="mermaid" id="workflow-mermaid">
+flowchart TD
+    subgraph ingestion ["Ingestion"]
+        A[Riverside Recording\nhost.mp4 + guest_01.mp4 + guest_02.mp4\n+ enhanced audio + timestamped transcript] --> B[Identify + export b-roll assets\nHuman drops into project/assets/]
+    end
+
+    subgraph planning ["Planning"]
+        B --> C[Nathan + Alex: Load project context, transcript, brief\nDetermine intro section, overall structure, music placement\nPropose b-roll timing + lower thirds + layouts]
+        C --> D[Update or generate planning/video_plan.json + .xlsx\nRun tools/new_project.py + validate + spreadsheet_to_json]
+        D --> E[tools/resolve/build_timeline.py or manual in Resolve\nIncorporate music, branding, intro/outro]
+    end
+
+    subgraph video_assembly_draft ["Video Assembly Draft"]
+        E --> F[Render proxy/draft video in Resolve (visuals, cuts, b-roll, lower thirds, music, intro/outro)\nOutput: renders/video_draft_v01.mp4 (temp or no final captions)]
+        F --> G[Host preview (local path, temp upload, or YouTube unlisted draft)\nRecord in project memory]
+    end
+
+    subgraph captions_approval ["Captions Approval (Gate before final video production)"]
+        G --> H[Generate / refine captions\nResolve captions track or make_template_subtitles.py + ASS/SRT from approved transcript/plan]
+        H --> I[New captioned preview or captions file review + request_approval action_type=video_captions\nPost Teams Adaptive Card with preview/captions link + Approve/Reject/Request Changes]
+        I --> J{Client / Human Decision in Teams?}
+        J -->|Approved| K[Captions approved. Proceed to final video production with approved captions]
+        J -->|changes_requested + feedback notes| L[Nathan reads decision_notes + prior plan + transcript\nDispatches Alex or calls edit tools: adjust caption text/timing/style, re-generate captions]
+        L --> H
+    end
+
+    subgraph final_video_production ["Final Video Production + Approval"]
+        K --> M[Incorporate approved captions into final Resolve timeline\nFinal color, audio polish, music integration, end card if applicable\nRender final long-form: renders/longform_final_v01.mp4]
+        M --> N[Host final preview + request_approval action_type=video_production\nPost Teams Adaptive Card with final preview link + Approve/Reject/Request Changes]
+        N --> O{Client / Human Decision in Teams?}
+        O -->|Approved| P[Video production approved. Proceed to YouTube upload]
+        O -->|changes_requested + feedback notes| Q[Nathan reads decision_notes + approved captions + plan\nDispatches Alex or calls edit tools: final tweaks in Resolve using approved captions as base]
+        Q --> M
+    end
+
+    subgraph publish_long_form ["Publish Long-Form"]
+        P --> R[Generate series-fitting thumbnail (template + episode specifics)\nCraft description from meeting notes + brief\nAdd appropriate end card]
+        R --> S[Upload to YouTube via tool (stub today: yt CLI or API)\nSet unlisted, series metadata, playlist if applicable]
+        S --> T[Record PublishedOutput + AgentEvent. Notify client]
+    end
+
+    subgraph clips ["Clips Phase 5-10 Shorts"]
+        T --> U[Nathan + Alex: Scan transcript/plan for 5-10 high-value moments\nHook + key insight + CTA or brand moment]
+        U --> V[Create clip sub-timelines or exports in Resolve\nApply captions per clip, consistent branding]
+        V --> W[Render clip previews (individual + optional grid)\nPackage in renders/clips/ or temp hosted links]
+        W --> X[request_approval action_type=clip_package\nTeams card(s) with links + Approve entire set / Request changes on specific clips]
+        X --> Y{Client decision?}
+        Y -->|Approved| Z[Per-clip: description, thumbnail variant, upload to YT, add to designated playlist]
+        Y -->|iterate specific clips| V
+    end
+
+    Z --> AA[Mark episode complete in project memory + video project README\nCapture learnings for next Parlay upgrade]
+
+    style A fill:#e1f5fe
+    style I fill:#fff3e0,stroke:#ff9800
+    style N fill:#fff3e0,stroke:#ff9800
+    style X fill:#fff3e0,stroke:#ff9800
+    style L fill:#f3e5f5
+    style Q fill:#f3e5f5
+    style S fill:#e8f5e9
+    style Z fill:#e8f5e9
+                </div>
+            </div>
+            <p class="text-center text-xs text-slate-500 mt-3">This diagram is interactive. Zoom and pan supported in modern browsers.</p>
+        </div>
+
+        <!-- Legend -->
+        <div class="mb-10 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                <div class="legend-item">
+                    <div class="w-3 h-3 rounded bg-amber-400"></div>
+                    <span class="font-medium text-sm">Orange = Human approval gates</span>
+                </div>
+                <p class="text-xs text-slate-500 mt-1 ml-5">Via ParlayVU Teams cards + approvals system</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                <div class="legend-item">
+                    <div class="w-3 h-3 rounded bg-violet-400"></div>
+                    <span class="font-medium text-sm">Purple = Iteration / revision loops</span>
+                </div>
+                <p class="text-xs text-slate-500 mt-1 ml-5">Feedback notes drive re-work</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                <div class="legend-item">
+                    <div class="w-3 h-3 rounded bg-emerald-400"></div>
+                    <span class="font-medium text-sm">Green = Publish steps</span>
+                </div>
+                <p class="text-xs text-slate-500 mt-1 ml-5">Side-effecting, always gated</p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                <span class="font-medium text-sm">Nathan + Alex coordinate</span>
+                <p class="text-xs text-slate-500 mt-1">Nathan = orchestrator • Alex = visuals lead</p>
+            </div>
+        </div>
+
+        <!-- Key Change Notice -->
+        <div class="mb-8 bg-sky-50 border border-sky-200 rounded-3xl p-5">
+            <div class="flex gap-4">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-sky-500 text-white rounded-2xl flex items-center justify-center text-sm font-bold">!</div>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-sky-900">Recent Change: Captions Before Video Production</h3>
+                    <p class="text-sky-700 text-sm mt-1">Captions approval (<strong>video_captions</strong>) is now the explicit gate <strong>before</strong> final video production approval (<strong>video_production</strong>). This prevents re-work on the polished final video.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Phases -->
+        <div class="space-y-8">
+            <h2 class="text-2xl font-semibold heading-font">Detailed Phases</h2>
+
+            <!-- Phase 0 -->
+            <div class="workflow-card bg-white border border-slate-200 rounded-3xl p-6">
+                <div class="flex items-center gap-x-3 mb-3">
+                    <div class="px-3 py-1 bg-slate-900 text-white text-xs font-semibold tracking-wider rounded-2xl">PHASE 0</div>
+                    <h3 class="font-semibold text-xl">Setup (Human + Nathan)</h3>
+                </div>
+                <ul class="space-y-2 text-sm text-slate-700 pl-1">
+                    <li class="flex gap-2">• Complete interview in Riverside → export raw tracks + transcript</li>
+                    <li class="flex gap-2">• Run <code class="bg-slate-100 px-1.5 py-px rounded text-xs">new_project.py</code> to scaffold episode folder</li>
+                    <li class="flex gap-2">• Drop assets (host/guest/b-roll + branding + music)</li>
+                    <li class="flex gap-2">• Tell Nathan: "Start Podcast Parlay for [episode]"</li>
+                </ul>
+            </div>
+
+            <!-- Phase 1 -->
+            <div class="workflow-card bg-white border border-slate-200 rounded-3xl p-6">
+                <div class="flex items-center gap-x-3 mb-3">
+                    <div class="px-3 py-1 bg-slate-900 text-white text-xs font-semibold tracking-wider rounded-2xl">PHASE 1</div>
+                    <h3 class="font-semibold text-xl">Planning &amp; First Draft Assembly</h3>
+                </div>
+                <div class="text-sm text-slate-700">
+                    Nathan + Alex propose intro, scene cuts, layouts, lower thirds, b-roll placement, and music. 
+                    Update <code>video_plan.json</code> → run Resolve timeline builder or manual assembly in DaVinci Resolve.
+                </div>
+            </div>
+
+            <!-- Phase 2: Captions Gate (Highlighted as important) -->
+            <div class="workflow-card bg-white border-2 border-amber-300 rounded-3xl p-6 shadow-sm">
+                <div class="flex items-center gap-x-3 mb-3">
+                    <div class="px-3 py-1 bg-amber-500 text-white text-xs font-semibold tracking-wider rounded-2xl">PHASE 2 — KEY GATE</div>
+                    <h3 class="font-semibold text-xl">Video Assembly Draft + <span class="text-amber-600">Captions Approval</span></h3>
+                </div>
+                <p class="text-sm text-slate-700 mb-4"><strong>Captions must be approved before final video production.</strong></p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <div class="font-medium mb-1 text-amber-700">1. Assembly Draft</div>
+                        <div>Render visuals-focused draft (no or temp captions).</div>
+                    </div>
+                    <div>
+                        <div class="font-medium mb-1 text-amber-700">2. Captions Generation</div>
+                        <div>Use Resolve or <code>make_template_subtitles.py</code> + AI/Alex polish.</div>
+                    </div>
+                    <div class="md:col-span-2">
+                        <div class="font-medium mb-1 text-amber-700">3. Captions Approval (via Teams)</div>
+                        <div class="text-amber-700">→ <code>request_video_approval(stage="video_captions")</code> — client approves text, timing, and style first.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase 3 -->
+            <div class="workflow-card bg-white border border-slate-200 rounded-3xl p-6">
+                <div class="flex items-center gap-x-3 mb-3">
+                    <div class="px-3 py-1 bg-slate-900 text-white text-xs font-semibold tracking-wider rounded-2xl">PHASE 3</div>
+                    <h3 class="font-semibold text-xl">Final Video Production + Approval</h3>
+                </div>
+                <p class="text-sm text-slate-700">Once captions are approved, incorporate them into the final Resolve timeline + polish. Then request <strong>video_production</strong> approval.</p>
+                <div class="mt-3 text-xs bg-slate-100 px-3 py-2 rounded-2xl inline-block">action_type = <span class="font-mono font-semibold">video_production</span></div>
+            </div>
+
+            <!-- Phase 4-6 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="workflow-card bg-white border border-slate-200 rounded-3xl p-5">
+                    <div class="text-emerald-600 text-xs font-semibold tracking-wider mb-1">PHASE 4</div>
+                    <h4 class="font-semibold">Long-Form YouTube Publish</h4>
+                    <p class="text-xs text-slate-600 mt-2">Thumbnail, description, end card → unlisted upload after production approval.</p>
+                </div>
+                <div class="workflow-card bg-white border border-slate-200 rounded-3xl p-5">
+                    <div class="text-emerald-600 text-xs font-semibold tracking-wider mb-1">PHASE 5</div>
+                    <h4 class="font-semibold">Clips (5-10 Shorts)</h4>
+                    <p class="text-xs text-slate-600 mt-2">Select moments → generate captioned clips → approval card for the package.</p>
+                </div>
+                <div class="workflow-card bg-white border border-slate-200 rounded-3xl p-5">
+                    <div class="text-emerald-600 text-xs font-semibold tracking-wider mb-1">PHASE 6</div>
+                    <h4 class="font-semibold">Clips Publish + Close</h4>
+                    <p class="text-xs text-slate-600 mt-2">Upload each clip + add to playlist. Update project memory.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-12 pt-8 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center">
+            <div>
+                Generated from <code>video_system/docs/PODCAST_PARLAY_FULL_WORKFLOW.md</code><br>
+                Last major update: Captions-before-production order
+            </div>
+            <div class="text-right">
+                <a href="#" onclick="window.location.reload()" class="hover:text-slate-700">Refresh</a> • 
+                <a href="PODCAST_PARLAY_FULL_WORKFLOW.md" class="hover:text-slate-700">View raw Markdown</a>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Initialize Tailwind
+        function initTailwind() {
+            document.documentElement.style.setProperty('--accent', '#0ea5e9');
+        }
+        
+        // Initialize Mermaid
+        function initMermaid() {
+            // Use modern Mermaid v10+ API. startOnLoad is off to control manually.
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: 'base',
+                themeVariables: {
+                    primaryColor: '#0f172a',
+                    primaryTextColor: '#fff',
+                    primaryBorderColor: '#334155',
+                    lineColor: '#64748b',
+                    secondaryColor: '#f1f5f9',
+                    tertiaryColor: '#e0f2fe'
+                },
+                flowchart: {
+                    curve: 'basis',
+                    useMaxWidth: true
+                }
+            });
+            
+            // Render all .mermaid divs
+            function renderMermaid() {
+                const mermaidDivs = document.querySelectorAll('.mermaid');
+                if (mermaidDivs.length > 0) {
+                    mermaidDivs.forEach(div => {
+                        // Dedent to remove any HTML source indentation (common cause of "Syntax error in text")
+                        let src = div.textContent || '';
+                        const lines = src.split('\n');
+                        if (lines.length > 1) {
+                            const indents = lines.slice(1)
+                                .filter(l => l.trim().length > 0)
+                                .map(l => (l.match(/^(\s*)/) || ['',''])[1].length);
+                            const minIndent = indents.length > 0 ? Math.min(...indents) : 0;
+                            src = lines.map((l, i) => i === 0 ? l : l.slice(minIndent)).join('\n').trim();
+                            div.textContent = src;
+                        }
+                    });
+                    mermaid.run({
+                        querySelector: '.mermaid',
+                        suppressErrors: true
+                    }).catch(err => {
+                        console.error('Mermaid render error:', err);
+                        // Show helpful message and the source for debugging "Syntax error in text"
+                        mermaidDivs.forEach(div => {
+                            const pre = document.createElement('pre');
+                            pre.style.color = 'red';
+                            pre.style.fontSize = '12px';
+                            pre.textContent = 'Mermaid parse error (v' + (window.mermaid ? '10+' : '?') + '): ' + (err.message || err) + '\n\nDiagram source for debug:\n' + (div.textContent || '');
+                            if (div.parentNode) div.parentNode.replaceChild(pre, div);
+                        });
+                    });
+                }
+            }
+            
+            renderMermaid();
+            
+            // Re-render on window resize for better responsiveness
+            let resizeTimer;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => {
+                    const mermaidDivs = document.querySelectorAll('.mermaid');
+                    mermaidDivs.forEach(div => {
+                        div.removeAttribute('data-processed');
+                    });
+                    renderMermaid();
+                }, 300);
+            });
+        }
+        
+        // Keyboard shortcut hint
+        function addKeyboardHints() {
+            document.addEventListener('keydown', function(e) {
+                if (e.key === '/' && document.activeElement.tagName === 'BODY') {
+                    e.preventDefault();
+                    const mermaid = document.querySelector('.mermaid');
+                    if (mermaid) mermaid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            });
+            
+            // Add subtle hint
+            const hint = document.createElement('div');
+            hint.className = 'fixed bottom-4 right-4 text-[10px] text-slate-400 hidden md:block';
+            hint.innerHTML = 'Press <kbd class="font-mono bg-white border px-1 rounded">/</kbd> to jump to diagram';
+            document.body.appendChild(hint);
+        }
+        
+        // Boot everything
+        function init() {
+            initTailwind();
+            initMermaid();
+            addKeyboardHints();
+            
+            // Make sure Mermaid renders
+            setTimeout(() => {
+                console.log('%c[Parlay] Podcast Parlay workflow viewer initialized', 'color:#64748b');
+                if (window.mermaid) {
+                    console.log('Mermaid version:', mermaid.version || '10+ (check network tab for mermaid.min.js)');
+                }
+            }, 800);
+        }
+        
+        window.onload = init;
+    </script>
+</body>
+</html>

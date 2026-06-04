@@ -59,10 +59,19 @@ def find_tool(name: str) -> str:
     winget = (
         Path(r"C:\Users\DavidBaker\AppData\Local\Microsoft\WinGet\Packages")
         / r"Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe"
-        / "ffmpeg-8.1-full_build"
+        / "ffmpeg-8.1.1-full_build"
         / "bin"
         / f"{name}.exe"
     )
+    if not winget.exists():
+        # fallback to the 8.1 name too
+        winget = (
+            Path(r"C:\Users\DavidBaker\AppData\Local\Microsoft\WinGet\Packages")
+            / r"Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe"
+            / "ffmpeg-8.1-full_build"
+            / "bin"
+            / f"{name}.exe"
+        )
     if winget.exists():
         return str(winget)
     return name

@@ -70,12 +70,29 @@
       ]
     }
   ],
+  "staticTabs": [
+    {
+      "entityId": "parlays_dashboard",
+      "name": "Parlays Dashboard",
+      "contentUrl": "https://parlayvu-api.thankfulriver-96fed9c6.eastus.azurecontainerapps.io/parlays/dashboard",
+      "websiteUrl": "https://parlayvu-api.thankfulriver-96fed9c6.eastus.azurecontainerapps.io/parlays/dashboard",
+      "scopes": ["personal", "team"]
+    },
+    {
+      "entityId": "podcast_parlay_workflow",
+      "name": "Podcast Parlay Workflow",
+      "contentUrl": "https://parlayvu-api.thankfulriver-96fed9c6.eastus.azurecontainerapps.io/static/Podcast_Parlay_Workflow.html",
+      "websiteUrl": "https://parlayvu-api.thankfulriver-96fed9c6.eastus.azurecontainerapps.io/static/Podcast_Parlay_Workflow.html",
+      "scopes": ["personal", "team"]
+    }
+  ],
   "permissions": [
     "identity",
     "messageTeamMembers"
   ],
   "validDomains": [
     "parlayvu-api.thankfulriver-96fed9c6.eastus.azurecontainerapps.io",
-    "parlayvu.ai"
+    "parlayvu.ai",
+    "localhost"
   ]
 }

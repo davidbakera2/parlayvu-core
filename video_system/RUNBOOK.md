@@ -58,3 +58,5 @@ python .	ools\spreadsheet_to_json.py .\projects\ClientName\Show_Name_Ep01
 The next implementation step is to migrate the proven RamAir renderer into `toolsender_video.py` so it consumes `planningideo_plan.json`.
 
 Until then, this system is the planning, styling, validation, and subtitle foundation.
+
+**Full end-to-end process (including client approvals, iteration loops in Teams chat, captions round, YouTube unlisted + clips publishing):** See the living spec [docs/PODCAST_PARLAY_FULL_WORKFLOW.md](docs/PODCAST_PARLAY_FULL_WORKFLOW.md). It includes the exact Mermaid diagram, step-by-step with approval gates, how Nathan coordinates it, and how to evolve the workflow by editing this file + tools.

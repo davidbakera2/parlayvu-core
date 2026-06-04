@@ -436,6 +436,94 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
             "required": ["client_id", "change_description"],
         },
     },
+    # --- Podcast Parlay / Video Production tools (see PODCAST_PARLAY_FULL_WORKFLOW.md) ---
+    {
+        "name": "init_podcast_parlay_project",
+        "description": (
+            "Initialize a new Podcast Parlay video project folder for a client episode. "
+            "Use when the user says they just finished a Riverside interview and want to "
+            "start the video production process (long-form + clips). Creates the standard "
+            "projects/<Client>/<Show_EpXX> structure, copies the starter plan, etc. "
+            "After calling, tell the user to drop host/guest/b-roll assets into the assets/ folder."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_id": {
+                    "type": "string",
+                    "description": "Active client_id, e.g. 'ramair'.",
+                },
+                "episode_slug": {
+                    "type": "string",
+                    "description": "Episode identifier, e.g. 'Straight_From_The_Hart_Ep06' or 'Show_Ep01'.",
+                },
+                "show_name": {
+                    "type": "string",
+                    "description": "Optional human show name for the folder.",
+                },
+                "raw_assets_note": {
+                    "type": "string",
+                    "description": "Optional note about where the raw files came from (Riverside, b-roll sources, etc.).",
+                },
+            },
+            "required": ["client_id", "episode_slug"],
+        },
+    },
+    {
+        "name": "generate_video_draft",
+        "description": (
+            "Generate (or prepare) the next video draft for a Podcast Parlay stage. "
+            "Stages: 'longform_draft' (first picture lock), 'longform_captioned' (after captions round). "
+            "Returns a preview path/URL. In the current phase this scaffolds and marks a placeholder; "
+            "later it will drive Resolve renders. Call this, then immediately call request_video_approval "
+            "so the client gets a review card in Teams."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_id": {"type": "string", "description": "Active client_id, e.g. 'ramair'."},
+                "episode_slug": {"type": "string", "description": "Episode slug matching the project folder."},
+                "stage": {
+                    "type": "string",
+                    "description": "One of: longform_draft, longform_captioned (more stages in the workflow doc).",
+                },
+                "notes": {"type": "string", "description": "Optional context or instructions for this draft."},
+            },
+            "required": ["client_id", "episode_slug"],
+        },
+    },
+    {
+        "name": "request_video_approval",
+        "description": (
+            "Create a formal ParlayVU approval request for a video production stage (long-form draft, "
+            "captioned version, clip package, etc.). This uses the same approvals system as website "
+            "deploys, so it creates the DB record, can trigger Teams Adaptive Cards with preview links, "
+            "supports 'changes_requested' + notes for iteration, and is fully audited. "
+            "After the client approves via card or chat, you can proceed to the next stage in the "
+            "PODCAST_PARLAY_FULL_WORKFLOW.md. Always provide a usable preview_url or path."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_id": {"type": "string", "description": "Active client_id."},
+                "episode_slug": {"type": "string", "description": "Episode identifier."},
+                "stage": {
+                    "type": "string",
+                    "description": "Stage name, e.g. 'longform_draft', 'longform_captioned', 'clip_package'.",
+                },
+                "preview_url": {
+                    "type": "string",
+                    "description": "Link the client can click to watch the draft (YouTube unlisted, temp hosted, etc.).",
+                },
+                "preview_path": {
+                    "type": "string",
+                    "description": "Local or relative path to the render if no URL yet.",
+                },
+                "summary": {"type": "string", "description": "Short human summary for the approval card."},
+            },
+            "required": ["client_id", "episode_slug", "stage"],
+        },
+    },
 ]
 
 # ── System prompt assembly (split by surface) ─────────────────────────────────
@@ -493,8 +581,8 @@ USE TOOLS PROACTIVELY:
 - When a file, report, or document is mentioned ("the Q3 report", "the brand guide", "what did the contract say") → call list_client_files (with `folder` if you can guess where it lives, e.g. 'Reports' for a quarterly report), then read_client_file with the exact path. Answer from the actual file contents, never guess.
 - When a meeting is wrapping up, OR when someone says "send the notes", "save what we discussed", "file this", "wrap it up" → build a STRUCTURED meeting record: title, summary (2-4 paragraphs), attendees, decisions, action_items (with owner + due_date), questions, next_steps, source_material. If anything is ambiguous — especially action item owners ("someone will do X") or due dates ("soon" / "next week" without a specific date) — ASK FOR CLARIFICATION before calling save_meeting_notes. Action items missing an owner or due date should be flagged as "TBD" rather than guessed. Do NOT call save_meeting_notes silently.
 - When someone asks Dylan to produce homepage drafts ("5 sample home pages", "show us a few design directions for [client].[domain]", "give us some homepage ideas") → call dylan_generate_variations with the channel-bound client_id and the count they named (default 5 if unclear). When the tool returns, share the preview URL in your reply and tell them you'll line up an approval card so they can pick the variant to ship. The user is in the client's Teams channel so the binding tells you the client_id — do NOT use a mentioned domain to override it, but DO pass it as target_domain.
-- When someone asks for a SPECIFIC change to the live site ("change the headline to X", "swap the hero image", "fix the typo on the About page", "add a staff bio for Y") → call dylan_edit_active_site with the channel-bound client_id and a clear change_description. When the tool returns, share the preview URL and tell them an approval card is coming so they can ship the change.
-- When someone wants to add a proper section (e.g. "add our team", "insert a 3-column features section", "add a testimonials grid") → strongly prefer `compose_section_edit` over `dylan_edit_active_site`. Pass the approved `section_name` and structured `section_data`. This is the preferred tool for any structural or section-based work. Only fall back to the older edit tool for tiny text or image tweaks on existing content.
+- When someone asks for a SPECIFIC change to the live site ("change the headline to X", "swap the hero image", "fix the typo on the About page", "add a staff bio for Y", "update the photo of the building to the new one at /images/xxx.jpg") → call dylan_edit_active_site with the channel-bound client_id and a clear change_description. Small image/photo updates are now handled with a deterministic direct patch (no LLM rewrite risk) so they cannot break the page. For anything bigger or structural, the tool uses safe snippet replacements + validation + repair. When the tool returns, share the preview URL and tell them an approval card is coming.
+- When someone wants to add a proper section (e.g. "add our team", "insert a 3-column features section", "add a testimonials grid") → strongly prefer `compose_section_edit` over `dylan_edit_active_site`. Pass the approved `section_name` and structured `section_data`. This is the preferred (and more reliable) tool for adding or replacing whole sections. Only use the free-form edit tool for tiny text or image tweaks.
 
 WEBSITE DESIGN SYSTEM & EDITING RULES (v1):
 You are helping clients maintain and improve their marketing websites through natural conversation. You do NOT design from scratch in most cases. Instead, you guide clients toward using our approved, reusable Design System so their sites stay consistent, high-quality, and easy to maintain.
@@ -516,6 +604,27 @@ DECISION FRAMEWORK:
 - Does this require something genuinely new? → Propose creating a new approved section (requires internal approval).
 - Always confirm that a preview will be created for review before anything goes live.
 
+PODCAST PARLAY & VIDEO PRODUCTION WORKFLOW (Long-form interviews + clips):
+You are the persistent orchestrator for turning raw Riverside interviews (host + 1-2 guests) + client-identified b-roll into polished, branded long-form video + 5-10 short clips. This is a core repeatable "Parlay" (see the living executable spec).
+
+**Primary reference (load and follow exactly when a client mentions an interview, episode, "Straight From The Hart", podcast video, clips, or "the video we just recorded"):** `video_system/docs/PODCAST_PARLAY_FULL_WORKFLOW.md`. It contains the full step-by-step, the Mermaid diagram of the entire flow (ingest → planning → video assembly draft → captions generation + approval gate → final video production with approved captions + approval → YouTube unlisted with description/thumbnail/end-card → clip generation + separate approval → per-clip upload + playlist), roles (you + Alex for visuals, Resolve for execution), and exactly where the approval gates and revision loops live.
+
+Key principles (consistent with the spec):
+- Assets and plan live in `video_system/projects/<Client>/<Show_EpXX>/` (or mirrored in client_artifacts for memory). Use file tools + project context to inspect `planning/video_plan.json`, assets/, renders/, PROJECT_README.md.
+- You do NOT do the heavy editing yourself. You coordinate: run scaffolding (`new_project`), trigger planning/draft generation, call Resolve tools (once wired), produce previews, and — most importantly — gate everything client-facing with the approvals system.
+- Video assembly draft → preview → captions generation → request_approval (action_type "video_captions") for captions review/approval first. Only after captions are approved do we do final video production (bake in approved captions + polish) → request_approval (action_type "video_production"). Same pattern for clip package.
+- Iteration is the heart of the process: "changes_requested" + decision_notes come back from the client in Teams. You read the notes + current plan + transcript + previously approved captions (where relevant), then either patch the plan/captions (via tool), dispatch Alex ("Alex, revise the captions per this feedback" or "apply these final production tweaks"), or give precise instructions for Resolve. Re-render, new preview, updated or new approval card. Repeat until approved. All of this is fully auditable.
+- Captions approval is now the explicit early gate for the main video: approve captions (text, timing, style) before approving the final video production. This prevents re-work on the polished final.
+- After video production approval (final with approved captions): prepare description (from notes + brief), series thumbnail, end card, then publish tool (YouTube unlisted).
+- Then clips phase: identify 5-10 moments (using approved captions as base where relevant), generate captioned shorts, package previews, one approval card (or set), iterate per clip if needed, then batch upload + add to playlist.
+- Always narrate progress ("I'm kicking off the first video assembly draft render now — give me a minute while the tools run. Captions approval will come next."). Confirm preview will be available for review before any publish.
+- For visuals decisions (cuts, layouts, text, b-roll placement, thumbnail treatment, captions presentation) lean on Alex as the specialist. You stay the client-facing single point of contact and the one who files the approvals and memory.
+- The workflow doc itself is designed to be upgraded after every real episode. When a client or you learn something ("we keep forgetting the end card on the first long-form upload"), propose an edit to the doc + any supporting tool/prompt. That is how we make the Parlay smarter without rebuilding graphs.
+
+You have (or will have) direct tools for key actuation points: init video project, run planning/draft, request video approval (which creates the DB record and triggers the Teams card), apply feedback edits to plan, prepare/publish YouTube assets, generate clips package. For anything not yet wired as a direct tool, say clearly "I'll have the video tools / Alex handle the render and post the approval card for you to review" and then do the coordination.
+
+Always tie video work back to the correct client_id / project (e.g. "ramair-straight-from-the-hart-ep06") so approvals, memory, and files go to the right place.
+
 COMMUNICATION STYLE:
 - Be helpful and proactive, but clear about process.
 - When proposing a change, briefly name the component/section you'll use.
@@ -527,7 +636,7 @@ CRITICAL ANTI-HALLUCINATION RULES:
 3. NEVER deny being an AI if someone sincerely asks.
 4. When uncertain, use a tool to find out, then answer with what you found.
 5. If a tool fails or returns no result, say so honestly rather than making something up.
-6. Your write access is currently LIMITED to these tools: save_meeting_notes, dylan_generate_variations, dylan_edit_active_site. For everything else — sending emails, posting to social, scheduling meetings, modifying code, generating ad creative, adjusting paid spend — you cannot do it yourself yet. Route those by name to the right specialist: "I'll have Ava draft that email", "I'll have Riley publish that", "I'll have Codey wire up the integration", "I'll have Morgan adjust the ad spend". For the things you CAN do — meeting notes, homepage variations, homepage edits — actually call the tool when asked. It's honest to say "Filing those notes now" / "Dylan's spinning up 5 drafts now — give me about a minute" → then call the tool. Don't say you've done something you haven't actually done, and don't say you can't do something you actually can.
+6. Your write access is currently LIMITED to these tools: save_meeting_notes, dylan_generate_variations, dylan_edit_active_site, init_podcast_parlay_project, generate_video_draft, request_video_approval (and the high-level video helpers). For everything else — sending emails, posting to social, scheduling meetings, modifying code, generating ad creative, adjusting paid spend — you cannot do it yourself yet. Route those by name to the right specialist: "I'll have Ava draft that email", "I'll have Riley publish that", "I'll have Codey wire up the integration", "I'll have Morgan adjust the ad spend". For the things you CAN do — meeting notes, homepage variations/edits, kicking off Podcast Parlay video projects, generating drafts, and requesting captions or video production approvals — actually call the tool when asked. It's honest to say "Filing those notes now" / "Dylan's spinning up 5 drafts now" / "Kicking off the video assembly draft for Ep06, then we'll do captions approval — preview coming shortly" → then call the tool. Don't say you've done something you haven't actually done, and don't say you can't do something you actually can.
 
 STYLE:
 - Warm, confident, executive tone — not robotic, not over-formal
@@ -710,6 +819,35 @@ async def _execute_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
                 result["approval_id"] = approval["id"]
             except Exception:
                 logger.exception("Failed to create edit approval for %s", client_id)
+        elif tool_name == "init_podcast_parlay_project":
+            from app.tools.video_parlay_tools import init_podcast_parlay_project
+
+            result = await init_podcast_parlay_project(
+                client_id=tool_input["client_id"],
+                episode_slug=tool_input["episode_slug"],
+                show_name=tool_input.get("show_name"),
+                raw_assets_note=tool_input.get("raw_assets_note"),
+            )
+        elif tool_name == "generate_video_draft":
+            from app.tools.video_parlay_tools import generate_video_draft
+
+            result = await generate_video_draft(
+                client_id=tool_input["client_id"],
+                episode_slug=tool_input["episode_slug"],
+                stage=tool_input.get("stage", "longform_draft"),
+                notes=tool_input.get("notes"),
+            )
+        elif tool_name == "request_video_approval":
+            from app.tools.video_parlay_tools import request_video_approval
+
+            result = await request_video_approval(
+                client_id=tool_input["client_id"],
+                episode_slug=tool_input["episode_slug"],
+                stage=tool_input["stage"],
+                preview_url=tool_input.get("preview_url"),
+                preview_path=tool_input.get("preview_path"),
+                summary=tool_input.get("summary"),
+            )
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
 
@@ -807,6 +945,13 @@ def _openai_messages_to_anthropic(
     client_prefs = _build_client_preferences_context(client_id)
     if client_prefs:
         system_parts.append(client_prefs)
+    # Workflow packages (like viktor.com "different packages of workflows"): inject active ones' prompts + spec refs.
+    # This makes Nathan follow the living package specs (e.g. Podcast Parlay MD) when activated for the client.
+    from app.workflow_packages import inject_package_context
+    base_for_packages = "\n\n".join(system_parts)  # temp to feed injector (will be reassembled)
+    packages_block = inject_package_context(client_id, "")
+    if packages_block:
+        system_parts.append(packages_block)
     system_parts.append(NATHAN_BASE_SYSTEM)
     system_parts.append(_build_surface_rules(surface))
 

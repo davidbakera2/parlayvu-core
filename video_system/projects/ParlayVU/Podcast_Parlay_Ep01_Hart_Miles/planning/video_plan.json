@@ -1,0 +1,231 @@
+{
+  "project": "Podcast_Parlay_Ep01_Hart_Miles",
+  "scenes": [
+    {
+      "enabled": true,
+      "scene_id": "S001",
+      "start": "00:00:00.000",
+      "end": "00:00:08.000",
+      "duration": "00:00:08.000",
+      "layout": "intro",
+      "primary_camera": "",
+      "host_source": "intro.mp4",
+      "guest_01_source": "",
+      "guest_02_source": "",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "",
+      "bottom_row_text": "",
+      "notes": "Intro animation / music sting"
+    },
+    {
+      "enabled": true,
+      "scene_id": "S002",
+      "start": "00:00:08.000",
+      "end": "00:00:15.000",
+      "duration": "00:00:07.000",
+      "layout": "show_image",
+      "primary_camera": "",
+      "host_source": "",
+      "guest_01_source": "",
+      "guest_02_source": "",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "",
+      "bottom_row_text": "",
+      "notes": "Show image reveal"
+    },
+    {
+      "enabled": true,
+      "scene_id": "S003",
+      "start": "00:00:15.000",
+      "end": "00:02:00.000",
+      "duration": "00:01:45.000",
+      "layout": "1cam",
+      "primary_camera": "host",
+      "host_source": "host.mp4",
+      "guest_01_source": "",
+      "guest_02_source": "",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "DAVID HART",
+      "bottom_row_text": "CEO, RAMAIR INTERNATIONAL",
+      "notes": "Host welcome and intro to topic"
+    },
+    {
+      "enabled": true,
+      "scene_id": "S004",
+      "start": "00:02:00.000",
+      "end": "00:06:30.000",
+      "duration": "00:04:30.000",
+      "layout": "2cam",
+      "primary_camera": "",
+      "host_source": "host.mp4",
+      "guest_01_source": "guest_01.mp4",
+      "guest_02_source": "",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "JOHN MILES",
+      "bottom_row_text": "GUEST 01 - INTRO",
+      "notes": "Initial dialogue"
+    },
+    {
+      "enabled": true,
+      "scene_id": "S005",
+      "start": "00:06:30.000",
+      "end": "00:10:00.000",
+      "duration": "00:03:30.000",
+      "layout": "2cam_broll",
+      "primary_camera": "",
+      "host_source": "host.mp4",
+      "guest_01_source": "guest_01.mp4",
+      "guest_02_source": "",
+      "broll_id": "broll_01",
+      "broll_file": "",
+      "broll_source_start": "00:00:10.000",
+      "top_row_text": "DAVID HART",
+      "bottom_row_text": "DISCUSSION + BROLL",
+      "notes": "B-roll over key point"
+    },
+    {
+      "enabled": true,
+      "scene_id": "S006",
+      "start": "00:10:00.000",
+      "end": "00:15:00.000",
+      "duration": "00:05:00.000",
+      "layout": "2cam",
+      "primary_camera": "",
+      "host_source": "host.mp4",
+      "guest_01_source": "guest_01.mp4",
+      "guest_02_source": "guest_02.mp4",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "GUEST 02",
+      "bottom_row_text": "ADDITIONAL PERSPECTIVE",
+      "notes": "Include guest_02"
+    },
+    {
+      "enabled": true,
+      "scene_id": "S007",
+      "start": "00:15:00.000",
+      "end": "00:18:00.000",
+      "duration": "00:03:00.000",
+      "layout": "1cam",
+      "primary_camera": "host",
+      "host_source": "host.mp4",
+      "guest_01_source": "",
+      "guest_02_source": "",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "DAVID HART",
+      "bottom_row_text": "CLOSING THOUGHTS",
+      "notes": "Host wrap"
+    },
+    {
+      "enabled": true,
+      "scene_id": "S008",
+      "start": "00:18:00.000",
+      "end": "00:18:45.000",
+      "duration": "00:00:45.000",
+      "layout": "outro",
+      "primary_camera": "",
+      "host_source": "outro.mp4",
+      "guest_01_source": "",
+      "guest_02_source": "",
+      "broll_id": "",
+      "broll_file": "",
+      "broll_source_start": "",
+      "top_row_text": "",
+      "bottom_row_text": "",
+      "notes": "Outro with end card"
+    }
+  ],
+  "graphics": [
+    {
+      "enabled": true,
+      "graphic_id": "G001",
+      "type": "name_card",
+      "start": "00:01:30.000",
+      "end": "00:01:40.000",
+      "text_line_1": "David Hart",
+      "text_line_2": "CEO, RamAir International",
+      "position": "",
+      "style": "",
+      "linked_scene_id": "S004",
+      "notes": ""
+    },
+    {
+      "enabled": true,
+      "graphic_id": "G002",
+      "type": "name_card",
+      "start": "00:05:00.000",
+      "end": "00:05:10.000",
+      "text_line_1": "John Miles",
+      "text_line_2": "Guest Title",
+      "position": "",
+      "style": "",
+      "linked_scene_id": "S005",
+      "notes": ""
+    },
+    {
+      "enabled": true,
+      "graphic_id": "G003",
+      "type": "broll_card",
+      "start": "00:05:30.000",
+      "end": "00:05:40.000",
+      "text_line_1": "Key Topic",
+      "text_line_2": "In Action",
+      "position": "",
+      "style": "",
+      "linked_scene_id": "S005",
+      "notes": ""
+    }
+  ],
+  "broll": [
+    {
+      "broll_id": "broll_01",
+      "file_name": "broll_01.mp4",
+      "description": "Relevant b-roll for discussion",
+      "default_source_start": "00:00:00.000",
+      "notes": "User to identify and add actual b-roll files"
+    }
+  ],
+  "assets": [
+    {
+      "asset_key": "show_image",
+      "file_name": "show_image.png",
+      "purpose": "Main show image / outro"
+    },
+    {
+      "asset_key": "show_image_lower_third",
+      "file_name": "show_image_lower_third.png",
+      "purpose": "Left lower-third image"
+    },
+    {
+      "asset_key": "logo_square",
+      "file_name": "logo_square.png",
+      "purpose": "Right lower-third logo"
+    },
+    {
+      "asset_key": "intro",
+      "file_name": "intro.mp4",
+      "purpose": "Opening animation"
+    },
+    {
+      "asset_key": "music",
+      "file_name": "music.wav",
+      "purpose": "Background / bed music"
+    }
+  ],
+  "settings": {
+    "background_video": "",
+    "timeline_mode": "full_rendered",
+    "interview_start": "00:01:30.000"
+  }
+}

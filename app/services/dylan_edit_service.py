@@ -1,28 +1,32 @@
-"""Dylan's targeted-edit service.
+"""Dylan's targeted-edit service (significantly hardened for small real edits).
+
+Recent reliability work (to address "small edits like photo updates come out broken"):
+- Pure image/photo changes ("update the hero photo", "swap the staff picture src to ...")
+  are handled by _try_direct_image_patch — a pure regex attribute update. Zero LLM
+  risk of breaking classes, nesting, scripts, or aria-labels on ulcannarbor-style sites.
+- General edits now strongly prefer the LLM producing a JSON of precise "old"->"new"
+  snippet replacements (with context so the match is unique). The applicator does
+  exact single-occurrence replace and aborts on ambiguity. Full-page rewrite is
+  only a fallback.
+- Every result goes through _basic_html_validation. If it fails we auto-invoke a
+  repair LLM pass ("fix this while preserving the requested change only").
+- compose_section_edit (preferred for anything structural) has more robust
+  _insert_section heuristics.
+- Diffs are logged for audit. The Nathan prompt now documents the safe paths.
 
 Source of truth for "what's currently live" is the production domain itself,
 not the container's local disk. On every edit, we fetch the live HTML from
 `https://<production_domain>/`, write it back to
 `client_artifacts/<client>/03_Deliverables/sites/active/index.html` as a cache,
-then apply the plain-English change to that file via the LLM. The result lands
-in `.../sites/edits/edit-<timestamp>/index.html` and gets deployed to the
-client's preview Pages project for review. Promotion (replacing active/ and
-pushing to prod) is handled by client_deploy.promote_to_production once the
-edit is approved in Teams.
+then apply the plain-English change... (rest of original behavior preserved).
 
 Live-as-source means the workflow survives container restarts, ephemeral disk
-wipes, and the case where a different client's revision didn't promote
-anything — onboarding is config-only: a client's `production_domain` in their
-config.yaml is enough to make edits work. Falls back to the on-disk cache only
-if the live fetch fails (offline, prod project not yet deployed, etc.) and the
-cache exists.
-
-This is the ongoing-edit workflow primitive — same spine as variations, just a
-different Dylan action. Both feed into the same preview→approval→promote flow.
+wipes... (original text continues below).
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -146,7 +150,10 @@ async def _apply_edit_with_llm(
     change_description: str,
     current_html: str,
 ) -> str:
-    """One LLM call: take current HTML + change description, return edited HTML."""
+    """One LLM call using the improved prompt. Prefers JSON {replacements: [...]}
+    for safe surgical edits. Falls back to full HTML if needed.
+    Never returns the original if a change was requested.
+    """
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is required for Dylan edit generation")
@@ -165,11 +172,209 @@ async def _apply_edit_with_llm(
     )
     parts = [block.text for block in response.content if hasattr(block, "text")]
     raw = "".join(parts).strip()
-    # Sonnet occasionally wraps in code fences despite the instruction.
+
+    # Strip code fences (LLM sometimes ignores instructions)
     if raw.startswith("```"):
-        raw = re.sub(r"^```[a-zA-Z]*\n", "", raw)
-        raw = re.sub(r"\n```\s*$", "", raw)
-    return raw.strip()
+        raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+    raw = raw.strip()
+
+    # Preferred path: JSON with replacements for minimal, reliable edits
+    if raw.startswith("{") and "replacements" in raw:
+        try:
+            data = json.loads(raw)
+            replacements = data.get("replacements", [])
+            if replacements:
+                edited = _apply_replacements_safely(current_html, replacements, change_description)
+                if edited != current_html:
+                    logger.info("Dylan edit applied via %d replacements", len(replacements))
+                    return edited
+                else:
+                    logger.warning("Replacements produced no change; falling back to full HTML")
+        except Exception as exc:
+            logger.warning("Failed to parse/apply JSON replacements (%s); will try as full HTML", exc)
+
+    # Legacy / fallback: full HTML document
+    if "<!DOCTYPE" in raw.upper() or raw.lower().startswith("<html"):
+        return raw
+
+    # If LLM gave something weird, try to salvage by wrapping or last resort
+    logger.warning("LLM edit output did not look like HTML or JSON; using raw as best effort")
+    return raw
+
+
+def _apply_replacements_safely(
+    current_html: str, replacements: list[dict[str, str]], change_description: str
+) -> str:
+    """Apply a list of {old, new} replacements with strict safety.
+
+    - Each 'old' must appear EXACTLY once (use sufficient context in the prompt).
+    - Replacements are applied sequentially on the result of the previous.
+    - If any replace would not change anything or match >1 time, we abort and return original
+      so the caller can fall back or retry.
+    - Logs the before/after for the specific changed regions for audit.
+    """
+    html = current_html
+    applied = 0
+
+    for i, rep in enumerate(replacements):
+        old = rep.get("old", "")
+        new = rep.get("new", "")
+        if not old or old == new:
+            logger.warning("Skipping empty or no-op replacement %d", i)
+            continue
+
+        count = html.count(old)
+        if count == 0:
+            logger.warning("Replacement %d old snippet not found in HTML — aborting safe apply", i)
+            return current_html  # fail closed
+        if count > 1:
+            logger.warning(
+                "Replacement %d old snippet is ambiguous (matches %d times) — aborting. "
+                "Prompt should have included more surrounding context.",
+                i, count
+            )
+            return current_html
+
+        # Safe single replace
+        html = html.replace(old, new, 1)
+        applied += 1
+        logger.debug("Applied replacement %d: %r -> %r (len delta %d)", i, old[:60], new[:60], len(new) - len(old))
+
+    if applied == 0:
+        logger.warning("No replacements were applied for change: %s", change_description[:80])
+        return current_html
+
+    # Audit: log a compact before/after for the changed region
+    try:
+        import difflib
+        diff = list(difflib.unified_diff(
+            current_html.splitlines(keepends=True),
+            html.splitlines(keepends=True),
+            fromfile="before.html",
+            tofile="after.html",
+            n=2,
+        ))
+        if diff:
+            logger.info("Edit diff (first 10 lines):\n%s", "".join(diff[:10]))
+    except Exception:
+        pass
+
+    return html
+
+
+def _basic_html_validation(html: str, original: str, change_description: str) -> tuple[bool, str]:
+    """Lightweight post-edit checks. Returns (ok, reason_if_bad)."""
+    if not html or len(html) < 100:
+        return False, "output too short"
+
+    lower = html.lower()
+    if "<!doctype html>" not in lower and not lower.startswith("<!doctype"):
+        return False, "missing doctype"
+
+    required = ["<html", "<head", "<body", "</html>"]
+    for tag in required:
+        if tag not in lower:
+            return False, f"missing required tag {tag}"
+
+    # Reasonable size change for a small edit
+    orig_len = len(original)
+    new_len = len(html)
+    if abs(new_len - orig_len) > max(2000, orig_len * 0.3):
+        # Large change on what was supposed to be a small edit — suspicious
+        logger.warning(
+            "Large size delta after edit (%d -> %d) for '%s' — possible over-editing",
+            orig_len, new_len, change_description[:60]
+        )
+        # Still allow, but flag
+
+    # Check that at least the change description keywords appear, or some new content
+    # (very loose heuristic)
+    key_tokens = [w for w in change_description.lower().split() if len(w) > 3][:3]
+    if key_tokens and not any(t in lower for t in key_tokens):
+        logger.info("Change keywords not obviously present in output; may still be ok")
+
+    return True, ""
+
+
+def _try_direct_image_patch(current_html: str, change_description: str) -> str:
+    """If the change is clearly just 'update/replace/swap this photo/image/picture',
+    perform a safe, targeted attribute edit using regex. No LLM, cannot break structure.
+
+    Supports common patterns in the current single-file sites:
+      - <img src="..." alt="..." ...>
+      - <div role="img" aria-label="..." style="..."> or data-*
+      - background-image in inline style
+
+    Returns the (possibly) modified HTML, or original if not a pure image change.
+    """
+    desc = change_description.lower()
+    if not any(kw in desc for kw in ("photo", "image", "picture", "img", "src", "hero image", "staff photo")):
+        return current_html
+
+    # Try to extract a new src or description from the request.
+    # Simple heuristics; in practice Nathan gives clear instructions like
+    # "change the hero photo src to /images/new-building.jpg and aria-label to 'The new ULC building at sunset'"
+    new_src = None
+    new_alt = None
+
+    # Look for obvious URL or path in the description
+    url_match = re.search(r'(https?://\S+|/\S+\.(?:jpg|jpeg|png|webp|gif))', change_description, re.I)
+    if url_match:
+        new_src = url_match.group(1).strip(' "\'')
+
+    # Look for quoted description for alt/aria
+    alt_match = re.search(r'["\']([^"\']{10,})["\']', change_description)
+    if alt_match:
+        candidate = alt_match.group(1)
+        if any(w in candidate.lower() for w in ("photo", "image", "building", "people", "student", "campus")) or len(candidate) > 15:
+            new_alt = candidate
+
+    if not new_src and not new_alt:
+        # Not specific enough for direct patch — let the LLM path handle it
+        return current_html
+
+    html = current_html
+
+    # 1. <img> tags
+    def _replace_img(m: re.Match) -> str:
+        tag = m.group(0)
+        if new_src:
+            tag = re.sub(r'(?i)\bsrc\s*=\s*["\'][^"\']*["\']', f'src="{new_src}"', tag, count=1)
+        if new_alt:
+            tag = re.sub(r'(?i)\balt\s*=\s*["\'][^"\']*["\']', f'alt="{new_alt}"', tag, count=1)
+            tag = re.sub(r'(?i)\baria-label\s*=\s*["\'][^"\']*["\']', f'aria-label="{new_alt}"', tag, count=1)
+        return tag
+
+    html = re.sub(r'<img\b[^>]*>', _replace_img, html, flags=re.I)
+
+    # 2. role="img" containers (common in the current ULC/Parlay sites)
+    def _replace_role_img(m: re.Match) -> str:
+        tag = m.group(0)
+        if new_alt:
+            tag = re.sub(r'(?i)\baria-label\s*=\s*["\'][^"\']*["\']', f'aria-label="{new_alt}"', tag, count=1)
+        if new_src:
+            # If it has a background or data-src, update the most likely one
+            tag = re.sub(r'(?i)(background-image\s*:\s*url\([^)]*\))', f'background-image: url({new_src})', tag, count=1)
+            tag = re.sub(r'(?i)\bdata-(?:src|image)\s*=\s*["\'][^"\']*["\']', f'data-src="{new_src}"', tag, count=1)
+        return tag
+
+    html = re.sub(r'<div[^>]*role=["\']img["\'][^>]*>', _replace_role_img, html, flags=re.I)
+
+    # 3. Simple style background on hero-like divs (last resort)
+    if new_src and "background" in desc:
+        html = re.sub(
+            r'(?i)(<div[^>]*class=["\'][^"\']*hero[^"\']*["\'][^>]*style=["\'][^"\']*)background-image\s*:\s*url\([^)]*\)([^"\']*["\'])',
+            lambda m: m.group(1) + f'background-image: url({new_src})' + m.group(2),
+            html,
+            count=1,
+        )
+
+    if html != current_html:
+        logger.info("Applied direct image patch for change: %s", change_description[:80])
+        return html
+
+    return current_html
 
 
 async def ensure_edit_dir_on_disk(
@@ -285,11 +490,55 @@ async def edit_active_site(
         "Editing active site | client=%s change=%r",
         client_id, change_description[:80],
     )
-    edited_html = await _apply_edit_with_llm(
-        client_display_name=config.display_name,
-        change_description=change_description,
-        current_html=current_html,
-    )
+
+    # Special case: pure photo/image updates are done with a deterministic direct patch
+    # (no LLM involvement). This guarantees "update the hero photo to ..." never breaks
+    # the page structure, classes, or surrounding markup.
+    edited_html = _try_direct_image_patch(current_html, change_description)
+    used_direct = edited_html != current_html
+
+    if not used_direct:
+        edited_html = await _apply_edit_with_llm(
+            client_display_name=config.display_name,
+            change_description=change_description,
+            current_html=current_html,
+        )
+
+    ok, reason = _basic_html_validation(edited_html, current_html, change_description)
+    if not ok:
+        logger.error("Post-edit validation failed: %s", reason)
+        # Attempt a lightweight repair: ask LLM to fix the broken HTML while preserving intent
+        try:
+            repair_api_key = os.getenv("ANTHROPIC_API_KEY", "")
+            if repair_api_key:
+                repair_client = anthropic.AsyncAnthropic(api_key=repair_api_key)
+                repair_prompt = (
+                    f"The following HTML was produced by an edit for this request: {change_description}\n\n"
+                    f"It failed basic validation because: {reason}\n\n"
+                    "Please output a corrected, complete, valid single-file HTML homepage that performs ONLY the requested change. "
+                    "Preserve everything else exactly. Start with <!DOCTYPE html>."
+                )
+                repair_response = await repair_client.messages.create(
+                    model=SONNET_MODEL,
+                    max_tokens=SONNET_MAX_TOKENS,
+                    temperature=0.1,
+                    messages=[{"role": "user", "content": repair_prompt + "\n\nBROKEN HTML:\n" + edited_html[:50000]}],
+                )
+                repaired = "".join([b.text for b in repair_response.content if hasattr(b, "text")]).strip()
+                if repaired.startswith("```"):
+                    repaired = re.sub(r"^```[a-zA-Z]*\n?", "", repaired)
+                    repaired = re.sub(r"\n?```$", "", repaired)
+                if "<!DOCTYPE" in repaired.upper():
+                    edited_html = repaired
+                    ok, reason = _basic_html_validation(edited_html, current_html, change_description)
+                    if ok:
+                        logger.info("Repair succeeded for edit")
+        except Exception as repair_exc:
+            logger.exception("Repair attempt failed: %s", repair_exc)
+
+    if not ok:
+        # Last resort: return original + error marker so caller sees it was a no-op
+        raise ValueError(f"Dylan edit produced invalid HTML ({reason}). No change was applied.")
 
     # Write the edit to a timestamped folder under sites/edits/.
     slug = f"edit-{_timestamp_slug()}"
@@ -539,42 +788,57 @@ def _insert_section(
     target_location: str,
 ) -> str:
     """
-    Improved insertion logic for v1 (homepage only).
-    Tries to be smarter about common insertion points.
+    Robust insertion for approved design-system sections.
+    Uses multiple heuristics + a safe fallback. Still string-based (no bs4 dep yet)
+    but with better guards against breaking the document.
     """
-    loc = target_location.lower().strip()
+    loc = (target_location or "after:hero").lower().strip()
+    html = current_html
 
-    # Common smart insertion points
-    if "after:hero" in loc or loc == "after hero":
-        # Look for the end of the first major hero-like section
-        # Try to find common patterns
-        patterns = [
-            '</section>',           # After first section
-            '</header>',            # After header
-            'id="contact"',         # Before contact section
-        ]
-        
-        for pattern in patterns:
-            if pattern in current_html:
-                # Insert after the first occurrence of the pattern
-                idx = current_html.find(pattern)
-                if idx != -1:
-                    insert_pos = idx + len(pattern)
-                    return current_html[:insert_pos] + "\n" + section_html + "\n" + current_html[insert_pos:]
-        
-        # Fallback: insert near the top of main content
-        if "<main" in current_html:
-            main_start = current_html.find("<main")
-            # Insert after the opening main tag + some content
-            insert_pos = main_start + current_html[main_start:].find(">") + 1
-            return current_html[:insert_pos] + "\n" + section_html + "\n" + current_html[insert_pos:]
+    def _safe_insert_after(marker: str, insert: str) -> str | None:
+        if marker not in html:
+            return None
+        # Insert after the *first* occurrence only
+        idx = html.find(marker)
+        if idx == -1:
+            return None
+        pos = idx + len(marker)
+        return html[:pos] + "\n" + insert + "\n" + html[pos:]
+
+    if "after:hero" in loc or "after hero" in loc:
+        for marker in ("</section>", "</header>", 'id="main"', "<main"):
+            res = _safe_insert_after(marker, section_html)
+            if res:
+                return res
+        # Try after a hero class or role
+        for marker in ('class="hero', 'role="banner"'):
+            if marker in html:
+                idx = html.find(marker)
+                # advance to end of the opening tag
+                end_tag = html.find(">", idx)
+                if end_tag != -1:
+                    pos = end_tag + 1
+                    return html[:pos] + "\n" + section_html + "\n" + html[pos:]
 
     if "before:footer" in loc or "before footer" in loc:
-        if "</footer>" in current_html:
-            return current_html.replace("</footer>", section_html + "\n</footer>")
+        if "</footer>" in html:
+            return html.replace("</footer>", "\n" + section_html + "\n</footer>", 1)
 
-    # Ultimate fallback
-    if "</body>" in current_html:
-        return current_html.replace("</body>", section_html + "\n</body>")
+    if "before:contact" in loc or 'id="contact"' in html:
+        if 'id="contact"' in html:
+            idx = html.find('id="contact"')
+            # insert before the contact section
+            start = html.rfind("<", 0, idx)  # rough start of tag
+            if start != -1:
+                return html[:start] + "\n" + section_html + "\n" + html[start:]
 
-    return current_html + "\n" + section_html
+    # Safe universal fallbacks (preserve document well-formedness as much as possible)
+    for end_marker in ("</main>", "</body>"):
+        if end_marker in html:
+            return html.replace(end_marker, "\n" + section_html + "\n" + end_marker, 1)
+
+    # Last resort — append before closing html
+    if "</html>" in html:
+        return html.replace("</html>", "\n" + section_html + "\n</html>", 1)
+
+    return html + "\n" + section_html

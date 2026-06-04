@@ -19,6 +19,7 @@ matches this schema:
       pronunciation: { ... }
       tone: "..."
       authorized_contacts: [ ... ]
+    active_workflows: [ "podcast-parlay", "meeting-notes", ... ]  # optional list of workflow package ids (see workflow-packages-design.md and app/workflow_packages/)
 
 The Cloudflare Pages naming convention (<client_id>-previews for staging,
 <client_id> for production) means a new client gets correct deploy bindings
@@ -87,6 +88,7 @@ class ClientConfig:
     teams: TeamsConfig
     preferences: ClientPreferences
     cloudflare: Optional[CloudflareConfig] = None
+    active_workflows: list[str] = field(default_factory=list)  # e.g. ["podcast-parlay", "meeting-notes"] — enables "packages of workflows" like viktor.com
 
     @property
     def artifacts_dir(self) -> Path:
@@ -209,12 +211,18 @@ def load_client_config(client_id: str) -> ClientConfig:
         authorized_contacts=authorized_contacts,
     )
 
+    active_workflows_raw = raw.get("active_workflows") or []
+    if not isinstance(active_workflows_raw, list):
+        raise ClientConfigError(f"{path}: active_workflows must be a list (or omit for [])")
+    active_workflows = [str(w).strip() for w in active_workflows_raw if str(w).strip()]
+
     return ClientConfig(
         client_id=client_id,
         display_name=display_name,
         teams=teams,
         preferences=preferences,
         cloudflare=cloudflare,
+        active_workflows=active_workflows,
     )
 
 

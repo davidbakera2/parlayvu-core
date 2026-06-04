@@ -5,6 +5,8 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from starlette.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Any, Optional
 from uuid import uuid4
@@ -29,6 +31,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files from video_system/docs so the generated dashboards and workflow viewers
+# are available at https://.../static/Parlays_Dashboard.html etc.
+# This is required for MS Teams tabs (which need https web content, not local file paths).
+app.mount("/static", StaticFiles(directory="video_system/docs"), name="static")
 
 # ========================= MODELS =========================
 class NathanRequest(BaseModel):
@@ -525,6 +532,60 @@ async def memory_clients_endpoint():
     except Exception as e:
         logger.error(f"Error in /memory/clients: {e}")
         raise _memory_error(e)
+
+
+@app.get("/parlays/dashboard", response_class=HTMLResponse)
+async def parlays_dashboard():
+    """Live project/parlays dashboard (HTML).
+
+    This now serves the rich generated dashboard (same as the static file)
+    but dynamically, so it's always up-to-date when the API is running.
+    Perfect for embedding as an MS Teams tab (use the https URL via ngrok in dev,
+    or the deployed Container App URL in prod).
+
+    The static version (for double-click/offline) is still at
+    video_system/docs/Parlays_Dashboard.html — regenerate with the script if needed.
+    """
+    try:
+        # Import the generator logic
+        import sys
+        from pathlib import Path
+        repo_root = Path(__file__).resolve().parents[1]  # app/ -> root
+        if str(repo_root) not in sys.path:
+            sys.path.insert(0, str(repo_root))
+
+        from tools.generate_parlays_dashboard import (
+            scan_clients,
+            scan_video_parlays,
+            collect_pending_approvals,
+            build_dashboard_html,
+        )
+
+        clients = scan_clients()
+        parlays = scan_video_parlays()
+        try:
+            pending = collect_pending_approvals()
+        except Exception:
+            pending = []
+
+        # Enrich like the generator does (simplified here for live serving)
+        # For full fidelity, the generator's main() does the status enrichment.
+        # We call build with web_mode=True so links point to /static/...
+        html = build_dashboard_html(clients, parlays, pending, web_mode=True)
+        return html
+
+    except Exception as exc:
+        logger.exception("Failed to build rich parlays dashboard")
+        # Fallback to a simple message
+        return f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>ParlayVU • Parlays Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-slate-50 p-8">
+<h1 class="text-3xl font-semibold">ParlayVU Parlays Dashboard</h1>
+<p class="text-red-600">Error building dashboard: {exc}</p>
+<p>Try the static file: <a href="/static/Parlays_Dashboard.html">/static/Parlays_Dashboard.html</a></p>
+<p>Or run <code>python tools/generate_parlays_dashboard.py</code> and open the HTML directly.</p>
+</body></html>"""
 
 
 @app.post("/clients/{client_id}/ingest-files")

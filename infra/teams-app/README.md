@@ -74,3 +74,61 @@ The placeholder icons are a dark slate "P". Replace `color.png` (192×192)
 and `outline.png` (32×32, white-on-transparent) with real ParlayVU
 branding when you have artwork — re-run the build script (it will not
 overwrite existing icons), then re-upload via the update flow above.
+
+## Adding / Developing Dashboards as Teams Tabs
+
+The manifest now includes `staticTabs` for:
+
+- "Parlays Dashboard" → `/parlays/dashboard` (rich, dynamic view of clients, episodes, stages, approvals — uses the parlay_state machine)
+- "Podcast Parlay Workflow" → the detailed Mermaid viewer for the current Podcast Parlay spec
+
+**Why the local HTML path was causing errors:**
+
+Teams tabs are embedded web views that **require a public https URL**. A raw local path like `C:\...\Podcast_Parlay_Workflow.html` or even `file://...` will not load (security + Teams doesn't have access to your local FS in the tab context). That's the error you were seeing.
+
+**For local development (ngrok required):**
+
+1. Start the API:
+   ```powershell
+   python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+2. Expose it with ngrok (https):
+   ```powershell
+   ngrok http 8000
+   ```
+   Copy the https forwarding URL, e.g. `https://abc123.ngrok.io`
+
+3. Temporarily test the dashboard in browser: `https://abc123.ngrok.io/parlays/dashboard` and `https://abc123.ngrok.io/static/Podcast_Parlay_Workflow.html`
+
+4. Update the manifest (for testing):
+   - Edit `infra/teams-app/manifest.json`
+   - Change the `contentUrl` and `websiteUrl` in the two staticTabs to use your ngrok https URL.
+   - Bump `version` (e.g. 1.0.1 → 1.0.2)
+   - Rebuild: `python infra/teams-app/build_app_package.py`
+   - Re-upload the zip via Teams Admin Center (Update).
+
+5. Add the updated app (or update existing) in your team. The tabs should now appear alongside the bot.
+
+**For production:**
+
+- Deploy the Container App (it already serves the routes).
+- Update `contentUrl` / `websiteUrl` to the real prod URL (e.g. `https://parlayvu-api.../parlays/dashboard`).
+- Add the prod domain to `validDomains` in the manifest if not already there.
+- Rebuild + update the app package.
+
+**Future metrics dashboard:**
+
+We'll add e.g. `/parlays/metrics` (or a new tab) that pulls from project_memory, approvals, agent_events, generated_outputs, parlay iterations, etc. Same tab pattern. We can use the existing parlay_state + queries for nice charts (simple HTML/JS or embed Power BI if you have it in the tenant).
+
+**Rebuilding the package after manifest changes:**
+
+Always:
+```powershell
+python infra/teams-app/build_app_package.py
+```
+Then update in Teams Admin Center.
+
+Add `localhost` or your ngrok domain to `validDomains` during dev (as we did).
+
+This gives you a first-class dashboard *inside* MS Teams (as a tab in the ParlayVU app), while the bot (Nathan) handles the conversational side.

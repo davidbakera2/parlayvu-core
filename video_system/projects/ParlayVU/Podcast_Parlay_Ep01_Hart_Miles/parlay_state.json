@@ -1,0 +1,62 @@
+{
+  "_note": "READ-ONLY MIRROR of DB state (app/parlay_state.py is authoritative). Do not hand-edit.",
+  "project_id": "parlayvu-Podcast_Parlay_Ep01_Hart_Miles",
+  "stage": "longform_draft",
+  "stage_label": "Long-form draft \u2014 in review",
+  "pending_approval": {
+    "id": "2dcde3b4-9039-496d-9bc1-def6f36a0a48",
+    "project_id": "parlayvu-Podcast_Parlay_Ep01_Hart_Miles",
+    "generated_output_id": null,
+    "requested_by_agent": "dylan",
+    "approver": null,
+    "status": "pending",
+    "decision_notes": "Placeholder draft render from basic plan. Review and approve or request changes for iteration on lower thirds, broll, cuts, etc.",
+    "metadata": {
+      "action_type": "video_longform_draft",
+      "title": "Review initial draft for Hart/Miles interview",
+      "kind": "video_longform_draft",
+      "episode_slug": "Podcast_Parlay_Ep01_Hart_Miles",
+      "stage": "longform_draft",
+      "preview_url": "file://C:/Users/DavidBaker/Projects/parlayvu-core/video_system/projects/ParlayVU/Podcast_Parlay_Ep01_Hart_Miles/renders/longform_draft_v01.mp4"
+    },
+    "generated_output": null,
+    "created_at": "2026-06-03T00:12:54.274241+00:00",
+    "updated_at": "2026-06-03T00:12:54.274241+00:00"
+  },
+  "latest_preview": "file://local/renders/longform_draft_v01.mp4",
+  "iterations": [
+    {
+      "version": 1,
+      "stage": "longform_draft",
+      "preview_url": "file://local/renders/longform_draft_v01.mp4",
+      "preview_path": null,
+      "summary": "Initial draft assembly from plan - placeholder",
+      "status": "in_review",
+      "at": "2026-06-03T00:12:24.437861+00:00"
+    }
+  ],
+  "history": [
+    {
+      "to": "intake",
+      "by": "setup",
+      "note": "New episode for David Hart & John Miles interview",
+      "at": "2026-06-03T00:08:56.658614+00:00"
+    },
+    {
+      "to": "planning",
+      "by": "user",
+      "note": "Assets to be added; planning phase started for Hart/Miles interview",
+      "at": "2026-06-03T00:10:28.997920+00:00"
+    },
+    {
+      "to": "longform_draft",
+      "by": "setup",
+      "note": "Draft render placeholder created; ready for preview and approval request",
+      "at": "2026-06-03T00:12:24.794636+00:00"
+    }
+  ],
+  "renders_on_disk": [
+    "longform_draft_v01.mp4"
+  ],
+  "updated_at": "2026-06-03T00:12:24.794636+00:00"
+}

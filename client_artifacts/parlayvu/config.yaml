@@ -26,3 +26,12 @@ preferences:
   authorized_contacts:
     - "david@parlayvu.ai"
     - "david@bakerstrategy.com"
+
+# Workflow packages active for this (internal ParlayVU) client.
+# This is how "different packages of workflows" are activated, generalizing the
+# Podcast Parlay model to the full parlayvu.ai platform (like viktor.com's
+# capabilities for different work types).
+active_workflows:
+  - "podcast-parlay"
+  - "meeting-notes"
+  - "client-site"

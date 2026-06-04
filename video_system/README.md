@@ -86,3 +86,5 @@ This is being built **natively for Resolve** (no shoehorning of the old FFmpeg c
 The v1 FFmpeg renderer and all existing projects continue to work unchanged.
 
 See `tools/resolve/README.md` + `tools/resolve/SETUP.md` for the new integration code.
+
+**Full Podcast Parlay workflow (the complete client-facing process with approvals, iteration via Teams, long-form + clips, YouTube delivery):** Read and follow [docs/PODCAST_PARLAY_FULL_WORKFLOW.md](docs/PODCAST_PARLAY_FULL_WORKFLOW.md). This is the single editable source of truth with Mermaid visualization. Nathan and the team are wired to treat it as the operating manual. Edit it to upgrade the process.

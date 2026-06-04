@@ -254,3 +254,56 @@ For files Nathan *hasn't* pre-ingested (or when he needs the verbatim text), he 
 - `manifest.json` has comments... actually JSON doesn't allow comments. The README is the comment.
 
 **General principle:** When scaffolding a Teams app, generate a fresh independent GUID for `manifest.id` (`uuidgen` / `[guid]::NewGuid()`) and never reuse another identifier for it.
+
+---
+
+## 11. Workflow Packages for parlayvu.ai (modeled on viktor.com) — spec-driven, not LangGraph Studio / heavy graphs
+
+**Chosen:** "Different packages of workflows" are first-class, versioned, human-editable artifacts:
+- Living Markdown spec (Mermaid + phase tables + "how to develop/modify" section, exactly like `video_system/docs/PODCAST_PARLAY_FULL_WORKFLOW.md`).
+- Associated prompt additions, tool bindings, optional state/FSM, config schema, UI templates.
+- Activated per-client (via `client_artifacts/<id>/config.yaml` `active_workflows` or conversational "@Nathan activate the Podcast Parlay package").
+- Nathan (single brain) loads the active packages' specs/prompts/tools at runtime and orchestrates (with approvals, memory, specialists like Alex/Dylan).
+- Example packages: `podcast-parlay` (video prod), `meeting-notes`, `client-site` (Dylan/Astro deploys), future ad-audits, content-repurpose, etc.
+- Platform (parlayvu.ai) provides catalog, install/activate UI, per-package dashboards — like viktor.com's capabilities but verticalized for agency/marketing/video workflows + deep MS365/Teams + Resolve integration.
+
+**LangGraph / Studio policy:**
+- Use LangGraph *lightly and internally only*: thin router (`app/graph.py` Nathan → specialist), small sub-graphs for specialist coordination (e.g. `meeting_strategy.py`).
+- Never use LangGraph Studio (or authoring heavy graphs) as the surface for defining or "packaging" customer workflows.
+- Rationale (proven on the first package + explicit in PODCAST_PARLAY... and history):
+  - viktor.com itself: "No workflow builder. No graph editor. The workflow is the prompt." Conversational activation + execution is the product strength.
+  - Editability: Users edit MD in any editor, git diff, PR, A/B per client by branching the spec. "The workflow doc itself is designed to be upgraded after every real episode."
+  - Our primitives already solve the hard parts (approvals as durable gates/iteration, parlay_state FSM + disk mirrors, project memory, Teams cards, one Nathan brain parameterized by surface).
+  - Past experience: LangGraph Studio felt "riddled with errors" for small edits; hid state; not portable/version-friendly for non-dev package authors.
+  - Scaling packages: MD + Python + existing approvals is dramatically easier/faster to manage, test (chat with Nathan in internal channel), and upgrade than rebuilding orchestration on graphs + Studio + Cloud.
+- If a future package needs complex branching state, implement the *internal* logic as a small encapsulated LangGraph (exposed only via tools), while the package spec + user interface remains prompt/spec-driven.
+
+**Why this matches the viktor.com goal:**
+- Users describe or select a package ("run the Podcast Parlay for Ep05", "activate ad audit package").
+- It does the real work (tools, deploys, renders via Resolve fallback or API, files, approvals).
+- Proactive/scheduled/heartbeat possible via existing infra.
+- Team context via client_artifacts + memory.
+- "Packages" are the catalog of repeatable, high-value workflows (not one-off prompts).
+- parlayvu.ai becomes the "hire the AI + choose your packages" platform, with Nathan as the coworker.
+
+**Implementation sketch (see docs/workflow-packages-design.md and app/workflow_packages/registry.py for scaffold):**
+- `app/workflow_packages/registry.py` + per-package dirs (or DB-backed).
+- Nathan prompt construction injects active packages (load spec on demand via file tools for freshness).
+- Tool registration is conditional on active packages.
+- Config + UI for activation (extend existing client config + dashboards).
+- All packages go through the same approvals + memory + audit.
+
+**What we deliberately rejected:**
+- Rebuilding the orchestration layer on LangGraph graphs + Studio as the primary authoring tool for packages.
+- Treating each "package" as a deployable LangGraph that customers configure in a canvas.
+- Heavy dependence on LangGraph Platform/Cloud for execution (our FastAPI + direct LLM loops + custom state already work and are simpler to operate/audit).
+
+**When we'd revisit:**
+- A package's internal logic demonstrably benefits from visual graph debugging in Studio *and* the package authors are comfortable with it (rare for our target users).
+- LangGraph adds unique multi-tenant persistence/scaling/observability we can't achieve otherwise.
+- Customer demand for a no-code canvas for *their own* custom workflows (then offer it as an advanced/power-user feature, not the default for core packages).
+
+**Migration cost if we change mind:** High for the platform (would require re-expressing all specs as graphs, new UI, new deployment story). Low for internal sub-logic (we already use small graphs).
+
+**Cost to implement the chosen path:** Low incremental (registry + prompt injection + a couple more packages; the Podcast Parlay already proves the model works).
+

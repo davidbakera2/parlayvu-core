@@ -138,3 +138,5 @@ The goal is for the approved plan from the Agentic Planning layer to largely dri
 ---
 
 *This document will evolve as the Podcast Parlay is implemented and refined.*
+
+**Detailed executable workflow & management spec:** See [video_system/docs/PODCAST_PARLAY_FULL_WORKFLOW.md](../../video_system/docs/PODCAST_PARLAY_FULL_WORKFLOW.md). That is the living, version-controlled, Mermaid-visualized, Nathan-followable spec for the end-to-end process (ingest → planning → video assembly draft → captions approval gate → final video production with approved captions + approval → YouTube publish → clips 5-10 with their own approval loop → publish to playlist). Captions are now approved *before* the final video production. It is deliberately designed for easy human + agent editing and regular upgrades without opaque tooling.

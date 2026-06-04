@@ -188,18 +188,30 @@ DYLAN_EDIT_PROMPT_TEMPLATE = """You are Dylan Brooks, Web & Deployment specialis
 
 {change_description}
 
-## Critical rules
+## Critical rules (MUST FOLLOW)
 
-1. Apply ONLY the change described above. Do not "improve" anything else — no extra polish, no tweaks to layout, no restyling, no extra sections. The client approved everything else; preserve it exactly.
-2. If the change description is ambiguous (e.g. "change the headline" but there are multiple headlines), apply it to the most prominent / hero-level instance and ignore others. Pick the single best interpretation rather than asking — this is a non-interactive pipeline.
-3. Preserve all Tailwind classes, HTML structure, image placeholders, ARIA labels, scripts, and external links unless the change specifically targets them.
-4. Output a SINGLE complete HTML document starting with `<!DOCTYPE html>`. No code fences, no commentary, no markdown — just the modified HTML.
+1. Apply ONLY the change described above. Do not "improve" anything else — no extra polish, no tweaks to layout, no restyling, no extra sections, no reformatting. The client approved everything else; preserve it exactly.
+2. If the change description is ambiguous (e.g. "change the headline" but there are multiple), apply it to the most prominent / hero-level instance. Pick one best interpretation.
+3. Preserve ALL Tailwind classes, existing structure, aria-labels, role=img placeholders, scripts, links, and formatting unless the specific change targets them.
+4. For image/photo updates (e.g. "update the hero photo", "change the staff image src", "replace picture of X"): ONLY change the relevant src, alt, aria-label, or background on the matching element. Do not touch surrounding markup.
+5. PREFER SURGICAL EDITS: Instead of rewriting the entire page, output a JSON object ONLY (no prose, no markdown, no code fences):
+   {
+     "explanation": "one sentence summary of the exact change made",
+     "replacements": [
+       {
+         "old": "EXACT unique string snippet from the current HTML (include 30-150 chars of surrounding context so it matches only once; copy verbatim including whitespace)",
+         "new": "the replacement string (the minimal change that achieves the request)"
+       }
+     ]
+   }
+   The system will apply your replacements with exact string match (one occurrence). If multiple changes needed, list them in order.
+6. If you must output full HTML (rare, only if no safe snippet replace works), start with <!DOCTYPE html> and nothing else. But always try the JSON replacements format first.
 
-## Current homepage HTML
+## Current homepage HTML (for reference; do not output this)
 
 {current_html}
 
-Return only the modified HTML. Begin with `<!DOCTYPE html>`."""
+Output ONLY the JSON (preferred) or the full modified HTML. Begin directly with {{ or <!DOCTYPE."""
 
 
 # ====================== CLIENT FILE INGESTION ======================

@@ -90,12 +90,27 @@ $env:PYTHONPATH = "C:\Program Files\Blackmagic Design\DaVinci Resolve\Developer\
 python -c "import DaVinciResolveScript as dvr; print(dvr.scriptapp('Resolve'))"
 ```
 
-### Resolve says scripting is disabled
+### Resolve says scripting is disabled or you can't type in the Script Console
 
 In Resolve, go to:
 **Workspace > Scripts > Script Console**
 
-If the Script Console does not appear or shows an error, scripting may be disabled in your Resolve installation (rare on Studio versions).
+- The console window has a large **output area** at the top and a small **command input box** at the bottom.
+- **Click directly with your mouse in the bottom input box** to focus it (it may look like a blank line or say "command").
+- At the top of the console toolbar, make sure the language dropdown is set to **Python** (not Lua).
+- Type a test command like:
+  ```
+  print("Hello from Resolve scripting")
+  ```
+- Then press **Enter** to execute (in recent Resolve versions the Script Console is often a REPL - Enter runs the code in the input; there may not be a separate "Execute" button visible. Use Shift+Enter or Ctrl+Enter for multi-line if needed. Look for "Console" tab or input field at bottom if UI looks different).
+
+If you still cannot click or type in the input box, or nothing happens:
+- This usually means the installed Resolve is the **x64 emulated version** on your ARM hardware (you saw the warning message about this earlier).
+- The emulated build has limited or broken scripting support, which is why attach fails (scriptapp returns None) and the console is unresponsive.
+- **Fix**: Uninstall the current Resolve. Download and install the **native Windows ARM** version from the Blackmagic Design support page (https://www.blackmagicdesign.com/support/family/davinci-resolve-and-fusion). Look specifically for the ARM download.
+- After reinstall, launch Resolve, open a project, open the Script Console again, and retry typing/executing the print command.
+
+Also try: **Workspace > Scripts > Script Console** while Resolve is the foreground window. Sometimes focus/activation is required.
 
 ### Multiple versions of Resolve installed
 

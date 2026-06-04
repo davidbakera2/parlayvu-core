@@ -204,5 +204,23 @@ class NoDomainConfiguredTests(unittest.TestCase):
                 self.assertIn("Promote a homepage variation first", msg)
 
 
+class DirectImagePatchTests(unittest.TestCase):
+    """Tests for the new reliable direct patch for photo updates (no LLM)."""
+
+    def test_updates_img_src_and_aria(self):
+        from app.services.dylan_edit_service import _try_direct_image_patch
+        html = '''<div role="img" aria-label="Old photo of the building" class="hero"></div>'''
+        desc = 'update the hero photo to /images/new-ulc.jpg with description "The ULC building on a sunny day"'
+        result = _try_direct_image_patch(html, desc)
+        self.assertIn('data-src="/images/new-ulc.jpg"', result)  # or background, but our heuristic
+        self.assertIn('aria-label="The ULC building on a sunny day"', result)
+
+    def test_no_change_for_non_image_request(self):
+        from app.services.dylan_edit_service import _try_direct_image_patch
+        html = '<div>some text</div>'
+        result = _try_direct_image_patch(html, "change the headline to Hello")
+        self.assertEqual(result, html)
+
+
 if __name__ == "__main__":
     unittest.main()
