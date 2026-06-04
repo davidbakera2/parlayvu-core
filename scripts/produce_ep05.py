@@ -41,8 +41,14 @@ async def main() -> None:
     print(json.dumps(init, indent=2)[:600], flush=True)
 
     banner("STEP 2 — generate_video_plan (AI cut from transcript)")
+    lower_thirds = {
+        "host": "David Baker | Host",
+        "guest_01": "David Hart | Founder & CEO, RAM Air International",
+        "guest_02": "John Miles | CEO, Superstratum (superstratum.com)",
+    }
     plan = await v.generate_video_plan(
-        client_id=CLIENT, episode_slug=EPISODE, episode_caption=CAPTION, show_start="00:22:01",
+        client_id=CLIENT, episode_slug=EPISODE, episode_caption=CAPTION,
+        show_start="00:22:01", lower_thirds=lower_thirds,
     )
     print("status:", plan.get("status"), "| scenes:", plan.get("scene_count"), flush=True)
     print("speaker_map:", json.dumps(plan.get("speaker_map", {})), flush=True)
