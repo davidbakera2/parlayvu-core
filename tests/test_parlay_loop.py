@@ -11,7 +11,9 @@ These lock in the fixes from the Grok-Build triage (Stage 3):
 """
 from __future__ import annotations
 
+import asyncio
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from sqlalchemy import create_engine
@@ -146,6 +148,65 @@ class SyncParlayDecisionTests(unittest.TestCase):
         with patch("app.parlay_state.record_decision") as rd:
             _sync_parlay_decision(None, status="approved", notes=None)
         rd.assert_not_called()
+
+
+class GenerateVideoDraftTests(unittest.TestCase):
+    """generate_video_draft now drives the real renderer as a background job."""
+
+    def setUp(self):
+        engine = create_engine("sqlite:///:memory:")
+        initialize_database(engine)
+        self.Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+        self.fake = build_fake_scope(self.Session)
+
+    def _run_draft(self, **kwargs):
+        from app.tools import video_parlay_tools as v
+        with patch("app.database.session_scope", self.fake), \
+             patch("app.approvals.session_scope", self.fake), \
+             patch.object(v, "_launch_render_job") as launch, \
+             patch.object(v, "_ensure_plan_json", return_value=True), \
+             patch.object(v, "record_agent_event", return_value=None), \
+             patch.object(v, "_refresh_state_mirror", return_value=None), \
+             patch.object(v, "_get_project_dir", return_value=Path("video_system/projects/RamAir/Ep05")):
+            result = asyncio.run(v.generate_video_draft(**kwargs))
+        return result, launch
+
+    def test_longform_draft_starts_background_render(self):
+        result, launch = self._run_draft(client_id="ramair", episode_slug="Ep05", stage="longform_draft")
+        self.assertEqual(result["status"], "rendering")
+        self.assertEqual(result["version"], 1)
+        launch.assert_called_once()
+        # iteration recorded as 'rendering' (no fake preview path)
+        with patch("app.database.session_scope", self.fake):
+            state = ps.get_state(ps.parlay_project_id("ramair", "Ep05"))
+        it = state["iterations"][-1]
+        self.assertEqual(it["stage"], "longform_draft")
+        self.assertEqual(it["status"], "rendering")
+        # background job told to render without subtitles for the draft stage
+        self.assertFalse(launch.call_args.kwargs["with_subtitles"])
+
+    def test_clips_stage_does_not_render(self):
+        result, launch = self._run_draft(client_id="ramair", episode_slug="Ep05", stage="clips")
+        self.assertEqual(result["status"], "not_rendered")
+        launch.assert_not_called()
+
+    def test_missing_plan_errors_without_render(self):
+        from app.tools import video_parlay_tools as v
+        with patch("app.database.session_scope", self.fake), \
+             patch("app.approvals.session_scope", self.fake), \
+             patch.object(v, "_launch_render_job") as launch, \
+             patch.object(v, "_ensure_plan_json", return_value=False), \
+             patch.object(v, "record_agent_event", return_value=None), \
+             patch.object(v, "_refresh_state_mirror", return_value=None), \
+             patch.object(v, "_get_project_dir", return_value=Path("video_system/projects/RamAir/Ep05")):
+            result = asyncio.run(v.generate_video_draft(client_id="ramair", episode_slug="Ep05", stage="longform_draft"))
+        self.assertEqual(result["status"], "error")
+        launch.assert_not_called()
+
+    def test_invalid_stage_rejected(self):
+        from app.tools import video_parlay_tools as v
+        with self.assertRaises(ValueError):
+            asyncio.run(v.generate_video_draft(client_id="ramair", episode_slug="Ep05", stage="bogus"))
 
 
 if __name__ == "__main__":

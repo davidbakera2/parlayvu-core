@@ -991,7 +991,11 @@ def main() -> None:
 
     project = Path(args.project)
     system_root = Path(__file__).resolve().parents[1]
-    template = Path(args.template) if args.template else system_root / "templates" / "ramair_interview" / "template_config.json"
+    # The FFmpeg layout assets (1cam.png, 2cam.png, ... + styles/) live under
+    # visual_systems/parlayvu_interview/legacy/. (The old templates/ramair_interview/
+    # path only carries a README in the repo — its assets were relocated here.)
+    default_template = system_root / "templates" / "visual_systems" / "parlayvu_interview" / "legacy" / "template_config.json"
+    template = Path(args.template) if args.template else default_template
     Renderer(project, template, args.max_scenes).render(args.with_subtitles)
 
 

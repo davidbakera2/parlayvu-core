@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -40,6 +42,12 @@ logger = logging.getLogger("parlayvu.tools.video_parlay")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VIDEO_SYSTEM_ROOT = REPO_ROOT / "video_system"
 PROJECTS_ROOT = VIDEO_SYSTEM_ROOT / "projects"
+RENDER_SCRIPT = VIDEO_SYSTEM_ROOT / "tools" / "render_video.py"
+SPREADSHEET_TO_JSON = VIDEO_SYSTEM_ROOT / "tools" / "spreadsheet_to_json.py"
+
+# Strong references to in-flight background render tasks so the event loop does
+# not garbage-collect them mid-run.
+_RENDER_TASKS: "set[asyncio.Task]" = set()
 
 
 def _repo_rel(p: Path) -> str:
@@ -180,123 +188,271 @@ async def init_podcast_parlay_project(
     }
 
 
+def _ensure_plan_json(project_dir: Path) -> bool:
+    """Make sure planning/video_plan.json exists, converting from the .xlsx via
+    spreadsheet_to_json.py if needed. Returns True if a plan json is present."""
+    plan_json = project_dir / "planning" / "video_plan.json"
+    if plan_json.exists():
+        return True
+    xlsx = project_dir / "planning" / "video_plan.xlsx"
+    if not xlsx.exists():
+        return False
+    try:
+        subprocess.check_call(
+            [sys.executable, str(SPREADSHEET_TO_JSON), str(project_dir)],
+            cwd=str(VIDEO_SYSTEM_ROOT),
+        )
+    except Exception as exc:
+        logger.warning("spreadsheet_to_json failed for %s: %s", project_dir, exc)
+    return plan_json.exists()
+
+
+def _safe_update_iteration(project_id: str, stage: str, version: int, *, client_id: str, **fields: Any) -> None:
+    try:
+        ps.update_iteration(project_id, stage=stage, version=version, client_id=client_id, **fields)
+    except Exception as exc:
+        logger.warning("Could not update iteration %s %s v%s: %s", project_id, stage, version, exc)
+
+
+def _safe_event(client_id: str, project_id: str, event_type: str, summary: str, payload: dict[str, Any]) -> None:
+    try:
+        record_agent_event(
+            client_id=client_id,
+            project_id=project_id,
+            agent_name="nathan",
+            event_type=event_type,
+            channel="video_parlay",
+            summary=summary,
+            payload=payload,
+        )
+    except Exception as exc:
+        logger.warning("Could not record event %s for %s: %s", event_type, project_id, exc)
+
+
+async def _run_render_job(
+    *,
+    client_id: str,
+    episode_slug: str,
+    project_id: str,
+    project_dir: Path,
+    stage: str,
+    version: int,
+    with_subtitles: bool,
+    max_scenes: Optional[int],
+) -> None:
+    """Run render_video.py as a subprocess, then flip the iteration to rendered
+    (or render_failed) and attach the produced file. Self-contained + defensive:
+    this runs detached from the request, so it must never raise to the loop."""
+    cmd = [sys.executable, str(RENDER_SCRIPT), str(project_dir)]
+    if with_subtitles:
+        cmd.append("--with-subtitles")
+    if max_scenes:
+        cmd += ["--max-scenes", str(max_scenes)]
+    logger.info("Render job start | %s/%s stage=%s v%s", client_id, episode_slug, stage, version)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=str(VIDEO_SYSTEM_ROOT),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _out, err = await proc.communicate()
+        if proc.returncode != 0:
+            tail = (err or b"").decode("utf-8", "replace")[-1000:]
+            logger.error("Render job failed | %s rc=%s\n%s", episode_slug, proc.returncode, tail)
+            _safe_update_iteration(project_id, stage, version, status="render_failed", client_id=client_id)
+            _safe_event(client_id, project_id, "video_render_failed",
+                        f"Render failed for {stage} v{version}",
+                        {"stage": stage, "version": version, "returncode": proc.returncode, "error_tail": tail})
+            _refresh_state_mirror(client_id, episode_slug)
+            return
+
+        # render_video.py writes renders/final_no_subtitles.mp4 (+ final_with_subtitles.mp4
+        # when --with-subtitles and captions exist). Prefer the subtitled output.
+        renders_dir = project_dir / "renders"
+        candidates = []
+        if with_subtitles:
+            candidates.append(renders_dir / "final_with_subtitles.mp4")
+        candidates.append(renders_dir / "final_no_subtitles.mp4")
+        produced = next((c for c in candidates if c.exists()), None)
+        if produced is None:
+            logger.error("Render job produced no output file | %s %s", episode_slug, [str(c) for c in candidates])
+            _safe_update_iteration(project_id, stage, version, status="render_failed", client_id=client_id)
+            _safe_event(client_id, project_id, "video_render_failed",
+                        f"Render produced no output for {stage} v{version}",
+                        {"stage": stage, "version": version})
+            _refresh_state_mirror(client_id, episode_slug)
+            return
+
+        # Snapshot to a versioned filename so the iteration trail keeps each render.
+        versioned = renders_dir / f"{stage}_v{version:02d}.mp4"
+        try:
+            shutil.copy2(produced, versioned)
+            render_rel = _repo_rel(versioned)
+        except OSError as exc:
+            logger.warning("Could not version render (%s); using raw output", exc)
+            render_rel = _repo_rel(produced)
+
+        _safe_update_iteration(project_id, stage, version, status="rendered",
+                               preview_path=render_rel, client_id=client_id)
+        _safe_event(client_id, project_id, "video_render_complete",
+                    f"Render complete for {stage} v{version}",
+                    {"stage": stage, "version": version, "render_path": render_rel})
+        _refresh_state_mirror(client_id, episode_slug)
+        logger.info("Render job done | %s/%s stage=%s v%s -> %s", client_id, episode_slug, stage, version, render_rel)
+    except Exception:
+        logger.exception("Render job crashed | %s/%s stage=%s v%s", client_id, episode_slug, stage, version)
+        _safe_update_iteration(project_id, stage, version, status="render_failed", client_id=client_id)
+        _refresh_state_mirror(client_id, episode_slug)
+
+
+def _launch_render_job(**kwargs: Any) -> None:
+    """Schedule a render as a background task on the running event loop.
+
+    A full render is minutes long and must not block Nathan's tool call, so we
+    fire-and-forget and let the iteration status report progress. NOTE (v1
+    limitation): this is in-process and not durable across a container restart —
+    acceptable for the current single-replica deploy; a durable job queue/worker
+    is a later step. If there's no running loop (a sync script/test), run inline.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is None:
+        asyncio.run(_run_render_job(**kwargs))
+        return
+    task = loop.create_task(_run_render_job(**kwargs))
+    _RENDER_TASKS.add(task)
+    task.add_done_callback(_RENDER_TASKS.discard)
+
+
 async def generate_video_draft(
     *,
     client_id: str,
     episode_slug: str,
     stage: str = ps.LONGFORM_DRAFT,
     notes: Optional[str] = None,
+    max_scenes: Optional[int] = None,
 ) -> dict[str, Any]:
-    """Trigger (or simulate) generation of the next video render for a review stage.
+    """Render the next version of a review stage and track it as an iteration.
 
     `stage` must be one of the canonical review stages in app/parlay_state.py:
-      - 'longform_draft'      — assembled long-form (cuts + b-roll + music) for review
-      - 'longform_captioned'  — captioned long-form for review
-      - 'clips'               — the clip package for review
-    Each call records a new versioned iteration (v1, v2, ...) for that stage so the
-    revision loop is visible, and moves the state machine to that review stage.
+      - 'longform_draft'      — assembled long-form (cuts + b-roll + music), no captions
+      - 'longform_captioned'  — captioned long-form (burns planning/captions.srt)
+      - 'clips'               — the clip package (not yet wired to a renderer)
 
-    In the current foundation phase this writes a placeholder render marker; as the
-    Resolve layer matures it will drive the real render and return a hosted preview.
+    For the long-form stages this drives the real FFmpeg compositor
+    (video_system/tools/render_video.py) against the episode's video_plan.json.
+    Rendering runs as a BACKGROUND job (minutes long), so this returns
+    immediately with status="rendering"; the iteration flips to "rendered" (with
+    the produced file as its preview) when the job finishes. Poll get_parlay_status.
+    `max_scenes` renders only the first N scenes — useful for a fast proxy/smoke render.
     """
     if stage not in ps.REVIEW_STAGES:
         raise ValueError(
             f"generate_video_draft stage must be one of {sorted(ps.REVIEW_STAGES)}; got {stage!r}."
         )
     project_dir = _get_project_dir(client_id, episode_slug)
-
-    # Basic validation using existing tools
-    plan_json = project_dir / "planning" / "video_plan.json"
-    if not plan_json.exists():
-        # Try to convert if xlsx is there
-        try:
-            subprocess.check_call(
-                [
-                    "python",
-                    str(VIDEO_SYSTEM_ROOT / "tools" / "spreadsheet_to_json.py"),
-                    str(project_dir),
-                ],
-                cwd=VIDEO_SYSTEM_ROOT,
-            )
-        except Exception:
-            pass
-
-    # For now: produce a "draft" marker and a fake render path the human can replace
-    renders_dir = project_dir / "renders"
-    renders_dir.mkdir(exist_ok=True)
-
-    draft_name = f"{stage}_v01.mp4"
-    draft_path = renders_dir / draft_name
-
-    # Touch a placeholder so the approval flow has something to point at
-    draft_path.write_bytes(b"PLACEHOLDER - run actual Resolve render here\n")
-    draft_rel = _repo_rel(draft_path)
-
     project_id = ps.parlay_project_id(client_id, episode_slug)
 
-    # Record the event
-    record_agent_event(
-        client_id=client_id,
-        project_id=project_id,
-        agent_name="nathan",
-        event_type="video_draft_generated",
-        channel="video_parlay",
-        summary=f"Video draft generated for stage {stage}",
-        payload={
+    def _record_and_advance(*, status: str, preview_path: Optional[str] = None) -> Optional[int]:
+        """Append the iteration + move the state machine to this review stage.
+        Returns the new version number for this stage (or None on failure)."""
+        try:
+            state = ps.record_iteration(
+                project_id, stage=stage, status=status, preview_path=preview_path,
+                summary=notes, client_id=client_id,
+            )
+            version = max(
+                (it["version"] for it in state.get("iterations", []) if it.get("stage") == stage),
+                default=None,
+            )
+            try:
+                ps.set_stage(project_id, stage, by="nathan", note=notes, client_id=client_id)
+            except ps.ParlayTransitionError:
+                ps.set_stage(project_id, stage, by="nathan", note=f"(out-of-order) {notes or ''}",
+                             client_id=client_id, force=True)
+            _refresh_state_mirror(client_id, episode_slug)
+            return version
+        except Exception as exc:
+            logger.warning("Could not update parlay state on draft for %s: %s", episode_slug, exc)
+            return None
+
+    # The clip package isn't producible by the long-form FFmpeg renderer yet.
+    # Be honest: track the stage, but don't fake a render.
+    if stage == ps.CLIPS:
+        version = _record_and_advance(status="planned")
+        return {
+            "status": "not_rendered",
             "stage": stage,
-            "draft_path": draft_rel,
-            "notes": notes,
-        },
+            "version": version,
+            "episode_slug": episode_slug,
+            "client_id": client_id,
+            "message": (
+                "Clip rendering isn't wired to a renderer yet — render_video.py produces the "
+                "long-form, not clips. The episode is marked at the clips stage; clip generation "
+                "is a separate build. Want me to plan the clip moments in the meantime?"
+            ),
+        }
+
+    # Long-form stages: ensure we have a plan to render from.
+    if not _ensure_plan_json(project_dir):
+        return {
+            "status": "error",
+            "stage": stage,
+            "episode_slug": episode_slug,
+            "client_id": client_id,
+            "message": (
+                f"No planning/video_plan.json for {episode_slug} (and no video_plan.xlsx to convert "
+                "from). Plan the episode first, then I can render."
+            ),
+        }
+
+    # Captioned stage burns planning/captions.srt; only request subtitles if present.
+    captions_present = (project_dir / "planning" / "captions.srt").exists()
+    with_subtitles = stage == ps.LONGFORM_CAPTIONED and captions_present
+
+    version = _record_and_advance(status="rendering")
+    if version is None:
+        return {
+            "status": "error",
+            "stage": stage,
+            "episode_slug": episode_slug,
+            "client_id": client_id,
+            "message": "Could not record the render iteration (state machine / DB issue). Render not started.",
+        }
+
+    _safe_event(client_id, project_id, "video_render_started",
+                f"Render started for {stage} v{version}",
+                {"stage": stage, "version": version, "with_subtitles": with_subtitles, "max_scenes": max_scenes})
+
+    _launch_render_job(
+        client_id=client_id,
+        episode_slug=episode_slug,
+        project_id=project_id,
+        project_dir=project_dir,
+        stage=stage,
+        version=version,
+        with_subtitles=with_subtitles,
+        max_scenes=max_scenes,
     )
 
-    # No hosted preview yet — this is a local placeholder render. We deliberately
-    # do NOT fabricate a file:// "preview_url" that looks clickable in Teams but
-    # isn't reachable; the real hosted URL arrives when the Resolve render lands.
-    preview_url = None
-
-    # Record this render as a new versioned iteration and move the state machine to
-    # the matching review stage. This is what makes each edit loop VISIBLE: every
-    # render becomes "[stage vN]" in the status view with its own preview link.
-    version = None
-    try:
-        state = ps.record_iteration(
-            project_id,
-            stage=stage,
-            preview_url=preview_url,
-            preview_path=draft_rel,
-            summary=notes,
-            status="rendered",
-            client_id=client_id,
-        )
-        # latest version number for this stage
-        version = max(
-            (it["version"] for it in state.get("iterations", []) if it.get("stage") == stage),
-            default=None,
-        )
-        # Move to the review stage. A legal transition (planning→draft, or
-        # re-rendering within the same review stage) is the normal path; only
-        # fall back to force for an out-of-order jump, which we annotate.
-        try:
-            ps.set_stage(project_id, stage, by="nathan", note=notes, client_id=client_id)
-        except ps.ParlayTransitionError:
-            ps.set_stage(project_id, stage, by="nathan", note=f"(out-of-order) {notes or ''}", client_id=client_id, force=True)
-        _refresh_state_mirror(client_id, episode_slug)
-    except Exception as exc:
-        logger.warning("Could not update parlay state on draft for %s: %s", episode_slug, exc)
+    caption_note = ""
+    if stage == ps.LONGFORM_CAPTIONED and not captions_present:
+        caption_note = " (no planning/captions.srt found — rendering without burned captions)"
 
     return {
-        "status": "draft_ready",
+        "status": "rendering",
         "stage": stage,
         "version": version,
         "episode_slug": episode_slug,
         "client_id": client_id,
-        "preview_path": draft_rel,
-        "preview_url": preview_url,
+        "preview_url": None,
         "message": (
-            f"Draft for {stage} (v{version}) ready at {draft_rel}. "
-            "This is a placeholder marker — in a full run it would be a real Resolve "
-            "proxy render with a hosted preview link. Tell me to request client "
-            "approval or make changes first."
+            f"Render started for {stage} v{version}{caption_note}. It runs in the background "
+            "(a few minutes for a full episode). I'll have the preview when it finishes — ask me "
+            "for the status, or I'll request approval once it's rendered."
         ),
     }
 

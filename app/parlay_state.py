@@ -305,6 +305,39 @@ def record_iteration(
     return _persist(project_id, state, client_id=client_id)
 
 
+def update_iteration(
+    project_id: str,
+    *,
+    stage: str,
+    version: int,
+    status: Optional[str] = None,
+    preview_url: Optional[str] = None,
+    preview_path: Optional[str] = None,
+    summary: Optional[str] = None,
+    client_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Update fields on an existing iteration, identified by (stage, version).
+
+    Used by async render jobs to flip a freshly-recorded "rendering" iteration to
+    "rendered" (or "render_failed") once the background render finishes, and to
+    attach the resulting preview. Only non-None fields are applied; a no-op if the
+    iteration isn't found.
+    """
+    state = get_state(project_id)
+    for it in state.get("iterations", []):
+        if it.get("stage") == stage and it.get("version") == version:
+            if status is not None:
+                it["status"] = status
+            if preview_url is not None:
+                it["preview_url"] = preview_url
+            if preview_path is not None:
+                it["preview_path"] = preview_path
+            if summary is not None:
+                it["summary"] = summary
+            break
+    return _persist(project_id, state, client_id=client_id)
+
+
 def set_pending_approval(
     project_id: str,
     approval_id: Optional[str],
