@@ -485,7 +485,8 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
                 "episode_slug": {"type": "string", "description": "Episode slug matching the project folder."},
                 "stage": {
                     "type": "string",
-                    "description": "One of: longform_draft, longform_captioned (more stages in the workflow doc).",
+                    "enum": ["longform_draft", "longform_captioned", "clips"],
+                    "description": "Which review render to produce: 'longform_draft' (first picture lock), 'longform_captioned' (after captions), or 'clips' (the clip package).",
                 },
                 "notes": {"type": "string", "description": "Optional context or instructions for this draft."},
             },
@@ -509,7 +510,8 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
                 "episode_slug": {"type": "string", "description": "Episode identifier."},
                 "stage": {
                     "type": "string",
-                    "description": "Stage name, e.g. 'longform_draft', 'longform_captioned', 'clip_package'.",
+                    "enum": ["longform_draft", "longform_captioned", "clips"],
+                    "description": "Review gate to open: 'longform_draft', 'longform_captioned', or 'clips'.",
                 },
                 "preview_url": {
                     "type": "string",
@@ -522,6 +524,51 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
                 "summary": {"type": "string", "description": "Short human summary for the approval card."},
             },
             "required": ["client_id", "episode_slug", "stage"],
+        },
+    },
+    {
+        "name": "record_parlay_decision",
+        "description": (
+            "Record a client's decision on a Podcast Parlay review gate and advance the "
+            "state machine. Call this when the client gives feedback in chat on a video "
+            "draft (Teams card decisions are wired automatically). decision='approved' "
+            "advances to the next milestone; decision='changes_requested' keeps the same "
+            "stage so the next generate_video_draft becomes the next version (v2, v3...)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_id": {"type": "string", "description": "Active client_id."},
+                "episode_slug": {"type": "string", "description": "Episode identifier."},
+                "stage": {
+                    "type": "string",
+                    "enum": ["longform_draft", "longform_captioned", "clips"],
+                    "description": "The review stage the decision applies to.",
+                },
+                "decision": {
+                    "type": "string",
+                    "enum": ["approved", "changes_requested", "rejected", "cancelled"],
+                    "description": "The client's decision.",
+                },
+                "notes": {"type": "string", "description": "Optional decision notes / requested changes."},
+            },
+            "required": ["client_id", "episode_slug", "stage", "decision"],
+        },
+    },
+    {
+        "name": "get_parlay_status",
+        "description": (
+            "Get the live status of a Podcast Parlay episode: current stage, the iteration "
+            "trail with preview links, and any open approval gate. Use for 'where is Ep06?' "
+            "type questions."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_id": {"type": "string", "description": "Active client_id."},
+                "episode_slug": {"type": "string", "description": "Episode identifier."},
+            },
+            "required": ["client_id", "episode_slug"],
         },
     },
 ]
@@ -612,10 +659,10 @@ You are the persistent orchestrator for turning raw Riverside interviews (host +
 Key principles (consistent with the spec):
 - Assets and plan live in `video_system/projects/<Client>/<Show_EpXX>/` (or mirrored in client_artifacts for memory). Use file tools + project context to inspect `planning/video_plan.json`, assets/, renders/, PROJECT_README.md.
 - You do NOT do the heavy editing yourself. You coordinate: run scaffolding (`new_project`), trigger planning/draft generation, call Resolve tools (once wired), produce previews, and — most importantly — gate everything client-facing with the approvals system.
-- Video assembly draft → preview → captions generation → request_approval (action_type "video_captions") for captions review/approval first. Only after captions are approved do we do final video production (bake in approved captions + polish) → request_approval (action_type "video_production"). Same pattern for clip package.
-- Iteration is the heart of the process: "changes_requested" + decision_notes come back from the client in Teams. You read the notes + current plan + transcript + previously approved captions (where relevant), then either patch the plan/captions (via tool), dispatch Alex ("Alex, revise the captions per this feedback" or "apply these final production tweaks"), or give precise instructions for Resolve. Re-render, new preview, updated or new approval card. Repeat until approved. All of this is fully auditable.
-- Captions approval is now the explicit early gate for the main video: approve captions (text, timing, style) before approving the final video production. This prevents re-work on the polished final.
-- After video production approval (final with approved captions): prepare description (from notes + brief), series thumbnail, end card, then publish tool (YouTube unlisted).
+- The review gates (stages you call generate_video_draft + request_video_approval on) are exactly: `longform_draft` → `longform_captioned` → `clips`. request_video_approval derives the approval action_type from the stage automatically (longform_draft → video_longform_draft, longform_captioned → video_longform_captioned, clips → video_clip_package). Don't invent other stage names — the tools validate against this list.
+- Flow: render the long-form draft (generate_video_draft stage="longform_draft") → request_video_approval. After it's approved, generate the captioned long-form (stage="longform_captioned") → request_video_approval. Captioned approval is the hard gate that unlocks publishing the long-form. The clip package (stage="clips") follows the same render → approve pattern.
+- Iteration is the heart of the process: "changes_requested" + decision_notes come back from the client in Teams (these flow into the state machine automatically; in chat, call record_parlay_decision yourself). On changes_requested you stay in the same stage — read the notes + plan + transcript, dispatch Alex or instruct Resolve, then re-render (a new version v2/v3...) and request approval again. Repeat until approved. Fully auditable.
+- After the captioned long-form is approved: prepare description (from notes + brief), series thumbnail, end card, then publish (YouTube unlisted). Publishing is hard-gated — it cannot proceed without the matching approved approval.
 - Then clips phase: identify 5-10 moments (using approved captions as base where relevant), generate captioned shorts, package previews, one approval card (or set), iterate per clip if needed, then batch upload + add to playlist.
 - Always narrate progress ("I'm kicking off the first video assembly draft render now — give me a minute while the tools run. Captions approval will come next."). Confirm preview will be available for review before any publish.
 - For visuals decisions (cuts, layouts, text, b-roll placement, thumbnail treatment, captions presentation) lean on Alex as the specialist. You stay the client-facing single point of contact and the one who files the approvals and memory.
@@ -848,6 +895,23 @@ async def _execute_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
                 preview_path=tool_input.get("preview_path"),
                 summary=tool_input.get("summary"),
             )
+        elif tool_name == "record_parlay_decision":
+            from app.tools.video_parlay_tools import record_parlay_decision
+
+            result = await record_parlay_decision(
+                client_id=tool_input["client_id"],
+                episode_slug=tool_input["episode_slug"],
+                stage=tool_input["stage"],
+                decision=tool_input["decision"],
+                notes=tool_input.get("notes"),
+            )
+        elif tool_name == "get_parlay_status":
+            from app.tools.video_parlay_tools import get_parlay_status
+
+            result = await get_parlay_status(
+                client_id=tool_input["client_id"],
+                episode_slug=tool_input["episode_slug"],
+            )
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
 
@@ -948,7 +1012,6 @@ def _openai_messages_to_anthropic(
     # Workflow packages (like viktor.com "different packages of workflows"): inject active ones' prompts + spec refs.
     # This makes Nathan follow the living package specs (e.g. Podcast Parlay MD) when activated for the client.
     from app.workflow_packages import inject_package_context
-    base_for_packages = "\n\n".join(system_parts)  # temp to feed injector (will be reassembled)
     packages_block = inject_package_context(client_id, "")
     if packages_block:
         system_parts.append(packages_block)

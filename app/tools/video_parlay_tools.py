@@ -34,8 +34,21 @@ from app.project_memory import record_agent_event
 
 logger = logging.getLogger("parlayvu.tools.video_parlay")
 
-VIDEO_SYSTEM_ROOT = Path("video_system")
+# Anchor paths to the repo root (this file is app/tools/video_parlay_tools.py) so
+# they resolve identically no matter what the process CWD is — the container and
+# local runs don't always launch from the repo root.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+VIDEO_SYSTEM_ROOT = REPO_ROOT / "video_system"
 PROJECTS_ROOT = VIDEO_SYSTEM_ROOT / "projects"
+
+
+def _repo_rel(p: Path) -> str:
+    """Repo-relative POSIX path string for result payloads. Falls back to the
+    absolute path (never raises) if `p` is outside the repo."""
+    try:
+        return str(Path(p).resolve().relative_to(REPO_ROOT)).replace("\\", "/")
+    except ValueError:
+        return str(p).replace("\\", "/")
 
 
 def _refresh_state_mirror(client_id: str, episode_slug: str) -> Optional[str]:
@@ -139,19 +152,19 @@ async def init_podcast_parlay_project(
         with readme.open("a", encoding="utf-8") as f:
             f.write(f"\n\n[{(raw_assets_note or 'Nathan re-entered the project')}]\n")
 
+    project_id = ps.parlay_project_id(client_id, episode_slug)
     record_agent_event(
         client_id=client_id,
-        project_id=episode_slug,
+        project_id=project_id,
         agent_name="nathan",
         event_type="video_project_initialized",
         channel="video_parlay",
         summary=f"Podcast Parlay project initialized: {episode_slug}",
-        payload={"project_dir": str(project_dir.relative_to(VIDEO_SYSTEM_ROOT))},
+        payload={"project_dir": _repo_rel(project_dir)},
     )
 
     # Seed the authoritative state machine at INTAKE and write the disk mirror.
     try:
-        project_id = ps.parlay_project_id(client_id, episode_slug)
         ps.set_stage(project_id, ps.INTAKE, by="nathan", note=raw_assets_note, client_id=client_id, force=True)
         _refresh_state_mirror(client_id, episode_slug)
     except Exception as exc:
@@ -159,7 +172,7 @@ async def init_podcast_parlay_project(
 
     return {
         "status": "initialized",
-        "project_dir": str(project_dir.relative_to(Path.cwd())),
+        "project_dir": _repo_rel(project_dir),
         "episode_slug": episode_slug,
         "client_id": client_id,
         "stage": ps.INTAKE,
@@ -171,25 +184,25 @@ async def generate_video_draft(
     *,
     client_id: str,
     episode_slug: str,
-    stage: str = "video_assembly_draft",
+    stage: str = ps.LONGFORM_DRAFT,
     notes: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Trigger (or simulate) generation of the next video draft for the given stage.
+    """Trigger (or simulate) generation of the next video render for a review stage.
 
-    Per current workflow (PODCAST_PARLAY_FULL_WORKFLOW.md): captions approval (video_captions)
-    happens BEFORE final video production approval (video_production).
+    `stage` must be one of the canonical review stages in app/parlay_state.py:
+      - 'longform_draft'      — assembled long-form (cuts + b-roll + music) for review
+      - 'longform_captioned'  — captioned long-form for review
+      - 'clips'               — the clip package for review
+    Each call records a new versioned iteration (v1, v2, ...) for that stage so the
+    revision loop is visible, and moves the state machine to that review stage.
 
-    Common stages: 'video_assembly_draft' (visuals + cuts + b-roll + music draft),
-    'video_captions' (for the captions approval gate), 'video_production' (final with
-    approved captions baked in), 'clip_package', etc.
-
-    In the current foundation phase this mostly validates the plan and tells the
-    human/Resolve operator what to do next. As timeline_builder etc. mature this
-    will drive more of the render.
-
-    Returns a dict with suggested next render command + a placeholder "preview_path".
-    Real implementation will run the render or queue it and return the actual path.
+    In the current foundation phase this writes a placeholder render marker; as the
+    Resolve layer matures it will drive the real render and return a hosted preview.
     """
+    if stage not in ps.REVIEW_STAGES:
+        raise ValueError(
+            f"generate_video_draft stage must be one of {sorted(ps.REVIEW_STAGES)}; got {stage!r}."
+        )
     project_dir = _get_project_dir(client_id, episode_slug)
 
     # Basic validation using existing tools
@@ -217,35 +230,40 @@ async def generate_video_draft(
 
     # Touch a placeholder so the approval flow has something to point at
     draft_path.write_bytes(b"PLACEHOLDER - run actual Resolve render here\n")
+    draft_rel = _repo_rel(draft_path)
+
+    project_id = ps.parlay_project_id(client_id, episode_slug)
 
     # Record the event
     record_agent_event(
         client_id=client_id,
-        project_id=episode_slug,
+        project_id=project_id,
         agent_name="nathan",
         event_type="video_draft_generated",
         channel="video_parlay",
         summary=f"Video draft generated for stage {stage}",
         payload={
             "stage": stage,
-            "draft_path": str(draft_path.relative_to(VIDEO_SYSTEM_ROOT)),
+            "draft_path": draft_rel,
             "notes": notes,
         },
     )
 
-    preview_url = f"file://{draft_path.resolve()}"  # or later a real hosted preview
+    # No hosted preview yet — this is a local placeholder render. We deliberately
+    # do NOT fabricate a file:// "preview_url" that looks clickable in Teams but
+    # isn't reachable; the real hosted URL arrives when the Resolve render lands.
+    preview_url = None
 
     # Record this render as a new versioned iteration and move the state machine to
     # the matching review stage. This is what makes each edit loop VISIBLE: every
     # render becomes "[stage vN]" in the status view with its own preview link.
     version = None
     try:
-        project_id = ps.parlay_project_id(client_id, episode_slug)
         state = ps.record_iteration(
             project_id,
             stage=stage,
             preview_url=preview_url,
-            preview_path=str(draft_path.relative_to(Path.cwd())),
+            preview_path=draft_rel,
             summary=notes,
             status="rendered",
             client_id=client_id,
@@ -255,7 +273,9 @@ async def generate_video_draft(
             (it["version"] for it in state.get("iterations", []) if it.get("stage") == stage),
             default=None,
         )
-        # Best-effort stage move; don't let an out-of-order call break the render.
+        # Move to the review stage. A legal transition (planning→draft, or
+        # re-rendering within the same review stage) is the normal path; only
+        # fall back to force for an out-of-order jump, which we annotate.
         try:
             ps.set_stage(project_id, stage, by="nathan", note=notes, client_id=client_id)
         except ps.ParlayTransitionError:
@@ -270,12 +290,13 @@ async def generate_video_draft(
         "version": version,
         "episode_slug": episode_slug,
         "client_id": client_id,
-        "preview_path": str(draft_path.relative_to(Path.cwd())),
+        "preview_path": draft_rel,
         "preview_url": preview_url,
         "message": (
-            f"Draft for {stage} (v{version}) ready at {draft_path}. "
-            "In a full run this would be a real Resolve proxy render. "
-            "Tell me to request client approval or make changes first."
+            f"Draft for {stage} (v{version}) ready at {draft_rel}. "
+            "This is a placeholder marker — in a full run it would be a real Resolve "
+            "proxy render with a hosted preview link. Tell me to request client "
+            "approval or make changes first."
         ),
     }
 
@@ -300,15 +321,24 @@ async def request_video_approval(
       in PODCAST_PARLAY_FULL_WORKFLOW.md
     - Everything is tied to the client/project for memory and audit.
 
-    Stages (per the workflow doc): video_assembly_draft, video_captions (the gate before production), video_production, clip_package, ...
+    `stage` must be a canonical review stage: 'longform_draft', 'longform_captioned',
+    or 'clips' (see app/parlay_state.py). The approval's action_type is derived from
+    the stage via ps.ACTION_TYPE_FOR_STAGE so the publish gates match deterministically
+    (notably 'clips' -> 'video_clip_package', NOT 'video_clips').
     """
+    if stage not in ps.ACTION_TYPE_FOR_STAGE:
+        raise ValueError(
+            f"request_video_approval stage must be one of {sorted(ps.ACTION_TYPE_FOR_STAGE)}; got {stage!r}."
+        )
+    action_type = ps.ACTION_TYPE_FOR_STAGE[stage]
+
     try:
         config = load_client_config(client_id)
         display = config.display_name
     except ClientConfigError:
         display = client_id
 
-    project_id = f"{client_id}-{episode_slug}"  # or a cleaner convention
+    project_id = ps.parlay_project_id(client_id, episode_slug)
     project_name = f"{display} — {episode_slug}"
 
     approval = request_approval(
@@ -316,28 +346,28 @@ async def request_video_approval(
         project_id=project_id,
         project_name=project_name,
         requested_by_agent="nathan",  # or "alex" / "video_parlay"
-        action_type=f"video_{stage}",
+        action_type=action_type,
         title=f"Review {stage.replace('_', ' ')} for {episode_slug}",
         summary=summary or f"Video draft ready for review. Preview: {preview_url or preview_path or '(see files)'}",
         metadata={
-            "kind": f"video_{stage}",
+            "kind": action_type,
             "episode_slug": episode_slug,
             "stage": stage,
             "preview_url": preview_url,
             "preview_path": preview_path,
-            "project_dir": str(_get_project_dir(client_id, episode_slug).relative_to(VIDEO_SYSTEM_ROOT)),
+            "project_dir": _repo_rel(_get_project_dir(client_id, episode_slug)),
             **(extra_metadata or {}),
         },
     )
 
     record_agent_event(
         client_id=client_id,
-        project_id=episode_slug,
+        project_id=project_id,
         agent_name="nathan",
         event_type="video_approval_requested",
         channel="video_parlay",
         summary=f"Approval requested for {stage}",
-        payload={"approval_id": approval["id"], "stage": stage},
+        payload={"approval_id": approval["id"], "stage": stage, "action_type": action_type},
     )
 
     # Mark the open approval gate on the state machine so the status view shows
@@ -400,7 +430,7 @@ async def record_parlay_decision(
 
     record_agent_event(
         client_id=client_id,
-        project_id=episode_slug,
+        project_id=project_id,
         agent_name="nathan",
         event_type="video_decision_recorded",
         channel="video_parlay",
@@ -458,22 +488,22 @@ async def create_longform_draft_and_request_approval(
     preview_path: Optional[str] = None,
     notes: Optional[str] = None,
 ) -> dict[str, Any]:
-    """High-level helper: generate draft (if needed) then immediately request the approval.
-    Note: per updated workflow, captions approval comes before final video production.
-    This helper is illustrative; prefer explicit stage calls matching the current spec.
+    """High-level helper: render the long-form draft then immediately request the
+    long-form draft approval gate. Prefer explicit stage calls for anything beyond
+    this first-draft convenience.
     """
     draft = await generate_video_draft(
         client_id=client_id,
         episode_slug=episode_slug,
-        stage="video_assembly_draft",
+        stage=ps.LONGFORM_DRAFT,
         notes=notes,
     )
     approval = await request_video_approval(
         client_id=client_id,
         episode_slug=episode_slug,
-        stage="video_captions",  # captions first, then video_production after approval
+        stage=ps.LONGFORM_DRAFT,
         preview_url=preview_url or draft.get("preview_url"),
         preview_path=preview_path or draft.get("preview_path"),
-        summary=notes or "Captions for review (gate before final video production).",
+        summary=notes or "Long-form draft ready for review.",
     )
     return {**draft, **approval, "combined": True}

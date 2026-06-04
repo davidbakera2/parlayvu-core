@@ -84,15 +84,17 @@ register_package(
             "init_podcast_parlay_project",
             "generate_video_draft",
             "request_video_approval",
-            # more added in video_parlay_tools
+            "record_parlay_decision",
+            "get_parlay_status",
         ],
         prompt_additions=(
             "PODCAST PARLAY & VIDEO PRODUCTION WORKFLOW: Load and follow exactly the spec at "
             "`video_system/docs/PODCAST_PARLAY_FULL_WORKFLOW.md` when the user mentions an interview, "
-            "episode, podcast video production, clips, or Riverside. Use the exact stages, approval "
-            "action_types (video_assembly_draft, video_captions, video_production, clip_package), "
-            "iteration via changes_requested, and coordinate with Alex + Resolve tools. "
-            "Captions approval before final production."
+            "episode, podcast video production, clips, or Riverside. The review gates are the stages "
+            "longform_draft → longform_captioned → clips (action_types video_longform_draft, "
+            "video_longform_captioned, video_clip_package); request_video_approval derives the "
+            "action_type from the stage. Iterate via changes_requested, coordinate with Alex + Resolve "
+            "tools. Captioned long-form approval is the hard gate before publishing."
         ),
     )
 )

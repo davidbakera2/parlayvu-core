@@ -1,6 +1,8 @@
 # parlayvu-core/app/main.py
 import logging
 import os
+from pathlib import Path
+
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -35,7 +37,10 @@ app.add_middleware(
 # Mount static files from video_system/docs so the generated dashboards and workflow viewers
 # are available at https://.../static/Parlays_Dashboard.html etc.
 # This is required for MS Teams tabs (which need https web content, not local file paths).
-app.mount("/static", StaticFiles(directory="video_system/docs"), name="static")
+# Anchor to the repo root (not the process CWD) and don't crash startup if the dir
+# is absent — check_dir=False makes a missing directory a 404, not a boot failure.
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "video_system" / "docs"
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR), check_dir=False), name="static")
 
 # ========================= MODELS =========================
 class NathanRequest(BaseModel):
@@ -702,6 +707,30 @@ async def approvals_request_endpoint(request: ApprovalRequest):
         raise _memory_error(e)
 
 
+def _sync_parlay_decision(approval: Optional[dict], *, status: str, notes: Optional[str]) -> None:
+    """If a decided approval is a Podcast Parlay review gate, advance the parlay
+    state machine to match the client's decision.
+
+    This is the loop hook: without it, approving a video draft in Teams would
+    leave the episode stuck at the review stage forever. Identified by the
+    approval's metadata (action_type starting with 'video_' + a 'stage'). Strictly
+    best-effort — never let a state hiccup break the approval decision itself.
+    """
+    if not approval:
+        return
+    try:
+        meta = approval.get("metadata") or {}
+        stage = meta.get("stage")
+        action_type = meta.get("action_type") or ""
+        project_id = approval.get("project_id")
+        if not project_id or not stage or not action_type.startswith("video_"):
+            return
+        from app import parlay_state as ps
+        ps.record_decision(project_id, stage=stage, decision=status, notes=notes, by="client")
+    except Exception:
+        logger.warning("Parlay state sync skipped for approval %s", approval.get("id"), exc_info=True)
+
+
 @app.post("/approvals/{approval_id}/decision")
 async def approvals_decision_endpoint(approval_id: str, request: ApprovalDecisionRequest):
     try:
@@ -713,6 +742,7 @@ async def approvals_decision_endpoint(approval_id: str, request: ApprovalDecisio
         )
         if approval is None:
             raise HTTPException(status_code=404, detail=f"Approval not found: {approval_id}")
+        _sync_parlay_decision(approval, status=request.status, notes=request.decision_notes)
         return {"approval": approval}
     except HTTPException:
         raise
@@ -833,6 +863,7 @@ async def teams_approval_decision_endpoint(approval_id: str, request: TeamsAppro
         )
         if approval is None:
             raise HTTPException(status_code=404, detail=f"Approval not found: {approval_id}")
+        _sync_parlay_decision(approval, status=request.status, notes=request.decision_notes)
         record_agent_event(
             client_id=None,
             project_id=approval.get("project_id"),
