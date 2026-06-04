@@ -651,27 +651,6 @@ DECISION FRAMEWORK:
 - Does this require something genuinely new? → Propose creating a new approved section (requires internal approval).
 - Always confirm that a preview will be created for review before anything goes live.
 
-PODCAST PARLAY & VIDEO PRODUCTION WORKFLOW (Long-form interviews + clips):
-You are the persistent orchestrator for turning raw Riverside interviews (host + 1-2 guests) + client-identified b-roll into polished, branded long-form video + 5-10 short clips. This is a core repeatable "Parlay" (see the living executable spec).
-
-**Primary reference (load and follow exactly when a client mentions an interview, episode, "Straight From The Hart", podcast video, clips, or "the video we just recorded"):** `video_system/docs/PODCAST_PARLAY_FULL_WORKFLOW.md`. It contains the full step-by-step, the Mermaid diagram of the entire flow (ingest → planning → video assembly draft → captions generation + approval gate → final video production with approved captions + approval → YouTube unlisted with description/thumbnail/end-card → clip generation + separate approval → per-clip upload + playlist), roles (you + Alex for visuals, Resolve for execution), and exactly where the approval gates and revision loops live.
-
-Key principles (consistent with the spec):
-- Assets and plan live in `video_system/projects/<Client>/<Show_EpXX>/` (or mirrored in client_artifacts for memory). Use file tools + project context to inspect `planning/video_plan.json`, assets/, renders/, PROJECT_README.md.
-- You do NOT do the heavy editing yourself. You coordinate: run scaffolding (`new_project`), trigger planning/draft generation, call Resolve tools (once wired), produce previews, and — most importantly — gate everything client-facing with the approvals system.
-- The review gates (stages you call generate_video_draft + request_video_approval on) are exactly: `longform_draft` → `longform_captioned` → `clips`. request_video_approval derives the approval action_type from the stage automatically (longform_draft → video_longform_draft, longform_captioned → video_longform_captioned, clips → video_clip_package). Don't invent other stage names — the tools validate against this list.
-- Flow: render the long-form draft (generate_video_draft stage="longform_draft") → request_video_approval. After it's approved, generate the captioned long-form (stage="longform_captioned") → request_video_approval. Captioned approval is the hard gate that unlocks publishing the long-form. The clip package (stage="clips") follows the same render → approve pattern.
-- Iteration is the heart of the process: "changes_requested" + decision_notes come back from the client in Teams (these flow into the state machine automatically; in chat, call record_parlay_decision yourself). On changes_requested you stay in the same stage — read the notes + plan + transcript, dispatch Alex or instruct Resolve, then re-render (a new version v2/v3...) and request approval again. Repeat until approved. Fully auditable.
-- After the captioned long-form is approved: prepare description (from notes + brief), series thumbnail, end card, then publish (YouTube unlisted). Publishing is hard-gated — it cannot proceed without the matching approved approval.
-- Then clips phase: identify 5-10 moments (using approved captions as base where relevant), generate captioned shorts, package previews, one approval card (or set), iterate per clip if needed, then batch upload + add to playlist.
-- Always narrate progress ("I'm kicking off the first video assembly draft render now — give me a minute while the tools run. Captions approval will come next."). Confirm preview will be available for review before any publish.
-- For visuals decisions (cuts, layouts, text, b-roll placement, thumbnail treatment, captions presentation) lean on Alex as the specialist. You stay the client-facing single point of contact and the one who files the approvals and memory.
-- The workflow doc itself is designed to be upgraded after every real episode. When a client or you learn something ("we keep forgetting the end card on the first long-form upload"), propose an edit to the doc + any supporting tool/prompt. That is how we make the Parlay smarter without rebuilding graphs.
-
-You have (or will have) direct tools for key actuation points: init video project, run planning/draft, request video approval (which creates the DB record and triggers the Teams card), apply feedback edits to plan, prepare/publish YouTube assets, generate clips package. For anything not yet wired as a direct tool, say clearly "I'll have the video tools / Alex handle the render and post the approval card for you to review" and then do the coordination.
-
-Always tie video work back to the correct client_id / project (e.g. "ramair-straight-from-the-hart-ep06") so approvals, memory, and files go to the right place.
-
 COMMUNICATION STYLE:
 - Be helpful and proactive, but clear about process.
 - When proposing a change, briefly name the component/section you'll use.
@@ -1012,7 +991,7 @@ def _openai_messages_to_anthropic(
     # Workflow packages (like viktor.com "different packages of workflows"): inject active ones' prompts + spec refs.
     # This makes Nathan follow the living package specs (e.g. Podcast Parlay MD) when activated for the client.
     from app.workflow_packages import inject_package_context
-    packages_block = inject_package_context(client_id, "")
+    packages_block = inject_package_context(client_id, "", surface)
     if packages_block:
         system_parts.append(packages_block)
     system_parts.append(NATHAN_BASE_SYSTEM)
@@ -1103,6 +1082,10 @@ async def run_nathan_conversation_streaming(
     system_prompt, messages = _openai_messages_to_anthropic(
         openai_messages, client_id=client_id, surface=surface
     )
+    # Gate the tool list to the client's active workflow packages (base tools are
+    # always present). Computed once per conversation, not per round.
+    from app.workflow_packages import build_nathan_tools
+    nathan_tools = build_nathan_tools(client_id, NATHAN_TOOLS)
     any_text_emitted = False
 
     for round_num in range(max_tool_rounds + 1):
@@ -1111,7 +1094,7 @@ async def run_nathan_conversation_streaming(
                 model="claude-opus-4-7",
                 max_tokens=1024,
                 system=system_prompt,
-                tools=NATHAN_TOOLS,
+                tools=nathan_tools,
                 messages=messages,
             )
         except anthropic.APIError as exc:

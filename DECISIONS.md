@@ -286,15 +286,14 @@ For files Nathan *hasn't* pre-ingested (or when he needs the verbatim text), he 
 - "Packages" are the catalog of repeatable, high-value workflows (not one-off prompts).
 - parlayvu.ai becomes the "hire the AI + choose your packages" platform, with Nathan as the coworker.
 
-**Status as built (2026-06-03) — be precise about what actually exists:**
-- ✅ `app/workflow_packages/__init__.py` holds the whole foundation today: a `WorkflowPackage` dataclass, a `KNOWN_PACKAGES` registry dict, `register_package`/`get_active_packages`/`get_package`/`load_spec`, and `inject_package_context`. **There is no separate `registry.py` or `base.py`** — earlier drafts of this entry and `docs/workflow-packages-design.md` named those files, but the logic was inlined into `__init__.py`. There are **no per-package directories** (`podcast_parlay/tools.py`, `state.py`, `config.schema.json`, `ui/`) yet.
-- ✅ Per-client activation config: `client_artifacts/<id>/config.yaml` `active_workflows` is parsed into `ClientConfig` (`app/client_config.py`).
-- ✅ Nathan prompt construction calls `inject_package_context` (`app/nathan_llm.py`).
-- ⚠️ **Prompt injection is currently unconditional and surface-agnostic** — the Podcast-Parlay prompt block is also hardcoded into `NATHAN_BASE_SYSTEM`, so it fires for every client and on the Tavus voice surface too. This contradicts Decisions #3 and #7 and needs fixing.
-- ❌ **Tool registration is NOT yet conditional on active packages** — the video tools are added to the global `NATHAN_TOOLS` list unconditionally; a package's `tool_names` is inert metadata that nothing consumes.
+**Status as built (updated 2026-06-04) — be precise about what actually exists:**
+- ✅ `app/workflow_packages/__init__.py` holds the whole foundation today: a `WorkflowPackage` dataclass, a `KNOWN_PACKAGES` registry dict, `register_package`/`get_active_packages`/`get_package`/`load_spec`, `inject_package_context`, and `build_nathan_tools`. **There is no separate `registry.py` or `base.py`** — earlier drafts of this entry and `docs/workflow-packages-design.md` named those files, but the logic was inlined into `__init__.py`. There are **no per-package directories** (`podcast_parlay/tools.py`, `state.py`, `config.schema.json`, `ui/`) yet.
+- ✅ Per-client activation config: `client_artifacts/<id>/config.yaml` `active_workflows` is parsed into `ClientConfig` (`app/client_config.py`). It is tri-state: omitted → `None` ("un-migrated", treated as all packages), `[]` → none, `[...]` → exactly those.
+- ✅ **Conditional tool registration** — `build_nathan_tools(client_id, NATHAN_TOOLS)` filters the tool list per request: base tools (owned by no package) always show; package-owned tools (e.g. the 5 video tools) appear only when a package declaring them is active. Un-migrated clients keep everything (backward compatible).
+- ✅ **Surface-aware prompt injection** — `inject_package_context(client_id, base, surface)` injects the full package prose on text surfaces and a terse one-line pointer on the Tavus voice surface (honoring Decisions #3/#7). The Podcast-Parlay prose now lives in the package's `prompt_additions`, NOT hardcoded in `NATHAN_BASE_SYSTEM`, so it fires only when the package is active.
 - ❌ No `/workflows/*` platform endpoints or activation UI yet.
 
-**Planned (not yet built):** per-package dirs, conditional tool gating driven by `active_workflows`, surface-aware prompt injection, platform endpoints + activation UI. All packages should go through the same approvals + memory + audit.
+**Planned (not yet built):** per-package directories (the logic is still all in `__init__.py`), `/workflows/*` platform endpoints + activation UI. All packages already go through the same approvals + memory + audit.
 
 **What we deliberately rejected:**
 - Rebuilding the orchestration layer on LangGraph graphs + Studio as the primary authoring tool for packages.
@@ -308,5 +307,5 @@ For files Nathan *hasn't* pre-ingested (or when he needs the verbatim text), he 
 
 **Migration cost if we change mind:** High for the platform (would require re-expressing all specs as graphs, new UI, new deployment story). Low for internal sub-logic (we already use small graphs).
 
-**Cost to implement the chosen path:** Low incremental in principle (registry + prompt injection + a couple more packages). **Caveat (2026-06-03):** the Podcast Parlay package is currently a scaffold, not a working proof — its tools don't yet close the loop (stage vocabulary is inconsistent across `parlay_state.py` / `video_parlay_tools.py` / `nathan_llm.py`, and client approvals never call `record_parlay_decision`, so the state machine never advances). The *model* (spec + prompt + tools + approvals) is sound; this specific package needs the wiring finished before it proves anything.
+**Cost to implement the chosen path:** Low incremental in principle (registry + prompt injection + a couple more packages). **Status (2026-06-04):** the Podcast Parlay loop now closes end-to-end — the stage/action_type vocabulary is reconciled on `parlay_state.py`'s canonical names, client approvals advance the state machine via `_sync_parlay_decision` → `record_decision`, and the publish gates are enforced deterministically (all covered by `tests/test_parlay_loop.py`). The one remaining stub is the **actual video render** (`generate_video_draft` writes a placeholder marker, not a real Resolve render) — the orchestration around it is real, the rendering is not yet wired.
 

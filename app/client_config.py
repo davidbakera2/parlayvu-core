@@ -88,7 +88,12 @@ class ClientConfig:
     teams: TeamsConfig
     preferences: ClientPreferences
     cloudflare: Optional[CloudflareConfig] = None
-    active_workflows: list[str] = field(default_factory=list)  # e.g. ["podcast-parlay", "meeting-notes"] — enables "packages of workflows" like viktor.com
+    # Workflow packages enabled for this client (viktor.com-style "packages of workflows").
+    # None  = key omitted → un-migrated client; the packages layer treats this as "all
+    #         packages active" for backward compatibility.
+    # []    = explicitly no packages.
+    # [...] = exactly these packages.
+    active_workflows: Optional[list[str]] = None
 
     @property
     def artifacts_dir(self) -> Path:
@@ -211,10 +216,16 @@ def load_client_config(client_id: str) -> ClientConfig:
         authorized_contacts=authorized_contacts,
     )
 
-    active_workflows_raw = raw.get("active_workflows") or []
-    if not isinstance(active_workflows_raw, list):
-        raise ClientConfigError(f"{path}: active_workflows must be a list (or omit for [])")
-    active_workflows = [str(w).strip() for w in active_workflows_raw if str(w).strip()]
+    if "active_workflows" in raw:
+        active_workflows_raw = raw.get("active_workflows")
+        if active_workflows_raw is None:
+            active_workflows = []  # `active_workflows:` with no value → explicitly none
+        elif isinstance(active_workflows_raw, list):
+            active_workflows = [str(w).strip() for w in active_workflows_raw if str(w).strip()]
+        else:
+            raise ClientConfigError(f"{path}: active_workflows must be a list (omit the key to leave it unset)")
+    else:
+        active_workflows = None  # key omitted → un-migrated; treated as "all packages"
 
     return ClientConfig(
         client_id=client_id,

@@ -313,7 +313,14 @@ class TeamsHandlerRoutesThroughNathanTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         nathan_call.assert_awaited_once()
         messages_arg = nathan_call.await_args.args[0]
-        user_text = messages_arg[0]["content"]
+        # The current turn is the LAST message; earlier entries may be replayed
+        # conversation history (conv-1 is shared with other tests). Assert on the
+        # message that actually carries the attachment marker, not a fixed index.
+        user_text = next(
+            (m["content"] for m in reversed(messages_arg)
+             if isinstance(m.get("content"), str) and "[Attachments saved" in m["content"]),
+            "",
+        )
         self.assertIn("[Attachments saved", user_text)
         self.assertIn("Q3.pdf", user_text)
 
