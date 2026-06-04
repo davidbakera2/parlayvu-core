@@ -1,8 +1,18 @@
 # Workflow Packages for parlayvu.ai (like viktor.com)
 
 **Date:** 2026-06-03
-**Status:** Draft for discussion/implementation
+**Status:** Draft design — this document is the *target*, not a description of what's built.
 **Related:** PODCAST_PARLAY_FULL_WORKFLOW.md (example package), ARCHITECTURE.md, DECISIONS.md, app/nathan_llm.py, client_artifacts/*/config.yaml, video_parlay_tools.py
+
+> **Build status (2026-06-03):** What actually exists today is the foundation in
+> `app/workflow_packages/__init__.py` (`WorkflowPackage` dataclass, `KNOWN_PACKAGES`
+> registry, `inject_package_context`) plus the `active_workflows` config flag. The
+> `registry.py`, `base.py`, and per-package directories named below were **not**
+> created — that logic was inlined into `__init__.py`. Conditional tool registration
+> and the `/workflows/*` endpoints are **not** built; prompt injection is currently
+> unconditional and surface-agnostic. See DECISIONS.md #11 "Status as built" for the
+> authoritative gap list. Treat the file names and roadmap below as the plan to grow
+> into, not a map of the current tree.
 
 ## Goal
 Make parlayvu.ai the platform where teams "hire" Nathan (the AI coworker in Teams/Slack/Tavus) and activate different **pre-packaged workflows** ("packages") for recurring business processes.
