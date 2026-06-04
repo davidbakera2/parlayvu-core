@@ -642,6 +642,7 @@ TASK: Output ONE JSON object, nothing else:
       "primary_camera": "host" | "guest_01" | "guest_02",
       "active_roles": ["host", "guest_01"],
       "top_row_text": "NAME | TITLE",
+      "topic_heading": "SHORT SUBJECT HEADING FOR WHAT IS BEING DISCUSSED",
       "broll_id": "",
       "notes": "why this scene/layout"
     }}
@@ -663,8 +664,13 @@ RULES:
   primary_camera must be one of active_roles (the dominant speaker).
 - Only use roles present in CAMERA ROLES available.
 - top_row_text: the on-screen lower third for the primary speaker, "NAME | TITLE"
-  in the brand's style (uppercase as the brief implies). Pull real names/titles
-  from the brief/transcript.
+  in the brand's style. Pull real names/titles from the brief/transcript.
+- topic_heading: the LOWER-BOTTOM subject line — a short, punchy heading (≈3-7
+  words) describing what is being discussed in this scene. Keep the SAME heading
+  across consecutive scenes on the same topic, and CHANGE it when the discussion
+  moves to a new subject (typically every few minutes). This is what the viewer
+  reads to know "what are they talking about right now", so make it specific and
+  benefit/insight-oriented, not generic.
 - broll_id: only a value from B-ROLL available, otherwise "".
 {f"- Director note to honor: {notes}" if notes else ""}
 Output ONLY the JSON object."""
@@ -705,9 +711,22 @@ def _coerce_roles(layout: str, primary: str, active: list[str]) -> tuple[str, li
     return primary, active
 
 
-def _assemble_video_plan(episode_slug: str, episode_caption: str, llm_out: dict[str, Any], assets: dict[str, Any]) -> dict[str, Any]:
+def _assemble_video_plan(
+    episode_slug: str,
+    episode_caption: str,
+    llm_out: dict[str, Any],
+    assets: dict[str, Any],
+    lower_thirds: Optional[dict[str, str]] = None,
+) -> dict[str, Any]:
     """Turn the LLM's {speaker_map, scenes} into the full video_plan.json the
-    FFmpeg renderer consumes (scenes + broll + assets + settings)."""
+    FFmpeg renderer consumes (scenes + broll + assets + settings).
+
+    `lower_thirds` (role -> "Name | Title") overrides the top lower third per
+    speaker — the authoritative source for guest titles the LLM can't know.
+    Each scene's bottom lower third is the LLM's per-scene topic_heading (so it
+    changes with the discussion), falling back to the episode caption.
+    """
+    lower_thirds = lower_thirds or {}
     broll_by_stem = {Path(b).stem: b for b in assets.get("broll", [])}
 
     scenes: list[dict[str, Any]] = []
@@ -738,8 +757,8 @@ def _assemble_video_plan(episode_slug: str, episode_caption: str, llm_out: dict[
             "broll_id": broll_id,
             "broll_file": broll_file,
             "broll_source_start": "",
-            "top_row_text": s.get("top_row_text", ""),
-            "bottom_row_text": episode_caption,
+            "top_row_text": lower_thirds.get(primary) or s.get("top_row_text", ""),
+            "bottom_row_text": s.get("topic_heading") or episode_caption,
             "char": "",
             "notes": s.get("notes", ""),
         })
@@ -799,6 +818,7 @@ async def generate_video_plan(
     transcript_path: Optional[str] = None,
     show_start: Optional[str] = None,
     speaker_map: Optional[dict[str, str]] = None,
+    lower_thirds: Optional[dict[str, str]] = None,
     notes: Optional[str] = None,
 ) -> dict[str, Any]:
     """Draft planning/video_plan.json from the episode transcript (the planning
@@ -846,7 +866,7 @@ async def generate_video_plan(
         logger.exception("Video plan drafting failed for %s", episode_slug)
         return {"status": "error", "episode_slug": episode_slug, "message": f"Couldn't draft the plan: {exc}"}
 
-    plan = _assemble_video_plan(episode_slug, caption, llm_out, assets)
+    plan = _assemble_video_plan(episode_slug, caption, llm_out, assets, lower_thirds=lower_thirds)
     planning.mkdir(parents=True, exist_ok=True)
     plan_path = planning / "video_plan.json"
     plan_path.write_text(json.dumps(plan, indent=2), encoding="utf-8")
