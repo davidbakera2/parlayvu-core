@@ -97,6 +97,13 @@ projects/**/social/
 projects/**/Hooks/
 projects/**/Shorts/
 
+# --- Regenerable parlay artifacts ---
+# parlay_state.json is a READ-ONLY runtime mirror of the DB state (see
+# app/parlay_state.py). It is rewritten on every tool call — never source.
+projects/**/parlay_state.json
+# Spreadsheet backup snapshots written before edits (scratch, not source).
+projects/**/*.before_*.xlsx
+
 # Keep the _starter_project minimal
 !projects/_starter_project/assets/*.png
 !projects/_starter_project/assets/*.wav

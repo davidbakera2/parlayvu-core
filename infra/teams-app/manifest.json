@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
   "manifestVersion": "1.17",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "id": "2dc8aa66-9c5b-4ff5-9151-48408f1f6554",
   "developer": {
     "name": "ParlayVU",
@@ -92,7 +92,6 @@
   ],
   "validDomains": [
     "parlayvu-api.thankfulriver-96fed9c6.eastus.azurecontainerapps.io",
-    "parlayvu.ai",
-    "localhost"
+    "parlayvu.ai"
   ]
 }
