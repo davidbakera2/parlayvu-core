@@ -280,16 +280,26 @@ class Renderer:
         draw.line((x1, y2 - 1, x2 - 1, y2 - 1), fill=(255, 255, 255), width=width)
 
     def make_overlay(self, name: str, template_name: str, top_text: str, topic: str) -> Path:
-        base_rgb = Image.open(self.layouts / template_name).convert("RGB")
-        base_rgb.info.clear()
-        if base_rgb.size != (W, H):
-            base_rgb = base_rgb.resize((W, H), Image.Resampling.LANCZOS)
+        src = Image.open(self.layouts / template_name)
+        if src.size != (W, H):
+            src = src.resize((W, H), Image.Resampling.LANCZOS)
+        src = src.convert("RGBA")
+        src.info.clear()
+        base_rgb = src.convert("RGB")  # flattened copy, used for the no-background path
 
         if template_name != "1cam.png" and self.setting_text("background_video", ""):
-            rgb = base_rgb.convert("RGB")
-            alpha = ImageChops.difference(rgb, Image.new("RGB", rgb.size, "black")).convert("L")
-            alpha = alpha.point(lambda px: 0 if px <= 3 else 255)
-            base = Image.merge("RGBA", (*rgb.split(), alpha))
+            # Composing over a background video. Prefer the template's OWN alpha so the
+            # box frames keep clean anti-aliased edges. Only fall back to deriving
+            # transparency from "not black" for flat (fully-opaque) templates — that
+            # hard threshold turned the white frame's gray anti-alias halo into a solid
+            # gray ring, i.e. the thin dark line around/inside every box.
+            if src.getchannel("A").getextrema()[0] < 255:
+                base = src.copy()
+            else:
+                rgb = base_rgb
+                alpha = ImageChops.difference(rgb, Image.new("RGB", rgb.size, "black")).convert("L")
+                alpha = alpha.point(lambda px: 0 if px <= 8 else 255)
+                base = Image.merge("RGBA", (*rgb.split(), alpha))
         else:
             base = base_rgb.convert("RGBA")
         base.info.clear()
