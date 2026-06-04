@@ -22,7 +22,10 @@ iteration loops, and how Nathan is supposed to use these.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -48,6 +51,25 @@ SPREADSHEET_TO_JSON = VIDEO_SYSTEM_ROOT / "tools" / "spreadsheet_to_json.py"
 # Strong references to in-flight background render tasks so the event loop does
 # not garbage-collect them mid-run.
 _RENDER_TASKS: "set[asyncio.Task]" = set()
+
+# --- Planner (transcript -> video_plan.json) -----------------------------------
+PLAN_MODEL = "claude-sonnet-4-6"
+PLAN_MAX_TOKENS = 8000
+PLAN_TRANSCRIPT_CAP = 60_000   # chars of transcript fed to the planner
+PLAN_BRIEF_CAP = 6_000
+
+# Interview camera angles (role -> conventional source filename).
+_ROLE_FILES = {"host": "host.mp4", "guest_01": "guest_01.mp4", "guest_02": "guest_02.mp4"}
+# Branding/system assets (filename -> asset_key the renderer expects), not footage/b-roll.
+_BRANDING_KEYS = {
+    "intro.mp4": "intro",
+    "show_image.png": "show_image",
+    "show_image_lower_third.png": "show_image_lower_third",
+    "logo_square.png": "logo_square",
+    "music.wav": "music",
+}
+_VALID_LAYOUTS = {"1cam", "2cam", "2cam_broll", "3cam", "3cam_broll"}
+_LAYOUT_ROLE_COUNT = {"1cam": 1, "2cam": 2, "2cam_broll": 2, "3cam": 3, "3cam_broll": 3}
 
 
 def _repo_rel(p: Path) -> str:
@@ -453,6 +475,315 @@ async def generate_video_draft(
             f"Render started for {stage} v{version}{caption_note}. It runs in the background "
             "(a few minutes for a full episode). I'll have the preview when it finishes — ask me "
             "for the status, or I'll request approval once it's rendered."
+        ),
+    }
+
+
+def _find_transcript(planning_dir: Path, explicit: Optional[str]) -> Optional[Path]:
+    """Locate the transcript to plan from. Prefers an explicit path, then the
+    largest speaker-labeled .txt (Riverside export), then the largest .srt/.vtt."""
+    if explicit:
+        p = Path(explicit)
+        if not p.is_absolute():
+            p = planning_dir / explicit
+        return p if p.exists() else None
+    if not planning_dir.exists():
+        return None
+    txts = [t for t in planning_dir.glob("*.txt") if "caption" not in t.name.lower()]
+    if txts:
+        return max(txts, key=lambda p: p.stat().st_size)
+    for ext in ("*.srt", "*.vtt"):
+        files = list(planning_dir.glob(ext))
+        if files:
+            return max(files, key=lambda p: p.stat().st_size)
+    return None
+
+
+def _load_brief(client_id: str, *, cap: int = PLAN_BRIEF_CAP) -> str:
+    """Best-effort read of the client's 00_Client_Brief markdown for names,
+    titles, topic framing, and brand voice. Empty string if none."""
+    base = REPO_ROOT / "client_artifacts" / client_id / "00_Client_Brief"
+    if not base.exists():
+        return ""
+    parts = []
+    for md in sorted(base.glob("*.md")):
+        try:
+            parts.append(md.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+    return "\n\n".join(parts)[:cap]
+
+
+def _classify_assets(project_dir: Path) -> dict[str, Any]:
+    """Sort the project's media into cameras / branding / b-roll."""
+    assets_dir = project_dir / "assets"
+    present = sorted(p.name for p in assets_dir.glob("*") if p.is_file()) if assets_dir.exists() else []
+    cameras = [n for n in present if n in _ROLE_FILES.values()]
+    branding = {name: key for name, key in _BRANDING_KEYS.items() if name in present}
+    broll = [n for n in present if n not in _ROLE_FILES.values() and n not in _BRANDING_KEYS]
+    return {"present": present, "cameras": cameras, "branding": branding, "broll": broll}
+
+
+def _strip_json_fence(raw: str) -> str:
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
+        raw = re.sub(r"\n?```$", "", raw)
+    return raw.strip()
+
+
+async def _draft_scenes_with_llm(
+    *,
+    episode_caption: str,
+    transcript: str,
+    brief: str,
+    assets: dict[str, Any],
+    speaker_map: Optional[dict[str, str]],
+    notes: Optional[str],
+) -> dict[str, Any]:
+    """Ask Sonnet to segment the transcript into a scene plan. Returns the parsed
+    JSON {speaker_map, scenes:[...]}. Raises RuntimeError if the API key is absent."""
+    import anthropic
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY is required to draft a video plan")
+
+    broll_ids = [Path(b).stem for b in assets.get("broll", [])]
+    roles_available = [r for r, f in _ROLE_FILES.items() if f in assets.get("cameras", [])] or ["host"]
+
+    fixed_map = json.dumps(speaker_map) if speaker_map else "null"
+    prompt = f"""You are Alex, ParlayVU's video editor, drafting the scene-by-scene plan for an
+interview episode. You turn a speaker-labeled transcript into a structured cut.
+
+EPISODE CAPTION (use verbatim as every scene's bottom_row_text): {episode_caption}
+
+CAMERA ROLES available (you may place these on screen): {roles_available}
+B-ROLL available (reference by broll_id = these exact ids, else leave ""): {broll_ids}
+PROVIDED SPEAKER MAP (use as-is if not null): {fixed_map}
+
+CLIENT BRIEF (for correct names, titles, topic, brand voice):
+{brief or "(none provided)"}
+
+TRANSCRIPT (speaker-labeled, timestamps look like "Name (MM:SS)"):
+{transcript}
+
+TASK: Output ONE JSON object, nothing else:
+{{
+  "speaker_map": {{"<transcript speaker name>": "host" | "guest_01" | "guest_02", ...}},
+  "scenes": [
+    {{
+      "scene_id": "S001",
+      "layout": "1cam" | "2cam" | "2cam_broll" | "3cam" | "3cam_broll",
+      "start": "HH:MM:SS.mmm",
+      "end": "HH:MM:SS.mmm",
+      "primary_camera": "host" | "guest_01" | "guest_02",
+      "active_roles": ["host", "guest_01"],
+      "top_row_text": "NAME | TITLE",
+      "broll_id": "",
+      "notes": "why this scene/layout"
+    }}
+  ]
+}}
+
+RULES:
+- speaker_map: the show host/interviewer is "host"; map remaining speakers to
+  "guest_01" then "guest_02" in order of first appearance. Honor the provided map if given.
+- Segment by topic/turn into scenes of roughly 20s-120s. Use the transcript
+  timestamps for start/end (convert "MM:SS" to "HH:MM:SS.000"); make scenes
+  sequential and non-overlapping.
+- layout: "1cam" when one person holds the floor (monologue/cold open);
+  "2cam" for two-person dialogue; "3cam" when all three are engaged. Use the
+  "*_broll" variants only when a listed broll_id genuinely illustrates the moment.
+- active_roles must match the layout: 1 role for 1cam, 2 for 2cam*, 3 for 3cam*.
+  primary_camera must be one of active_roles (the dominant speaker).
+- Only use roles present in CAMERA ROLES available.
+- top_row_text: the on-screen lower third for the primary speaker, "NAME | TITLE"
+  in the brand's style (uppercase as the brief implies). Pull real names/titles
+  from the brief/transcript.
+- broll_id: only a value from B-ROLL available, otherwise "".
+{f"- Director note to honor: {notes}" if notes else ""}
+Output ONLY the JSON object."""
+
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    response = await client.messages.create(
+        model=PLAN_MODEL,
+        max_tokens=PLAN_MAX_TOKENS,
+        temperature=0.2,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = "".join(b.text for b in response.content if hasattr(b, "text"))
+    data = json.loads(_strip_json_fence(raw))
+    if not isinstance(data, dict) or "scenes" not in data:
+        raise ValueError("Planner did not return the expected {speaker_map, scenes} JSON")
+    return data
+
+
+def _coerce_roles(layout: str, primary: str, active: list[str]) -> tuple[str, list[str]]:
+    """Reconcile active_roles with what the layout requires so the renderer
+    (which enforces exact camera counts for 2cam/3cam) won't reject the scene."""
+    order = ["host", "guest_01", "guest_02"]
+    active = [r for r in active if r in _ROLE_FILES] or ([primary] if primary in _ROLE_FILES else ["host"])
+    if primary not in active:
+        primary = active[0]
+    need = _LAYOUT_ROLE_COUNT.get(layout, len(active))
+    if len(active) > need:
+        # keep primary + fill toward the needed count, preserving order
+        kept = [primary] + [r for r in order if r in active and r != primary]
+        active = kept[:need]
+    elif len(active) < need:
+        for r in order:
+            if r not in active:
+                active.append(r)
+            if len(active) >= need:
+                break
+        active = active[:need]
+    return primary, active
+
+
+def _assemble_video_plan(episode_slug: str, episode_caption: str, llm_out: dict[str, Any], assets: dict[str, Any]) -> dict[str, Any]:
+    """Turn the LLM's {speaker_map, scenes} into the full video_plan.json the
+    FFmpeg renderer consumes (scenes + broll + assets + settings)."""
+    broll_by_stem = {Path(b).stem: b for b in assets.get("broll", [])}
+
+    scenes: list[dict[str, Any]] = []
+    for i, s in enumerate(llm_out.get("scenes", []), start=1):
+        layout = s.get("layout") if s.get("layout") in _VALID_LAYOUTS else "2cam"
+        primary = s.get("primary_camera") or "host"
+        active = s.get("active_roles") or [primary]
+        primary, active = _coerce_roles(layout, primary, active)
+        broll_id = (s.get("broll_id") or "").strip()
+        broll_file = broll_by_stem.get(broll_id, "")
+        if not broll_file and "broll" in layout:
+            # b-roll layout but no valid b-roll chosen — fall back to the plain layout
+            layout = layout.replace("_broll", "")
+            broll_id = ""
+            primary, active = _coerce_roles(layout, primary, active)
+        scenes.append({
+            "enabled": True,
+            "scene_id": s.get("scene_id") or f"S{i:03d}",
+            "start": s.get("start", ""),
+            "end": s.get("end", ""),
+            "duration": "",  # renderer infers from start/end
+            "source_start": "",
+            "layout": layout,
+            "primary_camera": primary,
+            "host_source": _ROLE_FILES["host"] if "host" in active else "",
+            "guest_01_source": _ROLE_FILES["guest_01"] if "guest_01" in active else "",
+            "guest_02_source": _ROLE_FILES["guest_02"] if "guest_02" in active else "",
+            "broll_id": broll_id,
+            "broll_file": broll_file,
+            "broll_source_start": "",
+            "top_row_text": s.get("top_row_text", ""),
+            "bottom_row_text": episode_caption,
+            "char": "",
+            "notes": s.get("notes", ""),
+        })
+
+    broll_section = [{"broll_id": Path(b).stem, "file_name": b, "default_source_start": ""} for b in assets.get("broll", [])]
+    assets_section = [{"asset_key": key, "file_name": name, "purpose": key} for name, key in assets.get("branding", {}).items()]
+    settings_section = [
+        {"setting": "auto_intro", "value": "true" if "intro" in assets.get("branding", {}).values() else "false"},
+        {"setting": "auto_opening_show_image", "value": "true"},
+        {"setting": "auto_outro_show_image", "value": "true"},
+        {"setting": "background_video", "value": ""},
+    ]
+    return {
+        "project": episode_slug,
+        "_generated_by": "generate_video_plan (Nathan/Alex draft — review before rendering)",
+        "speaker_map": llm_out.get("speaker_map", {}),
+        "scenes": scenes,
+        "graphics": [],
+        "broll": broll_section,
+        "assets": assets_section,
+        "settings": settings_section,
+    }
+
+
+async def generate_video_plan(
+    *,
+    client_id: str,
+    episode_slug: str,
+    episode_caption: Optional[str] = None,
+    transcript_path: Optional[str] = None,
+    speaker_map: Optional[dict[str, str]] = None,
+    notes: Optional[str] = None,
+) -> dict[str, Any]:
+    """Draft planning/video_plan.json from the episode transcript (the planning
+    step that used to be hand-authored in a spreadsheet).
+
+    Reads the transcript (auto-detected in planning/, or `transcript_path`), the
+    client brief, and the available footage/b-roll, then has Alex segment the
+    interview into scenes with layouts, lower-thirds, and b-roll placement. Writes
+    a complete video_plan.json that generate_video_draft can render immediately.
+    Always review/iterate the draft — it's a starting cut, not final.
+    """
+    project_dir = _get_project_dir(client_id, episode_slug)
+    planning = project_dir / "planning"
+    project_id = ps.parlay_project_id(client_id, episode_slug)
+
+    transcript_file = _find_transcript(planning, transcript_path)
+    if transcript_file is None:
+        return {
+            "status": "error",
+            "episode_slug": episode_slug,
+            "message": (
+                f"No transcript found in {_repo_rel(planning)}/. Drop a speaker-labeled "
+                "transcript (e.g. the Riverside .txt) into planning/, or pass transcript_path."
+            ),
+        }
+
+    transcript = transcript_file.read_text(encoding="utf-8", errors="replace")[:PLAN_TRANSCRIPT_CAP]
+    caption = (episode_caption or episode_slug.replace("_", " ")).strip()
+    brief = _load_brief(client_id)
+    assets = _classify_assets(project_dir)
+
+    try:
+        llm_out = await _draft_scenes_with_llm(
+            episode_caption=caption, transcript=transcript, brief=brief,
+            assets=assets, speaker_map=speaker_map, notes=notes,
+        )
+    except Exception as exc:
+        logger.exception("Video plan drafting failed for %s", episode_slug)
+        return {"status": "error", "episode_slug": episode_slug, "message": f"Couldn't draft the plan: {exc}"}
+
+    plan = _assemble_video_plan(episode_slug, caption, llm_out, assets)
+    planning.mkdir(parents=True, exist_ok=True)
+    plan_path = planning / "video_plan.json"
+    plan_path.write_text(json.dumps(plan, indent=2), encoding="utf-8")
+
+    # Advance the state machine to PLANNING (force from intake if needed).
+    try:
+        ps.set_stage(project_id, ps.PLANNING, by="nathan", note=notes, client_id=client_id)
+    except ps.ParlayTransitionError:
+        ps.set_stage(project_id, ps.PLANNING, by="nathan", note="(plan drafted)", client_id=client_id, force=True)
+    except Exception as exc:
+        logger.warning("Could not set PLANNING stage for %s: %s", episode_slug, exc)
+    _refresh_state_mirror(client_id, episode_slug)
+
+    _safe_event(client_id, project_id, "video_plan_drafted",
+                f"Drafted video plan for {episode_slug} ({len(plan['scenes'])} scenes)",
+                {"scene_count": len(plan["scenes"]), "transcript": transcript_file.name,
+                 "plan_path": _repo_rel(plan_path)})
+
+    scenes_preview = [
+        {"scene_id": s["scene_id"], "layout": s["layout"], "start": s["start"],
+         "end": s["end"], "top_row_text": s["top_row_text"]}
+        for s in plan["scenes"][:8]
+    ]
+    return {
+        "status": "planned",
+        "episode_slug": episode_slug,
+        "client_id": client_id,
+        "plan_path": _repo_rel(plan_path),
+        "scene_count": len(plan["scenes"]),
+        "speaker_map": plan["speaker_map"],
+        "scenes_preview": scenes_preview,
+        "transcript_used": transcript_file.name,
+        "message": (
+            f"Drafted a {len(plan['scenes'])}-scene plan for {episode_slug} from "
+            f"{transcript_file.name}. Review the scenes/lower-thirds (and the speaker map "
+            f"{plan['speaker_map']}), tweak if needed, then I can render the draft."
         ),
     }
 

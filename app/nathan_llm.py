@@ -470,6 +470,29 @@ NATHAN_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "generate_video_plan",
+        "description": (
+            "Draft the scene-by-scene video plan (planning/video_plan.json) for a Podcast Parlay "
+            "episode from its transcript. Reads the transcript in the project's planning/ folder "
+            "(or transcript_path), the client brief, and the available footage/b-roll, then segments "
+            "the interview into scenes with layouts, lower-thirds, and b-roll placement. Call this "
+            "after the project is initialized and the transcript + assets are in place, BEFORE "
+            "generate_video_draft. The result is a reviewable starting cut — show the user the scene "
+            "list + assumed speaker map and let them adjust before rendering."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "client_id": {"type": "string", "description": "Active client_id, e.g. 'ramair'."},
+                "episode_slug": {"type": "string", "description": "Episode slug matching the project folder."},
+                "episode_caption": {"type": "string", "description": "Lower-third episode caption used on every scene, e.g. 'EP06: ...'. Defaults to a readable form of the slug."},
+                "transcript_path": {"type": "string", "description": "Optional explicit transcript file; otherwise auto-detected in planning/."},
+                "notes": {"type": "string", "description": "Optional director guidance for the cut (pacing, what to feature, b-roll emphasis)."},
+            },
+            "required": ["client_id", "episode_slug"],
+        },
+    },
+    {
         "name": "generate_video_draft",
         "description": (
             "Generate (or prepare) the next video draft for a Podcast Parlay stage. "
@@ -853,6 +876,16 @@ async def _execute_tool(tool_name: str, tool_input: dict[str, Any]) -> str:
                 episode_slug=tool_input["episode_slug"],
                 show_name=tool_input.get("show_name"),
                 raw_assets_note=tool_input.get("raw_assets_note"),
+            )
+        elif tool_name == "generate_video_plan":
+            from app.tools.video_parlay_tools import generate_video_plan
+
+            result = await generate_video_plan(
+                client_id=tool_input["client_id"],
+                episode_slug=tool_input["episode_slug"],
+                episode_caption=tool_input.get("episode_caption"),
+                transcript_path=tool_input.get("transcript_path"),
+                notes=tool_input.get("notes"),
             )
         elif tool_name == "generate_video_draft":
             from app.tools.video_parlay_tools import generate_video_draft

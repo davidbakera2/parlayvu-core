@@ -92,6 +92,7 @@ register_package(
         spec_path=Path("video_system/docs/PODCAST_PARLAY_FULL_WORKFLOW.md"),
         tool_names=[
             "init_podcast_parlay_project",
+            "generate_video_plan",
             "generate_video_draft",
             "request_video_approval",
             "record_parlay_decision",
@@ -116,6 +117,10 @@ register_package(
             "approval action_type from the stage (longform_draft → video_longform_draft, "
             "longform_captioned → video_longform_captioned, clips → video_clip_package). Don't invent "
             "other stage names — the tools validate against this list.\n"
+            "- Planning first: once the project is initialized and the transcript + footage are in "
+            "place, call generate_video_plan to draft planning/video_plan.json from the transcript "
+            "(scenes, layouts, lower-thirds, b-roll). Show the user the scene list + assumed speaker "
+            "map and let them adjust before rendering.\n"
             "- Flow: render longform_draft → request_video_approval. After approval, render "
             "longform_captioned → request_video_approval. Captioned approval is the hard gate that "
             "unlocks publishing the long-form. The clip package (stage='clips') follows the same pattern.\n"
