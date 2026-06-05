@@ -15,9 +15,9 @@ dist/
 .astro/
 .wrangler/
 
-generated_sites/**/node_modules/
-generated_sites/**/dist/
-generated_sites/**/*.log
+# Dylan local/demo site outputs — created at runtime by app/agents/tools/dylan_tools.py,
+# regenerated per run. Not source content; do not track.
+generated_sites/
 azure_build_context/
 parlayvu-azure-build.tar.gz
 

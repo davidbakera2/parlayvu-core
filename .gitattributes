@@ -136,18 +136,3 @@ Makefile        text eol=lf
 
 # Note: If you add new file types (e.g. new template formats), declare
 # them here as text eol=lf or binary as appropriate.
-
-# -------------------------------------------------------------------
-# video_system specific relaxations
-# -------------------------------------------------------------------
-# Captions, transcripts, and planning files come from external recorders
-# (e.g. Riverside) and editors. They commonly have trailing spaces at
-# phrase ends and specific EOF newlines. Do not treat these as errors.
-video_system/**/planning/*.srt      whitespace=-trailing-space,-blank-at-eof
-video_system/**/planning/*.vtt      whitespace=-trailing-space,-blank-at-eof
-video_system/**/planning/*.txt      whitespace=-trailing-space,-blank-at-eof
-video_system/**/planning/*.ass      whitespace=-trailing-space,-blank-at-eof
-video_system/**/captions.*          whitespace=-trailing-space,-blank-at-eof
-video_system/**/david-*.txt         whitespace=-trailing-space,-blank-at-eof
-video_system/**/stfh-*.txt          whitespace=-trailing-space,-blank-at-eof
-video_system/**/stfh-*.srt          whitespace=-trailing-space,-blank-at-eof

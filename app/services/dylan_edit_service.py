@@ -23,6 +23,7 @@ different Dylan action. Both feed into the same preview→approval→promote flo
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -49,6 +50,22 @@ EDITS_SUBDIR = "edits"
 MAX_HTML_CHARS = 200_000  # cap so we never blow the context window on a bizarre file
 SONNET_MODEL = "claude-sonnet-4-6"
 SONNET_MAX_TOKENS = 8_000
+
+# Canonical reference designs for the approved design-system sections.
+# These .astro components are the source of truth for section structure/styling;
+# _generate_section_html() feeds the matching one to the LLM as grounding so output
+# matches the approved look instead of being freestyled. Not every approved section
+# has a reference file yet — missing ones fall back to a freestyle prompt.
+DESIGN_SYSTEM_SECTIONS_DIR = Path(__file__).resolve().parents[2] / "design-system" / "sections"
+
+
+def _load_section_reference(section_name: str) -> Optional[str]:
+    """Return the reference .astro markup for an approved section, or None if absent."""
+    reference = DESIGN_SYSTEM_SECTIONS_DIR / f"{section_name}.astro"
+    try:
+        return reference.read_text(encoding="utf-8")
+    except OSError:
+        return None
 
 
 def _timestamp_slug(now: Optional[datetime] = None) -> str:
@@ -502,11 +519,28 @@ async def _generate_section_html(
     """Generate section HTML guided by the design system (v1)."""
     client = anthropic.AsyncAnthropic()
 
+    reference_astro = _load_section_reference(section_name)
+    if reference_astro:
+        reference_block = (
+            "Canonical reference design (Astro component — the approved structure, "
+            "Tailwind classes, and layout for this section):\n"
+            f"```astro\n{reference_astro}\n```\n\n"
+            "Convert this reference into plain HTML for the provided data: keep the same "
+            "structure, Tailwind classes, and styling, drop the Astro frontmatter/props "
+            "syntax, and substitute the real values from Data below.\n"
+        )
+    else:
+        reference_block = (
+            "No reference component exists for this section yet — compose a clean, "
+            "accessible layout using semantic Tailwind classes.\n"
+        )
+
     prompt = f"""You are Dylan Brooks composing a clean, accessible section from the ParlayVU Design System.
 
 Section: {section_name}
 Client: {client_display_name}
 
+{reference_block}
 Data:
 {json.dumps(section_data, indent=2)}
 

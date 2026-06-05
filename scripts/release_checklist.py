@@ -57,7 +57,7 @@ def build_release_checks() -> list[dict[str, list[str]]]:
             "title": "Pitch Materials",
             "items": [
                 "Confirm live site and RamAir proof point are ready.",
-                "Use the architecture story from docs/architecture.md.",
+                "Use the architecture story from ARCHITECTURE.md.",
                 "Prepare a fallback path for unavailable external integrations.",
             ],
         },
