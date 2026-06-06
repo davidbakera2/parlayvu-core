@@ -520,8 +520,12 @@ class Renderer:
         overlay = self.make_overlay(overlay_name, template_name, top_text, topic)
         host = self.asset_path(scene.get("host_source") or "host.mp4")
         guest = self.asset_path(scene.get("guest_01_source") or "guest_01.mp4")
-        background = self.asset_path(self.setting_text("background_video", ""))
-        has_background = background.exists()
+        background_name = self.setting_text("background_video", "")
+        background = self.asset_path(background_name)
+        # Only treat the background as present when a file name was actually configured.
+        # Without this guard an empty setting resolves asset_path("") to the assets
+        # directory, which exists() reports True and ffmpeg then fails to open.
+        has_background = bool(background_name) and background.is_file()
         if has_background:
             inputs.extend(["-stream_loop", "-1", "-t", f"{duration:.3f}", "-i", background])
             inputs.extend(["-loop", "1", "-t", f"{duration:.3f}", "-i", overlay])
@@ -974,7 +978,7 @@ def main() -> None:
     parser.add_argument(
         "--template",
         default=None,
-        help="Path to template_config.json. Defaults to video_system/templates/ramair_interview/template_config.json.",
+        help="Path to template_config.json. Defaults to the parlayvu_interview/legacy visual system.",
     )
     parser.add_argument("--with-subtitles", action="store_true", help="Also render final_with_subtitles.mp4.")
     parser.add_argument("--max-scenes", type=int, default=None, help="Render only the first N enabled scenes for smoke tests.")
@@ -982,7 +986,7 @@ def main() -> None:
 
     project = Path(args.project)
     system_root = Path(__file__).resolve().parents[1]
-    template = Path(args.template) if args.template else system_root / "templates" / "ramair_interview" / "template_config.json"
+    template = Path(args.template) if args.template else system_root / "templates" / "visual_systems" / "parlayvu_interview" / "legacy" / "template_config.json"
     Renderer(project, template, args.max_scenes).render(args.with_subtitles)
 
 

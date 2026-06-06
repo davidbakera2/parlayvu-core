@@ -68,14 +68,6 @@ For early demos, `app.database.initialize_database()` can create tables directly
 
 Project memory writes are gated by `PROJECT_MEMORY_ENABLED`. Leave it `false` for local testing when you do not want API calls to write to Neon. Set it to `true` in a configured demo/prod environment after tables exist.
 
-To initialize the configured database and seed the investor demo project:
-
-```powershell
-python scripts/seed_demo.py
-```
-
-The seed creates a RamAir client and `ramair-straight-from-the-hart` project with source material, channel pilot artifacts, campaign outputs, an approval gate, and Nathan events. It is idempotent, so it can be rerun safely during setup.
-
 The RamAir Teams channel pilot is documented in `docs/ramair-client-channel-pilot.md`, with starter channel files under `client_artifacts/ramair/`. Print the channel standard or bind a real Teams channel when IDs are available with:
 
 ```powershell
@@ -93,28 +85,12 @@ Dylan deploy requests now require an approved `deploy_site` approval before depl
 
 Readiness checks are documented in `docs/readiness.md`. Use `GET /readiness` before demos to confirm LLM, database/project memory, M365, HeyGen, Teams, and approvals are configured as expected.
 
-## Investor Demo
-
-The investor demo runbook is documented in `docs/investor-demo-runbook.md`. Generate the command sequence with:
-
-```powershell
-python scripts/demo_runbook.py
-```
-
 ## Azure Container Apps
 
 The preferred hosted API path is Azure Container Apps with Neon Postgres kept as the database through `DATABASE_URL`. This keeps ParlayVU Dockerized and portable while aligning the hosted API with Teams, Microsoft 365, and Azure Bot Service. See `docs/azure-container-apps.md`. Print the Azure command checklist with:
 
 ```powershell
 python scripts/azure_deploy_checklist.py
-```
-
-## AWS Fargate
-
-The Fargate deployment path remains available as a portability option and is documented in `docs/aws-fargate.md`. Print the AWS command checklist with:
-
-```powershell
-python scripts/aws_deploy_checklist.py
 ```
 
 ## Release Checklist
@@ -149,5 +125,4 @@ The native Teams media bot scaffold lives under `services/teams-media-bot/`. It 
 4. Add database models and migrations for clients, projects, source assets, outputs, approvals, and agent activity.
 5. Add Microsoft Graph helpers for agent mailboxes and Teams events.
 6. Add HeyGen LiveAvatar callbacks connected to approved project memory.
-7. Containerize the API for Azure Container Apps while preserving AWS Fargate portability.
-8. Create a polished investor demo path using the RamAir case study.
+7. Containerize the API for Azure Container Apps.

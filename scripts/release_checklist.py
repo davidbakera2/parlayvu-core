@@ -8,7 +8,7 @@ def build_release_checks() -> list[dict[str, list[str]]]:
             "items": [
                 "Rotate credentials that were stored in local .env.",
                 "Confirm .env is ignored and not shared.",
-                "Move production values into AWS Secrets Manager under /parlayvu/prod/<NAME>.",
+                "Move production values into Azure Container App secrets or Azure Key Vault.",
                 "Keep MICROSOFT_GRAPH_ALLOW_SEND=false until send approvals are fully tested.",
             ],
         },
@@ -18,14 +18,6 @@ def build_release_checks() -> list[dict[str, list[str]]]:
                 "Install dependencies with pip install -r requirements.txt.",
                 "Run python -m unittest discover -s tests.",
                 "Confirm app and script syntax checks pass.",
-            ],
-        },
-        {
-            "title": "Demo Memory",
-            "items": [
-                "Run python scripts/seed_demo.py.",
-                "Confirm RamAir project memory exists.",
-                "Confirm pending approvals are visible.",
             ],
         },
         {
@@ -40,24 +32,15 @@ def build_release_checks() -> list[dict[str, list[str]]]:
         {
             "title": "Demo Rehearsal",
             "items": [
-                "Run python scripts/demo_runbook.py.",
                 "Walk through Teams, Nathan, Dylan, approvals, M365 draft, and HeyGen question flow.",
                 "Confirm deploys and sends remain approval-gated.",
-            ],
-        },
-        {
-            "title": "AWS/Fargate",
-            "items": [
-                "Review docs/aws-fargate.md.",
-                "Run python scripts/aws_deploy_checklist.py.",
-                "Confirm ECR, ECS, IAM, ALB, CloudWatch, and Secrets Manager setup.",
             ],
         },
         {
             "title": "Pitch Materials",
             "items": [
                 "Confirm live site and RamAir proof point are ready.",
-                "Use the architecture story from docs/architecture.md.",
+                "Use the architecture story from ARCHITECTURE.md.",
                 "Prepare a fallback path for unavailable external integrations.",
             ],
         },

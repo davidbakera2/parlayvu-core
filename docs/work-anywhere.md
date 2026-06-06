@@ -88,7 +88,7 @@ Add Episode 04 transcript, notes, or `client_artifacts/ramair/` updates before p
 
 ### 4. Optional: hosted API
 
-You do **not** need Azure/AWS for coding with Cursor. Hosted API only matters if you want Nathan endpoints without running Python locally.
+You do **not** need Azure for coding with Cursor. Hosted API only matters if you want Nathan endpoints without running Python locally.
 
 ---
 
@@ -179,7 +179,7 @@ See [Cost summary](#cost-summary) below.
 | **Neon Postgres** | **Maybe** — free tier is often enough for demos; paid tier if you exceed storage/compute. Enabling `PROJECT_MEMORY_ENABLED` does not add a "travel fee," only normal DB billing. |
 | **Microsoft 365 / Teams / nathan@ mailbox** | **No** incremental — existing tenant licenses. |
 | **HeyGen, Resend, Cloudflare** | **No** incremental for travel — existing subscriptions/usage; API calls same as home. |
-| **Azure Container Apps / AWS Fargate / Teams media bot VM** | **Yes, if you turn them on** — hosting is per hour/month. **Not required** for Pentwater coding with Cursor. |
+| **Azure Container Apps / Teams media bot VM** | **Yes, if you turn them on** — hosting is per hour/month. **Not required** for Pentwater coding with Cursor. |
 | **New laptop** | **Only if you buy hardware** — not required if you bring your current machine. |
 | **Hotel / phone data** | Your usual travel costs — not ParlayVU-specific. |
 
@@ -191,7 +191,7 @@ See [Cost summary](#cost-summary) below.
 
 1. Git push tonight → clone tomorrow  
 2. Cursor + Python venv + `.env`  
-3. Skip new Azure/AWS unless you need a public API URL  
+3. Skip new Azure hosting unless you need a public API URL  
 4. Build parlay template + EP04 in repo; save M365/HeyGen live demo for after readiness at home or hosted env  
 
 ## Troubleshooting

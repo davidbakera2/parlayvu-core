@@ -31,14 +31,24 @@ def bind_ramair_channel_from_env(env: dict[str, str] | None = None) -> dict[str,
         }
 
     try:
-        from app.database import initialize_database
-        from app.demo_seed import seed_ramair_demo
+        from app.database import initialize_database, session_scope
+        from app.models import Client, Project
         from app.project_memory import bind_teams_channel
-        from app.database import session_scope
 
         initialize_database()
         with session_scope() as session:
-            seed_ramair_demo(session)
+            # Ensure the RamAir client + project rows exist so the channel binding
+            # FK resolves. (Previously handled by the now-removed demo seeder.)
+            if session.get(Client, RAMAIR_CLIENT_ID) is None:
+                session.add(Client(id=RAMAIR_CLIENT_ID, name="RamAir International"))
+            if session.get(Project, RAMAIR_PROJECT_ID) is None:
+                session.add(
+                    Project(
+                        id=RAMAIR_PROJECT_ID,
+                        client_id=RAMAIR_CLIENT_ID,
+                        name=RAMAIR_PROJECT_NAME,
+                    )
+                )
 
         binding = bind_teams_channel(
             team_id=str(status["team_id"]),

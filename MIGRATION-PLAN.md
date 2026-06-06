@@ -1,5 +1,10 @@
 # Migration Plan: Baker Strategy → ParlayVU Tenant
 
+> ✅ **STATUS: COMPLETED 2026-05-26.** All phases (1–9) finished. ParlayVU runs entirely
+> in its own Entra tenant and Azure subscription; the old Baker Strategy resources are
+> decommissioned. This document is retained for historical reference only — see
+> [ARCHITECTURE.md](./ARCHITECTURE.md) §7 for the current production environment.
+
 > **Goal:** Move every piece of ParlayVU infrastructure that currently lives in the Baker Strategy Group tenant into ParlayVU's own M365 + Azure environment.
 >
 > **Why:** ParlayVU is its own company now. Mailboxes, Teams channels, and project files are already in ParlayVU's M365 tenant. But the app registration, Graph permissions, and Azure resources are still in Baker Strategy — which is why Nathan got 403 on the meeting notes save. Application permissions are scoped per tenant, so an app reg in Baker Strategy cannot touch resources in ParlayVU.
