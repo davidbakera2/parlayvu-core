@@ -32,7 +32,13 @@ from langgraph.graph import StateGraph, END
 from pydantic import BaseModel
 
 from app.client_config import CLIENT_ARTIFACTS_ROOT
-from app.agents.workflows.podcast_show_kit import load_show_kit, merge_with_show_kit, to_seconds
+from app.agents.workflows.podcast_show_kit import (
+    build_broll_manifest,
+    format_camera_roster,
+    load_show_kit,
+    merge_with_show_kit,
+    to_seconds,
+)
 
 logger = logging.getLogger("parlayvu.podcast_parlay")
 
@@ -129,7 +135,9 @@ Rules:
   reasonable monotonically-increasing times.
 - Prefer 4-12 substantive segments. Merge trivial back-and-forth into coherent topics.
 - suggested_layout: use 2cam_broll or 3cam_broll only when there is a clear b-roll idea.
-- Only include people you can identify from the transcript.
+- If a camera roster is provided, use its EXACT name spellings and map each segment's
+  `speaker` to the correct roster slot (host / guest_01 / guest_02). The transcript may
+  misspell names — always prefer the roster spelling.
 - Be evidence-based; do not invent facts not supported by the transcript."""
 
 ALEX_PLAN_PROMPT = """You are Alex Rivera, Visuals & Design specialist at ParlayVU.ai.
@@ -142,27 +150,31 @@ show's Show Kit — do NOT include them. Return ONLY valid JSON, no markdown, no
   "program_scenes": [
     {
       "layout": "2cam|2cam_broll|3cam|3cam_broll|1cam",
+      "cameras": ["host", "guest_01"],
       "source_start": "HH:MM:SS.000",
       "duration": "HH:MM:SS.000",
       "primary_camera": "host|guest_01|guest_02",
       "top_row_text": "NAME | TITLE of the person speaking",
       "bottom_row_text": "topic line",
-      "broll_id": ""
+      "broll_file": ""
     }
-  ],
-  "broll": [
-    {"broll_id": "broll_01", "file_name": "broll_01.mp4", "description": "what it shows"}
   ]
 }
 
 Rules:
 - One scene per segment, in order. `source_start` is the segment's start and `duration` is
-  (end - start) — these are positions IN THE TRIMMED INTERVIEW FOOTAGE, which is what the
-  segment timestamps already represent.
-- Use 3cam / 3cam_broll when three cameras are relevant, 2cam / 2cam_broll otherwise. Only
-  use a *_broll layout when there is a real b-roll clip to show, and set broll_id to match a
-  `broll[]` entry.
-- Lower thirds: top = "NAME | TITLE" of the current speaker; bottom = the topic.
+  (end - start) — positions IN THE TRIMMED INTERVIEW FOOTAGE (what the segment timestamps
+  already represent).
+- `cameras`: the camera slots to show, from the camera roster. This is a multi-camera shoot —
+  when two or more guests are part of the exchange, use `3cam` and list all three
+  (["host","guest_01","guest_02"]). For a single guest, use `2cam` with the host and THAT
+  guest (e.g. ["host","guest_02"] when guest_02 is speaking) — make sure the guest who is
+  actually talking appears on screen, not always guest_01.
+- Lower thirds: top = "NAME | TITLE" of the current speaker (exact spelling from the roster);
+  bottom = the topic.
+- B-roll: only use a *_broll layout when a relevant clip exists in the provided B-ROLL LIBRARY.
+  Set `broll_file` to an EXACT file name from that library — never invent a file name. (Note:
+  2cam_broll shows host + guest_01; use 3cam_broll if you need guest_02 on screen with b-roll.)
 - Do NOT emit intro / show_image / outro scenes, graphics, settings, or audio — the Show Kit
   owns all of that."""
 
@@ -179,6 +191,8 @@ class PodcastPlanState(BaseModel):
     project_context: Optional[dict] = None
     visual_system: str = "parlayvu_interview"
     assets_dir: Optional[str] = None
+    cameras: Optional[dict] = None          # {host/guest_01/guest_02: {name, title}}
+    broll_manifest: Optional[list] = None   # real b-roll files; auto-built from assets_dir
     segment_analysis: Optional[dict] = None
     video_plan: Optional[dict] = None
     error: Optional[str] = None
@@ -287,12 +301,30 @@ def _program_scenes_from_segments(analysis: dict) -> tuple[list[dict], list[dict
 # ---------------------------------------------------------------------------
 # Graph nodes
 # ---------------------------------------------------------------------------
+def _roster_block(state: PodcastPlanState) -> str:
+    """Camera roster + show name for a planner prompt (drives names/spelling/cameras)."""
+    parts = []
+    roster = format_camera_roster(state.cameras)
+    if roster:
+        parts.append(
+            "Camera roster (use these EXACT name spellings; the transcript may misspell them):\n"
+            + roster
+        )
+    try:
+        show_name = load_show_kit(state.visual_system).get("show_name")
+    except Exception:
+        show_name = None
+    if show_name:
+        parts.append(f"Show name (exact spelling): {show_name}")
+    return ("\n" + "\n\n".join(parts) + "\n") if parts else ""
+
+
 def blake_node(state: PodcastPlanState) -> dict:
     llm = _agent_llm("blake")
 
-    context_block = ""
+    context_block = _roster_block(state)
     if state.project_context:
-        context_block = f"\nProject context:\n{json.dumps(state.project_context, default=str)[:2000]}\n"
+        context_block += f"\nProject context:\n{json.dumps(state.project_context, default=str)[:2000]}\n"
 
     try:
         response = llm.invoke([
@@ -328,10 +360,19 @@ def alex_node(state: PodcastPlanState) -> dict:
         logger.exception("Show Kit load failed")
         return {"error": f"Show Kit load failed: {exc}"}
 
+    manifest = state.broll_manifest if state.broll_manifest is not None else build_broll_manifest(state.assets_dir)
+    manifest_block = ""
+    if manifest:
+        manifest_block = (
+            "\nB-ROLL LIBRARY (use ONLY these exact file names for broll_file):\n"
+            + "\n".join(f"- {b['file_name']}" for b in manifest) + "\n"
+        )
+
     llm = _agent_llm("alex")
     brand_block = f"\nBrand voice: {state.brand_voice}\n" if state.brand_voice else ""
     user = (
-        f"Episode: {state.episode_title}{brand_block}\n"
+        f"Episode: {state.episode_title}{brand_block}"
+        f"{_roster_block(state)}{manifest_block}\n"
         f"Segment analysis:\n{json.dumps(analysis, default=str)[:40000]}"
     )
 
@@ -342,19 +383,19 @@ def alex_node(state: PodcastPlanState) -> dict:
         ])
         out = _load_json(response.content)
         program_scenes = (out or {}).get("program_scenes") or []
-        broll = (out or {}).get("broll") or []
         if not program_scenes:
             raise ValueError("planner produced no program scenes")
     except Exception as exc:
         logger.warning("Alex output unusable (%s) — building program scenes from segments", exc)
-        program_scenes, broll = _program_scenes_from_segments(analysis)
+        program_scenes, _ = _program_scenes_from_segments(analysis)
 
     # Merge the per-episode program scenes onto the client's constant Show Kit format.
+    # The b-roll library (real files) becomes the plan's broll[] so broll_file/broll_id resolve.
     plan = merge_with_show_kit(
         program_scenes=program_scenes,
         show_kit=show_kit,
         project=project,
-        broll=broll,
+        broll=manifest,
         assets_dir=state.assets_dir,
     )
     logger.info(
@@ -390,11 +431,14 @@ async def run_podcast_parlay_planning(
     project_context: Optional[dict] = None,
     visual_system: str = "parlayvu_interview",
     assets_dir: Optional[str] = None,
+    cameras: Optional[dict] = None,
 ) -> dict:
     """Run the Podcast Parlay planning workflow and return its final state dict.
 
     `visual_system` selects the client's Show Kit; pass `assets_dir` (the episode's assets
-    folder) so the intro plays its full length (probed from the real intro clip).
+    folder) so the intro plays its full length and the real b-roll library is read; pass
+    `cameras` (host/guest_01/guest_02 -> {name, title}) so the planner uses the right cameras
+    and exact name spellings.
     """
     graph = get_podcast_plan_graph()
     initial = PodcastPlanState(
@@ -406,6 +450,7 @@ async def run_podcast_parlay_planning(
         project_context=project_context,
         visual_system=visual_system,
         assets_dir=assets_dir,
+        cameras=cameras,
     )
     result = await graph.ainvoke(initial)
     return result if isinstance(result, dict) else result.model_dump()

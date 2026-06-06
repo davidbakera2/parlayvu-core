@@ -1,5 +1,6 @@
 {
   "name": "parlayvu_interview",
+  "show_name": "Straight from the Hart",
   "description": "RamAir 'Straight from the Hart' podcast Show Kit — the constant per-episode format (background, music, bookends, render settings). Per-episode creative content (scenes, lower-third text, b-roll) comes from the planner and is merged onto this.",
   "template_config": "legacy/template_config.json",
 

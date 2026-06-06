@@ -45,13 +45,12 @@ BLAKE_JSON = json.dumps({
 
 ALEX_JSON = json.dumps({
     "program_scenes": [
-        {"layout": "3cam", "source_start": "00:00:00.000", "duration": "00:02:20.000",
+        {"layout": "3cam", "cameras": ["host", "guest_01", "guest_02"],
+         "source_start": "00:00:00.000", "duration": "00:02:20.000",
          "top_row_text": "David Hart", "bottom_row_text": "Origin story"},
-        {"layout": "2cam_broll", "source_start": "00:02:30.000", "duration": "00:02:30.000",
-         "top_row_text": "David Hart", "bottom_row_text": "Duct cleaning myths", "broll_id": "broll_01"},
-    ],
-    "broll": [
-        {"broll_id": "broll_01", "file_name": "broll_01.mp4", "description": "Duct footage"},
+        {"layout": "2cam", "cameras": ["host", "guest_02"],
+         "source_start": "00:02:30.000", "duration": "00:02:30.000",
+         "top_row_text": "John Miles", "bottom_row_text": "Duct cleaning myths"},
     ],
 })
 
@@ -126,13 +125,17 @@ class AlexNodeTests(unittest.TestCase):
         self.assertEqual(plan["scenes"][0]["layout"], "intro")
         self.assertEqual(plan["scenes"][1]["layout"], "show_image")
         self.assertEqual(plan["scenes"][-1]["layout"], "outro")
-        self.assertEqual([s["layout"] for s in plan["scenes"][2:-1]], ["3cam", "2cam_broll"])
+        self.assertEqual([s["layout"] for s in plan["scenes"][2:-1]], ["3cam", "2cam"])
+        # Per-scene cameras honored: the 2cam scene shows host + guest_02 (not guest_01).
+        two_cam = plan["scenes"][3]
+        self.assertEqual(two_cam["host_source"], "host.mp4")
+        self.assertEqual(two_cam["guest_02_source"], "guest_02.mp4")
+        self.assertNotIn("guest_01_source", two_cam)
         # Show Kit format applied.
         settings = _settings_map(plan)
         self.assertEqual(settings["background_video"], "background.mov")
         self.assertEqual(settings["intro_lower_third_scene_id"], plan["scenes"][2]["scene_id"])
         self.assertEqual([a["audio_id"] for a in plan["audio"]], ["intro_music", "outro_music"])
-        self.assertEqual(plan["broll"][0]["broll_id"], "broll_01")
 
     def test_falls_back_to_segments_when_planner_unusable(self):
         state = pp.PodcastPlanState(
@@ -167,7 +170,7 @@ class RunWorkflowTests(unittest.TestCase):
         self.assertEqual(plan["project"], "ramair-sfth")
         # intro + show_image + 2 program scenes + outro = 5
         self.assertEqual([s["layout"] for s in plan["scenes"]],
-                         ["intro", "show_image", "3cam", "2cam_broll", "outro"])
+                         ["intro", "show_image", "3cam", "2cam", "outro"])
         self.assertEqual(result["segment_analysis"]["episode_summary"][:5], "David")
 
     def test_blake_error_propagates_without_plan(self):
@@ -223,7 +226,7 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(body["status"], "generated")  # no client_id -> no approval
         # Show Kit-merged plan: intro + show_image + 2 program + outro
         self.assertEqual([s["layout"] for s in body["video_plan"]["scenes"]],
-                         ["intro", "show_image", "3cam", "2cam_broll", "outro"])
+                         ["intro", "show_image", "3cam", "2cam", "outro"])
         self.assertIsNone(body["plan_files"])           # not persisted without client_id
 
     def test_plan_endpoint_persists_and_requests_approval(self):

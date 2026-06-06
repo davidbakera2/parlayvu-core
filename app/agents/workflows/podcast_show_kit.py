@@ -80,6 +80,42 @@ def load_show_kit(visual_system: str = "parlayvu_interview") -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def build_broll_manifest(assets_dir: Optional[Path | str]) -> list[dict]:
+    """Scan the episode assets folder for the real b-roll files Alex may use."""
+    if not assets_dir:
+        return []
+    assets_dir = Path(assets_dir)
+    if not assets_dir.is_dir():
+        return []
+    manifest = []
+    for p in sorted(assets_dir.iterdir()):
+        if p.is_file() and p.stem.lower().startswith("broll"):
+            manifest.append({"broll_id": p.stem, "file_name": p.name})
+    return manifest
+
+
+def format_camera_roster(cameras: Optional[dict]) -> str:
+    """Render the camera->person map for a planner prompt.
+
+    `cameras` maps slots (host / guest_01 / guest_02) to a name string or
+    {name, title}. Returns one line per populated slot.
+    """
+    if not cameras:
+        return ""
+    lines = []
+    for slot in ("host", "guest_01", "guest_02"):
+        person = cameras.get(slot)
+        if not person:
+            continue
+        if isinstance(person, str):
+            lines.append(f"{slot} = {person}")
+        else:
+            name = person.get("name", "")
+            title = person.get("title", "")
+            lines.append(f"{slot} = {name}" + (f" ({title})" if title else ""))
+    return "\n".join(lines)
+
+
 def _intro_duration(intro_cfg: dict, assets_dir: Optional[Path]) -> float:
     """Full intro length: probe the intro asset when play_full + media available; else default."""
     default = to_seconds(intro_cfg.get("default_duration"), 15.0)
@@ -140,19 +176,26 @@ def merge_with_show_kit(
         sid = ps.get("scene_id") or f"S{i:03d}"
         first_program_id = first_program_id or sid
         dur = to_seconds(ps.get("duration"), 0.0)
+
+        # Active cameras for this scene. Alex may name them explicitly (e.g. ["host",
+        # "guest_02"] to show the host with the second guest); otherwise infer from layout.
+        cams = ps.get("cameras")
+        if not cams:
+            n = 3 if layout.startswith("3cam") else (1 if layout == "1cam" else 2)
+            cams = ["host", "guest_01", "guest_02"][:n]
+
         scene = {
             "enabled": True, "scene_id": sid, "layout": layout,
             "start": hhmmss(t), "end": hhmmss(t + dur), "duration": hhmmss(dur),
             "source_start": ps.get("source_start", ""),
-            "primary_camera": ps.get("primary_camera", "host"),
-            "host_source": ps.get("host_source", "host.mp4"),
-            "guest_01_source": ps.get("guest_01_source", "guest_01.mp4"),
+            "primary_camera": ps.get("primary_camera") or (cams[0] if cams else "host"),
             "top_row_text": ps.get("top_row_text", ""),
             "bottom_row_text": ps.get("bottom_row_text", ""),
             "notes": ps.get("notes", ""),
         }
-        if "3cam" in layout:
-            scene["guest_02_source"] = ps.get("guest_02_source", "guest_02.mp4")
+        for cam in ("host", "guest_01", "guest_02"):
+            if cam in cams:
+                scene[f"{cam}_source"] = f"{cam}.mp4"
         if "broll" in layout:
             scene["broll_id"] = ps.get("broll_id", "")
             if ps.get("broll_file"):

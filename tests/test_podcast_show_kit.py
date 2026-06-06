@@ -75,5 +75,66 @@ class MergeTests(unittest.TestCase):
         self.assertTrue(any(a["asset_key"] == "background_video" for a in plan["assets"]))
 
 
+class BrollManifestTests(unittest.TestCase):
+    def test_scans_real_broll_files(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            for n in ("broll_01.png", "broll_02.jpg", "host.mp4", "broll_03.mp4", "notes.txt"):
+                (d / n).write_text("x")
+            manifest = sk.build_broll_manifest(d)
+        names = [m["file_name"] for m in manifest]
+        self.assertEqual(names, ["broll_01.png", "broll_02.jpg", "broll_03.mp4"])  # only b-roll, sorted
+        self.assertEqual(manifest[0]["broll_id"], "broll_01")
+
+    def test_empty_when_no_dir(self):
+        self.assertEqual(sk.build_broll_manifest(None), [])
+        self.assertEqual(sk.build_broll_manifest("/no/such/dir"), [])
+
+
+class CameraRosterTests(unittest.TestCase):
+    def test_formats_names_and_titles(self):
+        roster = sk.format_camera_roster({
+            "host": {"name": "David Baker", "title": "Host"},
+            "guest_01": {"name": "David Hart", "title": "Founder & CEO, RAM AIR"},
+            "guest_02": "John Miles",
+        })
+        self.assertIn("host = David Baker (Host)", roster)
+        self.assertIn("guest_01 = David Hart (Founder & CEO, RAM AIR)", roster)
+        self.assertIn("guest_02 = John Miles", roster)
+
+    def test_empty(self):
+        self.assertEqual(sk.format_camera_roster(None), "")
+
+
+class CameraSelectionTests(unittest.TestCase):
+    def setUp(self):
+        self.kit = sk.load_show_kit("parlayvu_interview")
+
+    def test_explicit_cameras_set_only_those_sources(self):
+        plan = sk.merge_with_show_kit(
+            program_scenes=[
+                {"layout": "2cam", "cameras": ["host", "guest_02"],
+                 "source_start": "00:00:00.000", "duration": "00:00:10.000"},
+            ],
+            show_kit=self.kit, project="ep",
+        )
+        scene = next(s for s in plan["scenes"] if s["scene_id"].startswith("S"))
+        self.assertEqual(scene["host_source"], "host.mp4")
+        self.assertEqual(scene["guest_02_source"], "guest_02.mp4")
+        self.assertNotIn("guest_01_source", scene)  # guest_01 not shown
+
+    def test_layout_inferred_cameras_when_unspecified(self):
+        plan = sk.merge_with_show_kit(
+            program_scenes=[{"layout": "3cam", "source_start": "0", "duration": "10"}],
+            show_kit=self.kit, project="ep",
+        )
+        scene = next(s for s in plan["scenes"] if s["scene_id"].startswith("S"))
+        self.assertEqual(scene["host_source"], "host.mp4")
+        self.assertEqual(scene["guest_01_source"], "guest_01.mp4")
+        self.assertEqual(scene["guest_02_source"], "guest_02.mp4")  # 3cam -> all three
+
+
 if __name__ == "__main__":
     unittest.main()
