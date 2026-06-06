@@ -112,22 +112,26 @@ The goal is for the approved plan from the Agentic Planning layer to largely dri
 - Performance data and client feedback captured back into ParlayVU project memory.
 - Continuous improvement of agent prompts, templates, and planning logic based on what actually performs.
 
-## Current State (v1)
+## Current State
 
 - Riverside is already being used successfully for recording.
-- Basic planning still happens largely manually in spreadsheets.
-- Custom renderer exists but is difficult to scale and maintain.
-- No strong agentic planning layer yet.
-- Execution is not yet in DaVinci Resolve.
+- **Agentic planning layer is implemented** (`app/agents/workflows/podcast_parlay.py`):
+  Blake analyzes the transcript into timestamped segments; Alex composes a structured
+  `video_plan` (scenes, lower thirds, graphics, b-roll). Exposed at
+  `POST /parlays/podcast/plan`. Output contract: `docs/parlays/video-plan-schema.md`.
+- Execution (DaVinci Resolve) tooling lives in the separate video system and is not in
+  this repo; the planning output targets the documented `video_plan` schema so it can
+  drive that tooling.
 
 ## Roadmap
 
-1. Formalize Podcast Parlay definition and data contracts (this document).
-2. Build initial agentic planning agents that can propose cuts, lower thirds, and b-roll from Riverside transcripts.
-3. Define clean interface between planning output and DaVinci Resolve.
-4. Pilot the full flow on 1–2 episodes.
-5. Gradually reduce human time in the planning phase while maintaining quality.
-6. Evolve Shorts production into its own sub-Parlay or integrated flow.
+1. ✅ Formalize Podcast Parlay definition and data contracts (this document + `video-plan-schema.md`).
+2. ✅ Build initial agentic planning agents that propose cuts, lower thirds, and b-roll from transcripts.
+3. Wire the planning output into approvals + persist plans to project memory / `client_artifacts`.
+4. Define clean interface between planning output and DaVinci Resolve execution.
+5. Pilot the full flow on 1–2 episodes.
+6. Gradually reduce human time in the planning phase while maintaining quality.
+7. Evolve Shorts production into its own sub-Parlay or integrated flow.
 
 ## Related Parlays & Systems
 

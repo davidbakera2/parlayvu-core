@@ -39,6 +39,7 @@ ParlayVU.ai is an agentic content operating system for turning source material i
 - `GET /health` - basic API health.
 - `GET /readiness` - consolidated demo/production readiness checks without exposing secrets.
 - `POST /nathan` - send a user request to Nathan for routing.
+- `POST /parlays/podcast/plan` - Podcast Parlay agentic planning: interview transcript to a structured `video_plan`.
 - `POST /dylan/generate-site` - generate a local Astro + Tailwind site.
 - `POST /dylan/deploy-site` - build and deploy a generated site to Cloudflare Pages.
 - `GET /approvals` - list approval requests by project or status.

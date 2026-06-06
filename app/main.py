@@ -152,6 +152,14 @@ class MeetingStrategyRequest(BaseModel):
     folder_path: Optional[str] = None
 
 
+class PodcastPlanRequest(BaseModel):
+    transcript: str
+    episode_title: Optional[str] = "Episode"
+    client_id: Optional[str] = None
+    project_id: Optional[str] = None
+    brand_voice: Optional[str] = None
+
+
 # ========================= IMPORTS =========================
 from .approvals import decide_approval, list_approvals, request_approval, require_approved_approval
 from .agents.registry import initialize_registry
@@ -1738,6 +1746,63 @@ async def meetings_strategy_endpoint(request: MeetingStrategyRequest):
             "filed_in_teams": bool(teams_file),
             "url": teams_file.get("webUrl") if teams_file else None,
         },
+        "memory_output_id": memory_output_id,
+    }
+
+
+@app.post("/parlays/podcast/plan")
+async def podcast_parlay_plan_endpoint(request: PodcastPlanRequest):
+    """Podcast Parlay agentic planning: interview transcript -> structured video_plan.
+
+    Runs Blake (segment analysis) + Alex (plan composition). Returns a schema-valid
+    video_plan (see docs/parlays/video-plan-schema.md) for human review before render.
+    """
+    if not request.transcript.strip():
+        raise HTTPException(status_code=400, detail="Transcript is required")
+
+    project_context = None
+    if request.project_id:
+        try:
+            project_context = get_project_context(request.project_id)
+        except Exception as exc:
+            logger.warning("Could not load project context for podcast plan: %s", exc)
+
+    from app.agents.workflows.podcast_parlay import run_podcast_parlay_planning
+    result = await run_podcast_parlay_planning(
+        transcript=request.transcript,
+        episode_title=request.episode_title or "Episode",
+        project_id=request.project_id,
+        client_id=request.client_id,
+        brand_voice=request.brand_voice,
+        project_context=project_context,
+    )
+
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    video_plan = result.get("video_plan") or {}
+    segment_analysis = result.get("segment_analysis") or {}
+
+    memory_output_id = record_generated_output(
+        client_id=request.client_id or "default-client",
+        project_id=request.project_id,
+        agent_name="alex",
+        output_type="video_plan",
+        title=f"{request.episode_title} — Video Plan",
+        status="generated",
+        metadata={
+            "episode_title": request.episode_title,
+            "scene_count": len(video_plan.get("scenes", [])),
+            "graphic_count": len(video_plan.get("graphics", [])),
+        },
+    )
+
+    return {
+        "status": "generated",
+        "episode_title": request.episode_title,
+        "project_id": request.project_id,
+        "segment_analysis": segment_analysis,
+        "video_plan": video_plan,
         "memory_output_id": memory_output_id,
     }
 
