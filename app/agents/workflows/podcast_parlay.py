@@ -32,6 +32,7 @@ from langgraph.graph import StateGraph, END
 from pydantic import BaseModel
 
 from app.client_config import CLIENT_ARTIFACTS_ROOT
+from app.agents.workflows.podcast_show_kit import load_show_kit, merge_with_show_kit, to_seconds
 
 logger = logging.getLogger("parlayvu.podcast_parlay")
 
@@ -133,34 +134,20 @@ Rules:
 
 ALEX_PLAN_PROMPT = """You are Alex Rivera, Visuals & Design specialist at ParlayVU.ai.
 
-Using the segment analysis, compose a video_plan for the Podcast Parlay. Return ONLY
-valid JSON matching this schema exactly — no markdown, no extra text:
+Using the segment analysis, compose the INTERVIEW SCENES for this episode. The opening intro,
+show image, closing outro, music, background, and branding are added automatically from the
+show's Show Kit — do NOT include them. Return ONLY valid JSON, no markdown, no extra text:
 
 {
-  "scenes": [
+  "program_scenes": [
     {
-      "scene_id": "S001",
-      "enabled": true,
-      "start": "HH:MM:SS.000",
-      "end": "HH:MM:SS.000",
-      "layout": "intro|show_image|1cam|2cam|2cam_broll|3cam|3cam_broll|outro",
-      "primary_camera": "host|guest_01|guest_02|",
-      "broll_id": "",
-      "top_row_text": "lower third top row",
-      "bottom_row_text": "lower third bottom row",
-      "notes": ""
-    }
-  ],
-  "graphics": [
-    {
-      "graphic_id": "G001",
-      "enabled": true,
-      "type": "name_card|topic_card|broll_card|callout",
-      "start": "HH:MM:SS.000",
-      "end": "HH:MM:SS.000",
-      "text_line_1": "main text",
-      "text_line_2": "secondary text",
-      "linked_scene_id": "S001"
+      "layout": "2cam|2cam_broll|3cam|3cam_broll|1cam",
+      "source_start": "HH:MM:SS.000",
+      "duration": "HH:MM:SS.000",
+      "primary_camera": "host|guest_01|guest_02",
+      "top_row_text": "NAME | TITLE of the person speaking",
+      "bottom_row_text": "topic line",
+      "broll_id": ""
     }
   ],
   "broll": [
@@ -169,15 +156,15 @@ valid JSON matching this schema exactly — no markdown, no extra text:
 }
 
 Rules:
-- Open with an `intro` scene and a `show_image` scene, and close with an `outro` scene.
-- Create one interview scene per segment, in order, using the segment's suggested_layout
-  and timestamps; carry the lower-third text into top_row_text / bottom_row_text.
-- For each identified person, add a `name_card` graphic on their first interview scene
-  (text_line_1 = name, text_line_2 = title), shown for ~5 seconds.
-- Add a `topic_card` graphic when a segment introduces a clearly new topic.
-- When a segment's layout includes b-roll, add a `broll[]` entry and set the scene's
-  broll_id to match.
-- Keep scene_ids and graphic_ids stable and sequential (S001.., G001.., broll_01..)."""
+- One scene per segment, in order. `source_start` is the segment's start and `duration` is
+  (end - start) — these are positions IN THE TRIMMED INTERVIEW FOOTAGE, which is what the
+  segment timestamps already represent.
+- Use 3cam / 3cam_broll when three cameras are relevant, 2cam / 2cam_broll otherwise. Only
+  use a *_broll layout when there is a real b-roll clip to show, and set broll_id to match a
+  `broll[]` entry.
+- Lower thirds: top = "NAME | TITLE" of the current speaker; bottom = the topic.
+- Do NOT emit intro / show_image / outro scenes, graphics, settings, or audio — the Show Kit
+  owns all of that."""
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +177,8 @@ class PodcastPlanState(BaseModel):
     client_id: Optional[str] = None
     brand_voice: Optional[str] = None
     project_context: Optional[dict] = None
+    visual_system: str = "parlayvu_interview"
+    assets_dir: Optional[str] = None
     segment_analysis: Optional[dict] = None
     video_plan: Optional[dict] = None
     error: Optional[str] = None
@@ -272,42 +261,27 @@ def normalize_video_plan(plan: dict, *, project: str) -> dict:
     }
 
 
-def _fallback_plan_from_segments(analysis: dict, *, project: str) -> dict:
-    """Deterministic plan built straight from Blake's segments (used if the planner fails)."""
-    segments = (analysis or {}).get("segments") or []
-    scenes: list[dict] = [
-        {"scene_id": "S001", "layout": "intro", "host_source": "intro.mp4",
-         "start": "00:00:00.000", "end": "00:00:06.000", "notes": "Opening clip"},
-        {"scene_id": "S002", "layout": "show_image", "host_source": "show_image.png",
-         "start": "00:00:06.000", "end": "00:00:10.000", "notes": "Show image"},
-    ]
-    for i, seg in enumerate(segments, start=1):
+def _program_scenes_from_segments(analysis: dict) -> tuple[list[dict], list[dict]]:
+    """Deterministic program scenes from Blake's segments (used if the planner fails).
+
+    Returns (program_scenes, broll). Bookends/settings come from the Show Kit, not here.
+    """
+    program_scenes: list[dict] = []
+    for seg in (analysis or {}).get("segments") or []:
         seg = seg if isinstance(seg, dict) else {}
-        scenes.append({
-            "scene_id": f"S{i + 2:03d}",
+        start = to_seconds(seg.get("start"))
+        dur = max(0.0, to_seconds(seg.get("end")) - start)
+        if dur <= 0:
+            continue
+        program_scenes.append({
             "layout": seg.get("suggested_layout") or "2cam",
-            "start": seg.get("start") or "00:00:00.000",
-            "end": seg.get("end") or "00:00:00.000",
+            "source_start": seg.get("start") or "00:00:00.000",
+            "duration": str(dur),  # seconds; the merge parses it
             "top_row_text": seg.get("lower_third_top") or "",
             "bottom_row_text": seg.get("lower_third_bottom") or seg.get("topic") or "",
             "notes": seg.get("summary") or "",
         })
-    scenes.append({"scene_id": f"S{len(segments) + 3:03d}", "layout": "outro",
-                   "host_source": "outro.mp4", "notes": "Closing"})
-
-    graphics = []
-    for i, person in enumerate((analysis or {}).get("people") or [], start=1):
-        person = person if isinstance(person, dict) else {}
-        graphics.append({
-            "graphic_id": f"G{i:03d}",
-            "type": "name_card",
-            "text_line_1": person.get("name") or "",
-            "text_line_2": person.get("title") or "",
-        })
-
-    return normalize_video_plan(
-        {"scenes": scenes, "graphics": graphics, "broll": []}, project=project
-    )
+    return program_scenes, []
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +322,12 @@ def alex_node(state: PodcastPlanState) -> dict:
     project = state.project_id or "podcast-episode"
     analysis = state.segment_analysis or {}
 
+    try:
+        show_kit = load_show_kit(state.visual_system)
+    except Exception as exc:
+        logger.exception("Show Kit load failed")
+        return {"error": f"Show Kit load failed: {exc}"}
+
     llm = _agent_llm("alex")
     brand_block = f"\nBrand voice: {state.brand_voice}\n" if state.brand_voice else ""
     user = (
@@ -360,17 +340,26 @@ def alex_node(state: PodcastPlanState) -> dict:
             SystemMessage(content=ALEX_PLAN_PROMPT),
             HumanMessage(content=user),
         ])
-        raw_plan = _load_json(response.content)
-        plan = normalize_video_plan(raw_plan, project=project)
-        if not plan["scenes"]:
-            raise ValueError("planner produced no scenes")
+        out = _load_json(response.content)
+        program_scenes = (out or {}).get("program_scenes") or []
+        broll = (out or {}).get("broll") or []
+        if not program_scenes:
+            raise ValueError("planner produced no program scenes")
     except Exception as exc:
-        logger.warning("Alex planner output unusable (%s) — using deterministic fallback", exc)
-        plan = _fallback_plan_from_segments(analysis, project=project)
+        logger.warning("Alex output unusable (%s) — building program scenes from segments", exc)
+        program_scenes, broll = _program_scenes_from_segments(analysis)
 
+    # Merge the per-episode program scenes onto the client's constant Show Kit format.
+    plan = merge_with_show_kit(
+        program_scenes=program_scenes,
+        show_kit=show_kit,
+        project=project,
+        broll=broll,
+        assets_dir=state.assets_dir,
+    )
     logger.info(
-        "Video plan composed | scenes=%d graphics=%d broll=%d",
-        len(plan["scenes"]), len(plan["graphics"]), len(plan["broll"]),
+        "Video plan composed | scenes=%d (program=%d) broll=%d",
+        len(plan["scenes"]), len(program_scenes), len(plan["broll"]),
     )
     return {"video_plan": plan}
 
@@ -399,8 +388,14 @@ async def run_podcast_parlay_planning(
     client_id: Optional[str] = None,
     brand_voice: Optional[str] = None,
     project_context: Optional[dict] = None,
+    visual_system: str = "parlayvu_interview",
+    assets_dir: Optional[str] = None,
 ) -> dict:
-    """Run the Podcast Parlay planning workflow and return its final state dict."""
+    """Run the Podcast Parlay planning workflow and return its final state dict.
+
+    `visual_system` selects the client's Show Kit; pass `assets_dir` (the episode's assets
+    folder) so the intro plays its full length (probed from the real intro clip).
+    """
     graph = get_podcast_plan_graph()
     initial = PodcastPlanState(
         transcript=transcript,
@@ -409,6 +404,8 @@ async def run_podcast_parlay_planning(
         client_id=client_id,
         brand_voice=brand_voice,
         project_context=project_context,
+        visual_system=visual_system,
+        assets_dir=assets_dir,
     )
     result = await graph.ainvoke(initial)
     return result if isinstance(result, dict) else result.model_dump()

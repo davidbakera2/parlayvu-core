@@ -36,6 +36,18 @@ Defers: trigger UX, stock/AI b-roll, onboarding.
 Render host needs **ffmpeg + Pillow + fonts** (not required by the API itself — the renderer
 runs as a subprocess).
 
+### Show Kit (implemented)
+
+The two-layer split is now real. A client's **Show Kit** —
+`video_system/templates/visual_systems/<visual_system>/show_kit.json` — holds the constant
+per-episode format: background video, music cues (`intro_music`/`outro_music`),
+intro/show-image/outro bookends (intro plays its **full length**, probed from the clip),
+render settings, and the asset map. The planner's Alex stage emits only the per-episode
+**program scenes** (interview cuts, lower-third text, b-roll); `podcast_show_kit.merge_with_show_kit()`
+wraps them into a complete Ep04-format `video_plan` (bookends, contiguous timeline, settings,
+music, `intro_lower_third_scene_id` → first interview scene). Verified by rendering real
+RamAir footage with full intro + background + lower-third + music.
+
 ## Phase 2 — The client loop in Teams
 
 **Goal:** the runbook flow, in-channel.
