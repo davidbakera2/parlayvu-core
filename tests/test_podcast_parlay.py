@@ -5,7 +5,9 @@ LLM calls are mocked at the `_agent_llm` seam, so these run with no API keys.
 
 import asyncio
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from app.agents.workflows import podcast_parlay as pp
@@ -171,6 +173,33 @@ class RunWorkflowTests(unittest.TestCase):
         self.assertIsNone(result.get("video_plan"))
 
 
+class PersistenceTests(unittest.TestCase):
+    def test_writes_plan_and_segment_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(pp, "CLIENT_ARTIFACTS_ROOT", Path(tmp)):
+                written = pp.persist_video_plan(
+                    client_id="ramair",
+                    episode_title="Straight From The Hart Ep04",
+                    video_plan={"project": "ep", "scenes": [{"scene_id": "S001"}]},
+                    segment_analysis={"segments": []},
+                )
+            base = Path(tmp) / "ramair" / "02_Planning" / "podcast_plans" / "straight-from-the-hart-ep04"
+            self.assertTrue((base / "video_plan.json").is_file())
+            self.assertTrue((base / "segment_analysis.json").is_file())
+            self.assertEqual(written["slug"], "straight-from-the-hart-ep04")
+            saved = json.loads((base / "video_plan.json").read_text())
+            self.assertEqual(saved["scenes"][0]["scene_id"], "S001")
+
+    def test_rejects_path_escaping_client_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(pp, "CLIENT_ARTIFACTS_ROOT", Path(tmp)):
+                for bad in ("../evil", "a/b", ""):
+                    with self.assertRaises(ValueError):
+                        pp.persist_video_plan(
+                            client_id=bad, episode_title="x", video_plan={},
+                        )
+
+
 class EndpointTests(unittest.TestCase):
     def _client(self):
         from fastapi.testclient import TestClient
@@ -187,9 +216,49 @@ class EndpointTests(unittest.TestCase):
                 })
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
-        self.assertEqual(body["status"], "generated")
+        self.assertEqual(body["status"], "generated")  # no client_id -> no approval
         self.assertEqual(len(body["video_plan"]["scenes"]), 5)
         self.assertEqual(body["video_plan"]["graphics"][0]["type"], "name_card")
+        self.assertIsNone(body["plan_files"])           # not persisted without client_id
+
+    def test_plan_endpoint_persists_and_requests_approval(self):
+        client = self._client()
+        fake_approval = {"id": "appr-1", "status": "pending"}
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict("os.environ", {"PROJECT_MEMORY_ENABLED": "false"}), \
+                 patch.object(pp, "CLIENT_ARTIFACTS_ROOT", Path(tmp)), \
+                 patch.object(pp, "_agent_llm", _dispatch()), \
+                 patch("app.main.request_approval", return_value=fake_approval) as mock_appr:
+                resp = client.post("/parlays/podcast/plan", json={
+                    "transcript": "full transcript",
+                    "episode_title": "Ep04",
+                    "client_id": "ramair",
+                    "project_id": "ramair-sfth",
+                })
+            self.assertTrue((Path(tmp) / "ramair" / "02_Planning" / "podcast_plans" / "ep04" / "video_plan.json").is_file())
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["status"], "pending_approval")
+        self.assertEqual(body["approval"], fake_approval)
+        self.assertIsNotNone(body["plan_files"])
+        self.assertEqual(mock_appr.call_args.kwargs["action_type"], "video_plan")
+        self.assertEqual(mock_appr.call_args.kwargs["requested_by_agent"], "alex")
+
+    def test_approval_can_be_disabled(self):
+        client = self._client()
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict("os.environ", {"PROJECT_MEMORY_ENABLED": "false"}), \
+                 patch.object(pp, "CLIENT_ARTIFACTS_ROOT", Path(tmp)), \
+                 patch.object(pp, "_agent_llm", _dispatch()), \
+                 patch("app.main.request_approval") as mock_appr:
+                resp = client.post("/parlays/podcast/plan", json={
+                    "transcript": "t", "episode_title": "Ep04",
+                    "client_id": "ramair", "project_id": "ramair-sfth",
+                    "request_approval": False,
+                })
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "generated")
+        mock_appr.assert_not_called()
 
     def test_plan_endpoint_rejects_empty_transcript(self):
         client = self._client()

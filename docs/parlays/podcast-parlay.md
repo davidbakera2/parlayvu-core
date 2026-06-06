@@ -119,6 +119,8 @@ The goal is for the approved plan from the Agentic Planning layer to largely dri
   Blake analyzes the transcript into timestamped segments; Alex composes a structured
   `video_plan` (scenes, lower thirds, graphics, b-roll). Exposed at
   `POST /parlays/podcast/plan`. Output contract: `docs/parlays/video-plan-schema.md`.
+  The plan is persisted under `client_artifacts/<client>/02_Planning/podcast_plans/` and,
+  when a client + project are supplied, a `video_plan` approval is requested before render.
 - Execution (DaVinci Resolve) tooling lives in the separate video system and is not in
   this repo; the planning output targets the documented `video_plan` schema so it can
   drive that tooling.
@@ -127,7 +129,7 @@ The goal is for the approved plan from the Agentic Planning layer to largely dri
 
 1. ✅ Formalize Podcast Parlay definition and data contracts (this document + `video-plan-schema.md`).
 2. ✅ Build initial agentic planning agents that propose cuts, lower thirds, and b-roll from transcripts.
-3. Wire the planning output into approvals + persist plans to project memory / `client_artifacts`.
+3. ✅ Wire the planning output into approvals + persist plans to `client_artifacts` (a `video_plan` approval is requested before render; plans saved under `02_Planning/podcast_plans/`).
 4. Define clean interface between planning output and DaVinci Resolve execution.
 5. Pilot the full flow on 1–2 episodes.
 6. Gradually reduce human time in the planning phase while maintaining quality.

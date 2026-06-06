@@ -158,6 +158,7 @@ class PodcastPlanRequest(BaseModel):
     client_id: Optional[str] = None
     project_id: Optional[str] = None
     brand_voice: Optional[str] = None
+    request_approval: bool = True
 
 
 # ========================= IMPORTS =========================
@@ -1783,26 +1784,66 @@ async def podcast_parlay_plan_endpoint(request: PodcastPlanRequest):
     video_plan = result.get("video_plan") or {}
     segment_analysis = result.get("segment_analysis") or {}
 
+    # Persist the plan under the client's planning folder so it can be reviewed/rendered.
+    plan_files = None
+    if request.client_id:
+        try:
+            from app.agents.workflows.podcast_parlay import persist_video_plan
+            plan_files = persist_video_plan(
+                client_id=request.client_id,
+                episode_title=request.episode_title or "Episode",
+                video_plan=video_plan,
+                segment_analysis=segment_analysis,
+            )
+        except Exception as exc:
+            logger.warning("Could not persist video plan: %s", exc)
+
     memory_output_id = record_generated_output(
         client_id=request.client_id or "default-client",
         project_id=request.project_id,
         agent_name="alex",
         output_type="video_plan",
         title=f"{request.episode_title} — Video Plan",
+        uri=(plan_files or {}).get("video_plan_path"),
         status="generated",
         metadata={
             "episode_title": request.episode_title,
             "scene_count": len(video_plan.get("scenes", [])),
             "graphic_count": len(video_plan.get("graphics", [])),
+            "plan_files": plan_files,
         },
     )
 
+    # Gate: a video plan is client-facing (lower-third text, claims), so request review
+    # before render. Degrades gracefully if project memory / DB is unavailable.
+    approval = None
+    if request.request_approval and request.client_id and request.project_id:
+        try:
+            approval = request_approval(
+                client_id=request.client_id,
+                project_id=request.project_id,
+                requested_by_agent="alex",
+                action_type="video_plan",
+                title=f"Review video plan: {request.episode_title}",
+                summary="Podcast Parlay produced a video plan that needs review before render.",
+                generated_output_id=memory_output_id,
+                metadata={
+                    "episode_title": request.episode_title,
+                    "scene_count": len(video_plan.get("scenes", [])),
+                    "video_plan_path": (plan_files or {}).get("video_plan_path"),
+                },
+            )
+        except Exception as exc:
+            logger.warning("Could not create video-plan approval: %s", exc)
+
     return {
-        "status": "generated",
+        "status": "pending_approval" if approval else "generated",
         "episode_title": request.episode_title,
         "project_id": request.project_id,
         "segment_analysis": segment_analysis,
         "video_plan": video_plan,
+        "plan_files": plan_files,
+        "approval": approval,
         "memory_output_id": memory_output_id,
     }
 

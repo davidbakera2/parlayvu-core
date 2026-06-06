@@ -23,13 +23,20 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+from pathlib import Path
 from typing import Any, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel
 
+from app.client_config import CLIENT_ARTIFACTS_ROOT
+
 logger = logging.getLogger("parlayvu.podcast_parlay")
+
+# Persisted plans live under the client's planning folder (ARCHITECTURE.md §5).
+PLANS_SUBPATH = Path("02_Planning") / "podcast_plans"
 
 # ---------------------------------------------------------------------------
 # Schema constants (see docs/parlays/video-plan-schema.md)
@@ -405,3 +412,54 @@ async def run_podcast_parlay_planning(
     )
     result = await graph.ainvoke(initial)
     return result if isinstance(result, dict) else result.model_dump()
+
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+def _slugify(text: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return slug or "episode"
+
+
+def _repo_rel(p: Path) -> str:
+    try:
+        return str(p.relative_to(Path.cwd())).replace("\\", "/")
+    except ValueError:
+        return str(p).replace("\\", "/")
+
+
+def persist_video_plan(
+    *,
+    client_id: str,
+    episode_title: str,
+    video_plan: dict,
+    segment_analysis: Optional[dict] = None,
+) -> dict[str, str]:
+    """Write the plan (and segment analysis) under the client's planning folder.
+
+    Returns repo-relative paths. Raises ValueError on a bad/escaping client_id.
+    """
+    if not client_id or any(sep in client_id for sep in ("/", "\\")) or client_id in (".", ".."):
+        raise ValueError(f"Invalid client_id for plan persistence: {client_id!r}")
+
+    slug = _slugify(episode_title)
+    client_root = (CLIENT_ARTIFACTS_ROOT / client_id).resolve()
+    plan_dir = (client_root / PLANS_SUBPATH / slug).resolve()
+    if plan_dir != client_root and not plan_dir.is_relative_to(client_root):
+        raise ValueError("Resolved plan path escapes the client artifacts root")
+
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    plan_path = plan_dir / "video_plan.json"
+    plan_path.write_text(json.dumps(video_plan, indent=2), encoding="utf-8")
+
+    written = {
+        "slug": slug,
+        "plan_dir": _repo_rel(plan_dir),
+        "video_plan_path": _repo_rel(plan_path),
+    }
+    if segment_analysis is not None:
+        seg_path = plan_dir / "segment_analysis.json"
+        seg_path.write_text(json.dumps(segment_analysis, indent=2), encoding="utf-8")
+        written["segment_analysis_path"] = _repo_rel(seg_path)
+    return written

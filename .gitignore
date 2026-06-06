@@ -27,6 +27,9 @@ client_artifacts/*/03_Deliverables/sites/edits/
 client_artifacts/*/03_Deliverables/sites/active/
 client_artifacts/*/03_Deliverables/sites/index.html
 
+# Podcast Parlay generated plans — regenerated per run, not source content.
+client_artifacts/*/02_Planning/podcast_plans/
+
 *.pem
 *.key
 *.pfx
