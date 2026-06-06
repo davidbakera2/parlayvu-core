@@ -1,0 +1,19 @@
+{
+  "top_row": {
+    "font": "Arial",
+    "font_size": 38,
+    "bold": true,
+    "color": "white",
+    "background": "#062442"
+  },
+  "bottom_row": {
+    "font": "Arial",
+    "font_size": 56,
+    "bold": true,
+    "color": "black",
+    "background": "white"
+  },
+  "left_asset": "show_image_lower_third.png",
+  "right_asset": "logo_square.png",
+  "right_asset_fit": "cover_slight_overlap_under_frame"
+}
