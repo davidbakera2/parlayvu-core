@@ -650,7 +650,24 @@ class Renderer:
                 current_label = next_label
             video_label = current_label
 
-        filters.append(f"[{host_input}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.35,alimiter=limit=0.96[a]")
+        # Mix audio from every camera in the scene. Each camera carries only its own mic,
+        # so summing them (normalize=0) reconstructs the full conversation — using only the
+        # host track (the old behavior) dropped every guest's audio.
+        camera_audio = [host_input, guest_input]
+        if layout in {"3cam", "3cam_broll"} and guest_02.exists():
+            camera_audio.append(guest2_input)
+        if len(camera_audio) == 1:
+            filters.append(f"[{camera_audio[0]}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.35,alimiter=limit=0.96[a]")
+        else:
+            mix_labels = []
+            for ci in camera_audio:
+                filters.append(f"[{ci}:a]aformat=sample_rates=44100:channel_layouts=stereo[a{ci}]")
+                mix_labels.append(f"[a{ci}]")
+            filters.append(
+                "".join(mix_labels)
+                + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=0:normalize=0,"
+                + "volume=1.35,alimiter=limit=0.96[a]"
+            )
         self.encode(out, inputs, ";".join(filters), duration, video_label=video_label)
         return out
 

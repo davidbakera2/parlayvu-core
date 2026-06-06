@@ -39,9 +39,9 @@
 
   "audio": [
     {"enabled": true, "audio_id": "intro_music", "anchor": "intro_start", "file": "music.wav",
-     "start": "00:00:00.000", "duration": "00:00:27.000", "source_start": "00:00:00.000",
-     "volume": "0.2", "fade_in": "00:00:00.000", "fade_out": "00:00:10.000",
-     "notes": "Music over intro, opening show image, and the first part of the host intro; fades out into the interview."},
+     "start": "00:00:00.000", "duration": "00:00:50.000", "source_start": "00:00:00.000",
+     "volume": "0.2", "fade_in": "00:00:00.000", "fade_out": "00:00:12.000",
+     "notes": "Music over intro (full length), opening show image, and into the host intro; fades out ~12s into the interview."},
     {"enabled": true, "audio_id": "outro_music", "anchor": "outro_start", "file": "music.wav",
      "start": "-00:00:10.000", "duration": "00:00:15.000", "source_start": "00:01:49.000",
      "volume": "0.72", "fade_in": "00:00:15.000", "fade_out": "00:00:00.000",
