@@ -4,7 +4,7 @@
 
 - Protect secrets with `.gitignore` and secret-manager-backed deployment configuration.
 - Rotate any credentials that were stored in local files or exposed in chat/output.
-- Document local setup, runtime architecture, and investor demo flow.
+- Document local setup, runtime architecture, and demo flow.
 - Add container runtime files for repeatable local and Azure deployment.
 
 ## 2. Core API
@@ -42,9 +42,9 @@
 - Add health checks, logs, and rollback notes.
 - Keep Astro site output on Cloudflare Pages and wire domain verification for `parlayvu.ai`.
 
-## 7. Investor Demo
+## 7. Demo Flow
 
-- Seed a demo client/project based on the RamAir case study using `python scripts/seed_demo.py`.
+- Ensure the RamAir client/project exists in project memory.
 - Show Teams intake through Nathan.
 - Generate a landing page with Dylan.
 - Produce campaign copy with Ava and distribution steps with Riley/Jordan.

@@ -21,14 +21,6 @@ def build_release_checks() -> list[dict[str, list[str]]]:
             ],
         },
         {
-            "title": "Demo Memory",
-            "items": [
-                "Run python scripts/seed_demo.py.",
-                "Confirm RamAir project memory exists.",
-                "Confirm pending approvals are visible.",
-            ],
-        },
-        {
             "title": "Readiness",
             "items": [
                 "Start the API with uvicorn.",
@@ -40,7 +32,6 @@ def build_release_checks() -> list[dict[str, list[str]]]:
         {
             "title": "Demo Rehearsal",
             "items": [
-                "Run python scripts/demo_runbook.py.",
                 "Walk through Teams, Nathan, Dylan, approvals, M365 draft, and HeyGen question flow.",
                 "Confirm deploys and sends remain approval-gated.",
             ],

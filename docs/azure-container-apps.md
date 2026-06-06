@@ -37,8 +37,7 @@ This checklist moves the ParlayVU FastAPI/LangGraph backend to Azure while keepi
 5. Deploy the API container with ingress enabled.
 6. Confirm `/health` returns `healthy`.
 7. Confirm `/readiness` returns `ready`.
-8. Run `python scripts/seed_demo.py` against the production `DATABASE_URL` from a secure operator environment if demo memory is not already present.
-9. Update the Azure Bot messaging endpoint to the hosted `/teams/messages` URL.
+8. Update the Azure Bot messaging endpoint to the hosted `/teams/messages` URL.
 
 ## Security Notes
 

@@ -83,7 +83,7 @@ Supported Word template placeholders:
 
 Use `{{CLIENT}}` when the template should show the Teams channel/client short label. Use `{{CLIENT_NAME}}` when it should show the formal company name. `{{CLIENT_NAME}}` is resolved from `project_context.client.name` or the stored `Client.name`; if no stored name is available, it falls back to the same display value as `{{CLIENT}}`.
 
-For the RamAir demo, the seeded client name is `RamAir International` while the Teams channel label remains `RamAir`. Run `python scripts/seed_demo.py` against the target `DATABASE_URL` to create or update the seeded project memory, then confirm with `GET /memory/projects/ramair-straight-from-the-hart`.
+For RamAir, the stored client name is `RamAir International` while the Teams channel label remains `RamAir`. Ensure the RamAir client/project rows exist in project memory, then confirm with `GET /memory/projects/ramair-straight-from-the-hart`.
 
 `ONENOTE_OWNER_MAILBOX` defaults to `NATHAN_MAILBOX` when omitted. Prefer `ONENOTE_SECTION_ID` for production. If only names are configured, ParlayVU resolves `ONENOTE_NOTEBOOK_NAME=RamAir` and `ONENOTE_SECTION_NAME=Meeting Notes` through Graph before creating the page.
 

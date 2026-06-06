@@ -6,8 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import initialize_database
-from app.models import AgentEvent, GeneratedOutput, Project, TeamsChannelBinding
-from app.demo_seed import RAMAIR_PROJECT_ID, seed_ramair_demo
+from app.models import Approval, AgentEvent, Client, GeneratedOutput, Project, TeamsChannelBinding
 from app.project_memory import (
     bind_teams_channel,
     get_project_context,
@@ -17,6 +16,41 @@ from app.project_memory import (
     record_agent_event,
     record_generated_output,
 )
+
+
+RAMAIR_PROJECT_ID = "ramair-straight-from-the-hart"
+
+
+def _seed_minimal_ramair(session) -> None:
+    """Minimal RamAir fixture for the project-memory read tests.
+
+    Replaces the removed app.demo_seed.seed_ramair_demo helper — only seeds the
+    rows these tests actually assert on (client, project, one output, one pending
+    approval).
+    """
+    session.add(Client(id="ramair", name="RamAir International"))
+    session.add(
+        Project(
+            id=RAMAIR_PROJECT_ID,
+            client_id="ramair",
+            name="Straight from the Hart Content Engine",
+        )
+    )
+    output = GeneratedOutput(
+        project_id=RAMAIR_PROJECT_ID,
+        agent_name="dylan",
+        output_type="astro_site",
+        title="Campaign landing page",
+        status="generated",
+    )
+    session.add(output)
+    session.add(
+        Approval(
+            project_id=RAMAIR_PROJECT_ID,
+            requested_by_agent="dylan",
+            status="pending",
+        )
+    )
 
 
 class ProjectMemoryServiceTests(unittest.TestCase):
@@ -84,7 +118,7 @@ class ProjectMemoryServiceTests(unittest.TestCase):
         Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
         with Session() as session:
-            seed_ramair_demo(session)
+            _seed_minimal_ramair(session)
             session.commit()
 
         def fake_scope():
@@ -118,7 +152,7 @@ class ProjectMemoryServiceTests(unittest.TestCase):
         Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
         with Session() as session:
-            seed_ramair_demo(session)
+            _seed_minimal_ramair(session)
             session.commit()
 
         def fake_scope():

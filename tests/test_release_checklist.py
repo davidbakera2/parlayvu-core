@@ -9,7 +9,6 @@ class ReleaseChecklistTests(unittest.TestCase):
 
         self.assertIn("Secret Safety", sections)
         self.assertIn("Local Verification", sections)
-        self.assertIn("Demo Memory", sections)
         self.assertIn("Readiness", sections)
         self.assertIn("Demo Rehearsal", sections)
         self.assertIn("Pitch Materials", sections)
@@ -18,8 +17,6 @@ class ReleaseChecklistTests(unittest.TestCase):
         checklist = render_release_checklist()
 
         self.assertIn("python -m unittest discover -s tests", checklist)
-        self.assertIn("python scripts/seed_demo.py", checklist)
-        self.assertIn("python scripts/demo_runbook.py", checklist)
         self.assertIn("MICROSOFT_GRAPH_ALLOW_SEND=false", checklist)
         self.assertIn("approval-gated", checklist)
         self.assertIn("Final Gate", checklist)

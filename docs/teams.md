@@ -109,7 +109,7 @@ Nathan can publish a provided meeting summary into the RamAir channel SharePoint
 
 For `.docx`, Nathan uses the RamAir Word template at `00_Client_Brief/Templates/RamAir Meeting Notes Template.docx` by default and replaces placeholders such as `{{MEETING_TITLE}}`, `{{CLIENT}}`, `{{CLIENT_NAME}}`, `{{SUMMARY}}`, `{{DECISIONS}}`, and `{{NEXT_STEPS}}`. Use `{{CLIENT}}` for the short Teams channel/client label such as `RamAir`, and `{{CLIENT_NAME}}` for the stored company name such as `RamAir International`. If the template cannot be downloaded or rendered, Nathan still publishes the `.md` copy and falls back to the built-in generated `.docx`.
 
-The company name comes from project memory (`project_context.client.name` / `Client.name`). For the RamAir demo, run `python scripts/seed_demo.py` against the same `DATABASE_URL` used by the API to create or update `RamAir International`, then confirm with `GET /memory/projects/ramair-straight-from-the-hart`.
+The company name comes from project memory (`project_context.client.name` / `Client.name`). For RamAir, ensure the `RamAir International` client row exists in project memory on the same `DATABASE_URL` used by the API, then confirm with `GET /memory/projects/ramair-straight-from-the-hart`.
 
 Example Teams prompt:
 

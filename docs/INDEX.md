@@ -39,7 +39,6 @@ A map of every doc in this repo, grouped by purpose. Start here when looking for
 |---|---|
 | [ramair-client-channel-pilot.md](./ramair-client-channel-pilot.md) | RamAir Teams channel pilot model and scripts. |
 | [parlays/podcast-parlay.md](./parlays/podcast-parlay.md) | Podcast Parlay content-product planning. |
-| [investor-demo-runbook.md](./investor-demo-runbook.md) | Step-by-step investor demo flow. |
 | [work-anywhere.md](./work-anywhere.md) | Dev environment setup. |
 
 ## Scoped / deferred work
