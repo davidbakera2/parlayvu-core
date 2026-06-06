@@ -302,7 +302,11 @@ def _program_scenes_from_segments(analysis: dict) -> tuple[list[dict], list[dict
 # Graph nodes
 # ---------------------------------------------------------------------------
 def _roster_block(state: PodcastPlanState) -> str:
-    """Camera roster + show name for a planner prompt (drives names/spelling/cameras)."""
+    """Camera roster + show name + glossary for a planner prompt.
+
+    Drives correct camera selection and exact spellings (names, show name, and brand/product
+    terms the transcript commonly mis-transcribes, e.g. SaniJet).
+    """
     parts = []
     roster = format_camera_roster(state.cameras)
     if roster:
@@ -311,11 +315,16 @@ def _roster_block(state: PodcastPlanState) -> str:
             + roster
         )
     try:
-        show_name = load_show_kit(state.visual_system).get("show_name")
+        kit = load_show_kit(state.visual_system)
     except Exception:
-        show_name = None
-    if show_name:
-        parts.append(f"Show name (exact spelling): {show_name}")
+        kit = {}
+    if kit.get("show_name"):
+        parts.append(f"Show name (exact spelling): {kit['show_name']}")
+    if kit.get("known_terms"):
+        parts.append(
+            "Known terms — spell these EXACTLY, the transcript may misspell them: "
+            + ", ".join(kit["known_terms"])
+        )
     return ("\n" + "\n\n".join(parts) + "\n") if parts else ""
 
 

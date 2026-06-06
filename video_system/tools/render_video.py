@@ -519,7 +519,10 @@ class Renderer:
         }[layout]
         overlay = self.make_overlay(overlay_name, template_name, top_text, topic)
         host = self.asset_path(scene.get("host_source") or "host.mp4")
-        guest = self.asset_path(scene.get("guest_01_source") or "guest_01.mp4")
+        # The single "guest" slot (used by 2cam_broll) is whichever guest camera the scene
+        # selected — fall back guest_01 -> guest_02 so a host+guest_02 b-roll scene shows the
+        # right person. (3cam/3cam_broll handle guest_02 separately below.)
+        guest = self.asset_path(scene.get("guest_01_source") or scene.get("guest_02_source") or "guest_01.mp4")
         background = self.asset_path(self.setting_text("background_video", ""))
         # Guard: when background_video is unset, asset_path("") resolves to the assets
         # directory, and a directory .exists() — feeding ffmpeg a folder as a video input.
