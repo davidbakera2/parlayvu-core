@@ -69,6 +69,6 @@ Project configuration, not transcript-derived:
 - `settings[]`: `{ setting, value, notes }` — e.g. `template_name`, `background_video`, `timeline_mode` (`full_rendered` for the standard workflow).
 
 > History: this contract was originally defined in `video_system/schemas/spreadsheet_columns.md`.
-> `video_system` (the FFmpeg execution tooling, `render_video.py`) has been split out of
-> this repo; this document preserves the planning-output contract so the agentic planning
-> layer has a stable target.
+> The FFmpeg renderer that consumes this contract lives at
+> `video_system/tools/render_video.py`; this document is the stable contract between the
+> agentic planning layer and that renderer.

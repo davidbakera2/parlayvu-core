@@ -125,16 +125,16 @@ render end-to-end, with minimal manual tweaking for standard episodes.
   `POST /parlays/podcast/plan`. Output contract: `docs/parlays/video-plan-schema.md`.
   The plan is persisted under `client_artifacts/<client>/02_Planning/podcast_plans/` and,
   when a client + project are supplied, a `video_plan` approval is requested before render.
-- Execution (FFmpeg) tooling lives in the separate video system and is not currently in
-  this repo; the planning output targets the documented `video_plan` schema so it can
-  drive that renderer (`video_system/tools/render_video.py`).
+- Execution is the FFmpeg renderer at `video_system/tools/render_video.py`, which reads a
+  `video_plan.json` in the documented schema directly (verified end-to-end against plans
+  in this schema). The planning output targets that contract.
 
 ## Roadmap
 
 1. ✅ Formalize Podcast Parlay definition and data contracts (this document + `video-plan-schema.md`).
 2. ✅ Build initial agentic planning agents that propose cuts, lower thirds, and b-roll from transcripts.
 3. ✅ Wire the planning output into approvals + persist plans to `client_artifacts` (a `video_plan` approval is requested before render; plans saved under `02_Planning/podcast_plans/`).
-4. Restore the FFmpeg renderer and confirm the planning output drives it end-to-end.
+4. ✅ Confirm the planning output drives the FFmpeg renderer (`render_video.py`) end-to-end.
 5. Pilot the full flow on 1–2 episodes.
 6. Gradually reduce human time in the planning phase while maintaining quality.
 7. Evolve Shorts production into its own sub-Parlay or integrated flow.
