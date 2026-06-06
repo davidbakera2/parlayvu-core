@@ -332,7 +332,7 @@ def alex_node(state: PodcastPlanState) -> dict:
     brand_block = f"\nBrand voice: {state.brand_voice}\n" if state.brand_voice else ""
     user = (
         f"Episode: {state.episode_title}{brand_block}\n"
-        f"Segment analysis:\n{json.dumps(analysis, default=str)[:8000]}"
+        f"Segment analysis:\n{json.dumps(analysis, default=str)[:40000]}"
     )
 
     try:
