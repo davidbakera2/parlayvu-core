@@ -521,7 +521,11 @@ class Renderer:
         host = self.asset_path(scene.get("host_source") or "host.mp4")
         guest = self.asset_path(scene.get("guest_01_source") or "guest_01.mp4")
         background = self.asset_path(self.setting_text("background_video", ""))
-        has_background = background.exists()
+        # Guard: when background_video is unset, asset_path("") resolves to the assets
+        # directory, and a directory .exists() — feeding ffmpeg a folder as a video input.
+        # A background must be an actual file. Agent-generated plans omit background_video,
+        # so the no-background path (else branch below) is the common case.
+        has_background = background.is_file()
         if has_background:
             inputs.extend(["-stream_loop", "-1", "-t", f"{duration:.3f}", "-i", background])
             inputs.extend(["-loop", "1", "-t", f"{duration:.3f}", "-i", overlay])
