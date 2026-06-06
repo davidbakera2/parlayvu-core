@@ -12,7 +12,6 @@ class ReleaseChecklistTests(unittest.TestCase):
         self.assertIn("Demo Memory", sections)
         self.assertIn("Readiness", sections)
         self.assertIn("Demo Rehearsal", sections)
-        self.assertIn("AWS/Fargate", sections)
         self.assertIn("Pitch Materials", sections)
 
     def test_render_release_checklist_mentions_key_commands_and_gates(self):
@@ -21,7 +20,6 @@ class ReleaseChecklistTests(unittest.TestCase):
         self.assertIn("python -m unittest discover -s tests", checklist)
         self.assertIn("python scripts/seed_demo.py", checklist)
         self.assertIn("python scripts/demo_runbook.py", checklist)
-        self.assertIn("python scripts/aws_deploy_checklist.py", checklist)
         self.assertIn("MICROSOFT_GRAPH_ALLOW_SEND=false", checklist)
         self.assertIn("approval-gated", checklist)
         self.assertIn("Final Gate", checklist)

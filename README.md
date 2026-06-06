@@ -109,14 +109,6 @@ The preferred hosted API path is Azure Container Apps with Neon Postgres kept as
 python scripts/azure_deploy_checklist.py
 ```
 
-## AWS Fargate
-
-The Fargate deployment path remains available as a portability option and is documented in `docs/aws-fargate.md`. Print the AWS command checklist with:
-
-```powershell
-python scripts/aws_deploy_checklist.py
-```
-
 ## Release Checklist
 
 The final pitch-readiness gate is documented in `docs/release-checklist.md`. Print the checklist with:
@@ -149,5 +141,5 @@ The native Teams media bot scaffold lives under `services/teams-media-bot/`. It 
 4. Add database models and migrations for clients, projects, source assets, outputs, approvals, and agent activity.
 5. Add Microsoft Graph helpers for agent mailboxes and Teams events.
 6. Add HeyGen LiveAvatar callbacks connected to approved project memory.
-7. Containerize the API for Azure Container Apps while preserving AWS Fargate portability.
+7. Containerize the API for Azure Container Apps.
 8. Create a polished investor demo path using the RamAir case study.

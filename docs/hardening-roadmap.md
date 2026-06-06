@@ -5,7 +5,7 @@
 - Protect secrets with `.gitignore` and secret-manager-backed deployment configuration.
 - Rotate any credentials that were stored in local files or exposed in chat/output.
 - Document local setup, runtime architecture, and investor demo flow.
-- Add container runtime files for repeatable local and AWS deployment.
+- Add container runtime files for repeatable local and Azure deployment.
 
 ## 2. Core API
 
@@ -37,8 +37,8 @@
 
 ## 6. Deployment
 
-- Package the API for AWS Fargate.
-- Use AWS Secrets Manager for production secrets.
+- Package the API for Azure Container Apps.
+- Use Azure Container App secrets or Azure Key Vault for production secrets.
 - Add health checks, logs, and rollback notes.
 - Keep Astro site output on Cloudflare Pages and wire domain verification for `parlayvu.ai`.
 
