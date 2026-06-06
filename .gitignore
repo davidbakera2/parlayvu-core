@@ -30,6 +30,9 @@ client_artifacts/*/03_Deliverables/sites/index.html
 # Podcast Parlay generated plans — regenerated per run, not source content.
 client_artifacts/*/02_Planning/podcast_plans/
 
+# Podcast Parlay render projects — episode source media + rendered output. Large; never track.
+client_artifacts/*/03_Deliverables/podcast/
+
 *.pem
 *.key
 *.pfx
