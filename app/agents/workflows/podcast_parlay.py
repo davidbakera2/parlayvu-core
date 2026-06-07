@@ -372,9 +372,19 @@ def alex_node(state: PodcastPlanState) -> dict:
     manifest = state.broll_manifest if state.broll_manifest is not None else build_broll_manifest(state.assets_dir)
     manifest_block = ""
     if manifest:
+        def _b(b):
+            line = f"- {b['file_name']}"
+            if b.get("description"):
+                line += f": {b['description']}"
+            if b.get("tags"):
+                line += f" [tags: {', '.join(b['tags'])}]"
+            if b.get("usage"):
+                line += f" ({b['usage']})"
+            return line
         manifest_block = (
-            "\nB-ROLL LIBRARY (use ONLY these exact file names for broll_file):\n"
-            + "\n".join(f"- {b['file_name']}" for b in manifest) + "\n"
+            "\nB-ROLL LIBRARY (use ONLY these exact file names for broll_file; match a clip to a "
+            "beat by its description — 'specific' clips go on their topic, 'generic' clips can fill "
+            "anywhere):\n" + "\n".join(_b(b) for b in manifest) + "\n"
         )
 
     editing_block = ""

@@ -81,16 +81,33 @@ def load_show_kit(visual_system: str = "parlayvu_interview") -> dict:
 
 
 def build_broll_manifest(assets_dir: Optional[Path | str]) -> list[dict]:
-    """Scan the episode assets folder for the real b-roll files Alex may use."""
+    """Scan the episode assets folder for the real b-roll files Alex may use.
+
+    Merges in vision-generated descriptions/tags/usage from assets/broll.json when present
+    (see app/agents/workflows/podcast_broll.py) so Alex can place b-roll by meaning.
+    """
     if not assets_dir:
         return []
     assets_dir = Path(assets_dir)
     if not assets_dir.is_dir():
         return []
+
+    try:
+        from app.agents.workflows.podcast_broll import load_broll_descriptions
+        descriptions = load_broll_descriptions(assets_dir)
+    except Exception:
+        descriptions = {}
+
     manifest = []
     for p in sorted(assets_dir.iterdir()):
-        if p.is_file() and p.stem.lower().startswith("broll"):
-            manifest.append({"broll_id": p.stem, "file_name": p.name})
+        if p.is_file() and p.stem.lower().startswith("broll") and p.name != "broll.json":
+            entry = {"broll_id": p.stem, "file_name": p.name}
+            d = descriptions.get(p.name)
+            if d:
+                entry["description"] = d.get("description", "")
+                entry["tags"] = d.get("tags", [])
+                entry["usage"] = d.get("usage", "")
+            manifest.append(entry)
     return manifest
 
 
