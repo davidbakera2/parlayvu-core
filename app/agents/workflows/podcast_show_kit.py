@@ -26,7 +26,11 @@ VISUAL_SYSTEMS_DIR = (
     Path(__file__).resolve().parents[3] / "video_system" / "templates" / "visual_systems"
 )
 
-PROGRAM_LAYOUTS = {"1cam", "2cam", "2cam_broll", "3cam", "3cam_broll"}
+PROGRAM_LAYOUTS = {
+    "1cam", "2cam", "2cam_broll", "3cam", "3cam_broll",
+    # Data-driven layouts (see LAYOUT_BOXES in render_video.py). "*p" = tall/portrait b-roll.
+    "1cam_broll", "1cam_brollp", "2cam_brollp", "3cam_brollp", "4cam_brollp", "4cam", "4cam_broll",
+}
 
 
 # --------------------------------------------------------------------------- time helpers
@@ -101,8 +105,12 @@ def build_broll_manifest(assets_dir: Optional[Path | str]) -> list[dict]:
     manifest = []
     for p in sorted(assets_dir.iterdir()):
         if p.is_file() and p.stem.lower().startswith("broll") and p.name != "broll.json":
-            entry = {"broll_id": p.stem, "file_name": p.name}
             d = descriptions.get(p.name)
+            # A producer can mark a clip usage="exclude" in broll.json to keep it out of the
+            # library entirely (e.g. an unusable take) without deleting the file from assets.
+            if d and d.get("usage") == "exclude":
+                continue
+            entry = {"broll_id": p.stem, "file_name": p.name}
             if d:
                 entry["description"] = d.get("description", "")
                 entry["tags"] = d.get("tags", [])
@@ -120,7 +128,7 @@ def format_camera_roster(cameras: Optional[dict]) -> str:
     if not cameras:
         return ""
     lines = []
-    for slot in ("host", "guest_01", "guest_02"):
+    for slot in ("host", "guest_01", "guest_02", "guest_03"):
         person = cameras.get(slot)
         if not person:
             continue
@@ -198,8 +206,15 @@ def merge_with_show_kit(
         # "guest_02"] to show the host with the second guest); otherwise infer from layout.
         cams = ps.get("cameras")
         if not cams:
-            n = 3 if layout.startswith("3cam") else (1 if layout == "1cam" else 2)
-            cams = ["host", "guest_01", "guest_02"][:n]
+            if layout.startswith("4cam"):
+                n = 4
+            elif layout.startswith("3cam"):
+                n = 3
+            elif layout.startswith("1cam"):
+                n = 1
+            else:
+                n = 2
+            cams = ["host", "guest_01", "guest_02", "guest_03"][:n]
 
         scene = {
             "enabled": True, "scene_id": sid, "layout": layout,
@@ -210,7 +225,7 @@ def merge_with_show_kit(
             "bottom_row_text": ps.get("bottom_row_text", ""),
             "notes": ps.get("notes", ""),
         }
-        for cam in ("host", "guest_01", "guest_02"):
+        for cam in ("host", "guest_01", "guest_02", "guest_03"):
             if cam in cams:
                 scene[f"{cam}_source"] = f"{cam}.mp4"
         if "broll" in layout:

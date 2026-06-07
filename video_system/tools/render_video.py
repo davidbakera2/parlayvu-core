@@ -46,6 +46,38 @@ LOWER_RIGHT = sbox((1161, 604, 1254, 697))
 TOP_TEXT_BOX = sbox((176, 606, 1157, 631))
 BOTTOM_TEXT_BOX = sbox((184, 640, 1125, 687))
 
+# Camera/b-roll box geometry for every multi-box layout, in 1280x720 design space (x, y, w, h),
+# detected from the *transparent* boxes punched in each layout PNG. ``cams`` are listed in the
+# order they're filled — reading order (left->right for side-by-side, top->bottom for the stacked
+# *_broll layouts) — and the scene's cameras are placed into them in fixed role order
+# (host, guest_01, guest_02, guest_03). So the host is always the far-left/top box and the last
+# guest is always the far-right/bottom box, regardless of who is speaking. ``broll`` is the
+# b-roll panel (landscape for *_broll, tall portrait for *_brollp), or None.
+LAYOUT_BOXES: dict[str, dict] = {
+    # Side-by-side camera layouts.
+    "2cam":        {"cams": [(28, 26, 612, 564), (643, 26, 611, 564)], "broll": None},
+    "3cam":        {"cams": [(28, 26, 407, 564), (438, 26, 406, 564), (847, 26, 407, 564)], "broll": None},
+    "4cam":        {"cams": [(28, 26, 304, 564), (335, 26, 305, 564), (643, 26, 304, 564), (950, 26, 304, 564)], "broll": None},
+    # Stacked cameras (left column, top->bottom) + wide LANDSCAPE b-roll on the right.
+    "2cam_broll":  {"cams": [(28, 26, 217, 281), (28, 310, 217, 280)], "broll": (248, 26, 1006, 564)},
+    "3cam_broll":  {"cams": [(28, 26, 217, 186), (28, 215, 217, 186), (28, 404, 217, 186)], "broll": (248, 26, 1006, 564)},
+    "4cam_broll":  {"cams": [(28, 26, 217, 139), (28, 168, 217, 139), (28, 310, 217, 138), (28, 451, 217, 139)], "broll": (248, 26, 1006, 564)},
+    # Side-by-side cameras + tall PORTRAIT b-roll panel.
+    "1cam_brollp": {"cams": [(28, 26, 907, 564)], "broll": (938, 26, 315, 564)},
+    "2cam_brollp": {"cams": [(28, 26, 450, 564), (800, 26, 454, 564)], "broll": (481, 26, 316, 564)},
+    "3cam_brollp": {"cams": [(28, 26, 300, 564), (331, 26, 300, 564), (634, 26, 300, 564)], "broll": (937, 26, 317, 564)},
+    "4cam_brollp": {"cams": [(28, 26, 450, 280), (800, 26, 453, 280), (28, 309, 450, 281), (800, 309, 453, 281)], "broll": (481, 26, 316, 564)},
+    # Single camera + wide landscape b-roll (camera sits mid-left).
+    "1cam_broll":  {"cams": [(28, 168, 217, 280)], "broll": (248, 26, 1006, 564)},
+}
+
+CAMERA_KEYS = ("host", "guest_01", "guest_02", "guest_03")
+# Output-space pixels each video is grown on every side so it tucks BEHIND the template's
+# white frame lines (no background gap at the inner edge) without spilling past their outer side.
+OVERSCAN_PX = 3
+# 1cam is full-frame (handled separately); everything else is a LAYOUT_BOXES multi-box layout.
+ALL_PROGRAM_LAYOUTS = {"1cam"} | set(LAYOUT_BOXES)
+
 
 def run(cmd: list[str | Path]) -> None:
     print(" ".join(str(c) for c in cmd))
@@ -178,7 +210,7 @@ class Renderer:
         for scene in self.plan.get("scenes", []):
             if scene.get("enabled") is False:
                 continue
-            if scene.get("layout") in {"1cam", "2cam", "2cam_broll", "3cam", "3cam_broll"}:
+            if scene.get("layout") in ALL_PROGRAM_LAYOUTS:
                 return parse_time(scene.get("start"))
         return 0.0
 
@@ -232,7 +264,7 @@ class Renderer:
         still heard. Cameras are added as dedicated audio inputs at the scene's source_start.
         """
         cam_idxs: list[int] = []
-        for cam in ("host.mp4", "guest_01.mp4", "guest_02.mp4"):
+        for cam in ("host.mp4", "guest_01.mp4", "guest_02.mp4", "guest_03.mp4"):
             path = self.assets / cam
             if path.exists():
                 inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", path])
@@ -300,13 +332,15 @@ class Renderer:
         draw.line((x2 - 1, y1, x2 - 1, y2 - 1), fill=(255, 255, 255), width=width)
         draw.line((x1, y2 - 1, x2 - 1, y2 - 1), fill=(255, 255, 255), width=width)
 
-    def make_overlay(self, name: str, template_name: str, top_text: str, topic: str) -> Path:
+    def make_overlay(self, name: str, template_name: str, top_text: str, topic: str, keyed: bool = False) -> Path:
         base_rgb = Image.open(self.layouts / template_name).convert("RGB")
         base_rgb.info.clear()
         if base_rgb.size != (W, H):
             base_rgb = base_rgb.resize((W, H), Image.Resampling.LANCZOS)
 
-        if template_name != "1cam.png" and self.setting_text("background_video", ""):
+        # ``keyed`` forces the transparent-box output (boxes + outer margins become transparent,
+        # lines/strip/art stay opaque) so the overlay can be composited ON TOP of the cameras.
+        if keyed or (template_name != "1cam.png" and self.setting_text("background_video", "")):
             rgb = base_rgb.convert("RGB")
             alpha = ImageChops.difference(rgb, Image.new("RGB", rgb.size, "black")).convert("L")
             alpha = alpha.point(lambda px: 0 if px <= 3 else 255)
@@ -450,7 +484,11 @@ class Renderer:
     def vf_scale_to_box(self, label: str, width: int, height: int, zoom: float = 1.0) -> str:
         scale_width = round(width * zoom)
         scale_height = round(height * zoom)
-        return f"[{label}:v]scale={scale_width}:{scale_height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1,fps={FPS},format=yuv420p"
+        # setpts=PTS-STARTPTS zeroes the first frame's timestamp. With -ss input seeking a
+        # camera's first frame can land just after t=0, so without this the overlay's very first
+        # output frame shows only the background+template (a 1-frame "flash" with no cameras at
+        # each scene start).
+        return f"[{label}:v]setpts=PTS-STARTPTS,scale={scale_width}:{scale_height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1,fps={FPS},format=yuv420p"
 
     def lower_third_scene(self, scene_id: str) -> dict[str, str] | None:
         scene_id = str(scene_id or "").strip()
@@ -541,126 +579,65 @@ class Renderer:
             self.encode(out, inputs, ";".join(filters), duration)
             return out
 
-        template_name = {
-            "2cam": "2cam.png",
-            "2cam_broll": "2cam_broll.png",
-            "3cam": "3cam.png",
-            "3cam_broll": "3cam_broll.png",
-        }[layout]
-        overlay = self.make_overlay(overlay_name, template_name, top_text, topic)
-        host = self.asset_path(scene.get("host_source") or "host.mp4")
-        # The single "guest" slot (used by 2cam_broll) is whichever guest camera the scene
-        # selected — fall back guest_01 -> guest_02 so a host+guest_02 b-roll scene shows the
-        # right person. (3cam/3cam_broll handle guest_02 separately below.)
-        guest = self.asset_path(scene.get("guest_01_source") or scene.get("guest_02_source") or "guest_01.mp4")
+        # ---- Multi-box layouts: cameras (+ optional b-roll) behind the template lines. ----
+        # Each box's video is scaled to fill the box and grown OVERSCAN_PX on every side so it
+        # tucks BEHIND the white frame lines (no background gap at the inner edge); the template
+        # (lines + lower-third, with transparent boxes) is then composited ON TOP, so the lines
+        # stay crisp and the overscan never shows past their outer side. Cameras fill the boxes in
+        # fixed role order (host, guest_01, guest_02, guest_03) — host is always the far-left/top
+        # box and the last guest the far-right/bottom box, regardless of who is speaking.
+        spec = LAYOUT_BOXES[layout]
+        overlay = self.make_overlay(overlay_name, f"{layout}.png", top_text, topic, keyed=True)
+
         background = self.asset_path(self.setting_text("background_video", ""))
-        # Guard: when background_video is unset, asset_path("") resolves to the assets
-        # directory, and a directory .exists() — feeding ffmpeg a folder as a video input.
-        # A background must be an actual file. Agent-generated plans omit background_video,
-        # so the no-background path (else branch below) is the common case.
-        has_background = background.is_file()
-        if has_background:
+        # Guard: asset_path("") resolves to the assets directory, which exists — so check is_file.
+        if background.is_file():
             inputs.extend(["-stream_loop", "-1", "-t", f"{duration:.3f}", "-i", background])
-            inputs.extend(["-loop", "1", "-t", f"{duration:.3f}", "-i", overlay])
-            host_input, guest_input = "2", "3"
             filters.append(
                 f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-                f"setsar=1,fps={FPS},format=yuv420p[bgbase]"
+                f"setsar=1,fps={FPS},format=yuv420p[base]"
             )
-            filters.append(f"[1:v]fps={FPS},format=rgba[layoutv]")
-            filters.append("[bgbase][layoutv]overlay=0:0:format=auto[bg]")
         else:
-            inputs.extend(["-loop", "1", "-t", f"{duration:.3f}", "-i", overlay])
-            host_input, guest_input = "1", "2"
-            filters.append("[0:v]fps=24,format=yuv420p[bg]")
+            inputs.extend(["-f", "lavfi", "-t", f"{duration:.3f}", "-i", f"color=c=black:s={W}x{H}:r={FPS}"])
+            filters.append("[0:v]format=yuv420p[base]")
 
-        if layout == "2cam":
-            cameras: list[tuple[str, Path]] = []
-            for camera_key in ["host", "guest_01", "guest_02"]:
-                source_name = scene.get(f"{camera_key}_source")
-                if source_name:
-                    cameras.append((camera_key, self.asset_path(source_name)))
-            if len(cameras) != 2:
-                raise ValueError(
-                    f"2cam scene {scene.get('scene_id')} must populate exactly two camera source fields; "
-                    f"found {len(cameras)}"
-                )
-            primary = scene.get("primary_camera") or cameras[0][0]
-            left_key, left_path = next(((key, path) for key, path in cameras if key == primary), cameras[0])
-            right_key, right_path = next((key, path) for key, path in cameras if key != left_key)
-            inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", left_path])
-            inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", right_path])
-            left_input = str(sum(1 for item in inputs if str(item) == "-i") - 2)
-            right_input = str(sum(1 for item in inputs if str(item) == "-i") - 1)
-            host_input = left_input
-            filters.append(self.vf_scale_to_box(left_input, sx(612), sy(564)) + "[hostv]")
-            filters.append(self.vf_scale_to_box(right_input, sx(611), sy(564)) + "[guestv]")
-            hx, hy = spos(28, 26)
-            gx, gy = spos(643, 26)
-            filters.append(f"[bg][hostv]overlay={hx}:{hy}[tmp1];[tmp1][guestv]overlay={gx}:{gy}[v]")
-        elif layout == "2cam_broll":
-            inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", host])
-            inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", guest])
+        def _obox(bx: int, by: int, bw: int, bh: int) -> tuple[int, int, int, int]:
+            x0, y0 = sx(bx), sy(by)
+            return x0, y0, sx(bx + bw) - x0, sy(by + bh) - y0
+
+        o = OVERSCAN_PX
+        cur = "base"
+        present = [k for k in CAMERA_KEYS if scene.get(f"{k}_source")]
+        boxes = spec["cams"]
+        if len(present) < len(boxes):
+            print(f"WARNING: {layout} scene {scene.get('scene_id')} has {len(present)} cameras "
+                  f"for {len(boxes)} boxes ({present}); unfilled boxes show the background.")
+        for n, (key, (bx, by, bw, bh)) in enumerate(zip(present, boxes)):
+            src = self.asset_path(scene.get(f"{key}_source"))
+            inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", src])
+            in_idx = str(sum(1 for item in inputs if str(item) == "-i") - 1)
+            x0, y0, bw_o, bh_o = _obox(bx, by, bw, bh)
+            filters.append(self.vf_scale_to_box(in_idx, bw_o + 2 * o, bh_o + 2 * o) + f"[dc{n}]")
+            filters.append(f"[{cur}][dc{n}]overlay={x0 - o}:{y0 - o}[d{n}]")
+            cur = f"d{n}"
+        if spec.get("broll"):
             broll_file = scene.get("broll_file") or self.broll_index.get(scene.get("broll_id"), {}).get("file_name")
-            broll_start = parse_time(scene.get("broll_source_start") or self.broll_index.get(scene.get("broll_id"), {}).get("default_source_start"))
-            broll_input = self.add_broll_input(inputs, self.asset_path(broll_file), broll_start, duration)
-            filters.append(self.vf_scale_to_box(host_input, sx(217), sy(281)) + "[hostv]")
-            filters.append(self.vf_scale_to_box(guest_input, sx(217), sy(280)) + "[guestv]")
-            broll_zoom = 1.3 if Path(str(broll_file)).name.lower() == "davidhart1.mp4" else 1.0
-            filters.append(self.vf_scale_to_box(broll_input, sx(1006), sy(564), broll_zoom) + "[brollv]")
-            hx, hy = spos(28, 26)
-            gx, gy = spos(28, 310)
-            bx, by = spos(248, 26)
-            filters.append(f"[bg][hostv]overlay={hx}:{hy}[tmp1];[tmp1][guestv]overlay={gx}:{gy}[tmp2];[tmp2][brollv]overlay={bx}:{by}[v]")
-        elif layout == "3cam":
-            inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", host])
-            inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", guest])
-            guest_02 = self.asset_path(scene.get("guest_02_source") or "guest_02.mp4")
-            if guest_02.exists():
-                inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", guest_02])
-                guest2_input = str(sum(1 for item in inputs if str(item) == "-i") - 1)
-                filters.append(self.vf_scale_to_box(host_input, sx(407), sy(564)) + "[hostv]")
-                filters.append(self.vf_scale_to_box(guest_input, sx(406), sy(564)) + "[guestv]")
-                filters.append(self.vf_scale_to_box(guest2_input, sx(407), sy(564)) + "[guest2v]")
-                hx, hy = spos(28, 26)
-                g2x, g2y = spos(438, 26)
-                gx, gy = spos(848, 26)
-                filters.append(f"[bg][hostv]overlay={hx}:{hy}[tmp1];[tmp1][guest2v]overlay={g2x}:{g2y}[tmp2];[tmp2][guestv]overlay={gx}:{gy}[v]")
-            else:
-                filters.append(self.vf_scale_to_box(host_input, sx(612), sy(564)) + "[hostv]")
-                filters.append(self.vf_scale_to_box(guest_input, sx(611), sy(564)) + "[guestv]")
-                hx, hy = spos(28, 26)
-                gx, gy = spos(643, 26)
-                filters.append(f"[bg][hostv]overlay={hx}:{hy}[tmp1];[tmp1][guestv]overlay={gx}:{gy}[v]")
-        elif layout == "3cam_broll":
-            inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", host])
-            inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", guest])
-            guest_02 = self.asset_path(scene.get("guest_02_source") or "guest_02.mp4")
-            broll_file = scene.get("broll_file") or self.broll_index.get(scene.get("broll_id"), {}).get("file_name")
-            broll_start = parse_time(scene.get("broll_source_start") or self.broll_index.get(scene.get("broll_id"), {}).get("default_source_start"))
-            if guest_02.exists():
-                inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", guest_02])
-                guest2_input = str(sum(1 for item in inputs if str(item) == "-i") - 1)
-            broll_input = self.add_broll_input(inputs, self.asset_path(broll_file), broll_start, duration)
-            filters.append(self.vf_scale_to_box(host_input, sx(217), sy(186)) + "[hostv]")
-            filters.append(self.vf_scale_to_box(guest_input, sx(217), sy(186)) + "[guestv]")
-            if guest_02.exists():
-                filters.append(self.vf_scale_to_box(guest2_input, sx(217), sy(186)) + "[guest2v]")
-            broll_zoom = 1.3 if Path(str(broll_file)).name.lower() == "davidhart1.mp4" else 1.0
-            filters.append(self.vf_scale_to_box(broll_input, sx(1006), sy(564), broll_zoom) + "[brollv]")
-            hx, hy = spos(28, 26)
-            gx, gy = spos(28, 215)
-            g2x, g2y = spos(28, 404)
-            bx, by = spos(248, 26)
-            if guest_02.exists():
-                filters.append(f"[bg][hostv]overlay={hx}:{hy}[tmp1];[tmp1][guestv]overlay={gx}:{gy}[tmp2];[tmp2][guest2v]overlay={g2x}:{g2y}[tmp3];[tmp3][brollv]overlay={bx}:{by}[v]")
-            else:
-                filters.append(f"[bg][hostv]overlay={hx}:{hy}[tmp1];[tmp1][guestv]overlay={gx}:{gy}[tmp2];[tmp2][brollv]overlay={bx}:{by}[v]")
-        else:
-            raise NotImplementedError(f"Layout not implemented yet: {layout}")
+            if broll_file:
+                bx, by, bw, bh = spec["broll"]
+                broll_start = parse_time(scene.get("broll_source_start") or self.broll_index.get(scene.get("broll_id"), {}).get("default_source_start"))
+                broll_input = self.add_broll_input(inputs, self.asset_path(broll_file), broll_start, duration)
+                x0, y0, bw_o, bh_o = _obox(bx, by, bw, bh)
+                filters.append(self.vf_scale_to_box(broll_input, bw_o + 2 * o, bh_o + 2 * o) + "[dbrl]")
+                filters.append(f"[{cur}][dbrl]overlay={x0 - o}:{y0 - o}[dbody]")
+                cur = "dbody"
+        # Template (lines + lower-third) on top of the videos.
+        ov_idx = str(sum(1 for item in inputs if str(item) == "-i"))
+        inputs.extend(["-loop", "1", "-t", f"{duration:.3f}", "-i", overlay])
+        filters.append(f"[{ov_idx}:v]fps={FPS},format=rgba[layoutv]")
+        filters.append(f"[{cur}][layoutv]overlay=0:0:format=auto,format=yuv420p[v]")
 
         video_label = "v"
-        if layout in {"2cam_broll", "3cam_broll"}:
+        if "broll" in layout:
             current_label = "v"
             for card_index, card in enumerate(self.broll_cards_for_scene(scene), start=1):
                 card_path = self.make_broll_card(
@@ -708,7 +685,11 @@ class Renderer:
                 "-preset",
                 "medium",
                 "-crf",
-                "19",
+                "16",
+                # Reduced deblocking keeps the template's thin white frame lines crisp; at crf 16
+                # the high-contrast line edge survives instead of smearing into a grey fringe.
+                "-x264-params",
+                "deblock=-1,-1",
                 "-c:a",
                 "aac",
                 "-ar",
@@ -751,7 +732,9 @@ class Renderer:
                 "-preset",
                 "medium",
                 "-crf",
-                "19",
+                "16",
+                "-x264-params",
+                "deblock=-1,-1",
                 "-pix_fmt",
                 "yuv420p",
                 "-c:a",
@@ -886,7 +869,9 @@ class Renderer:
                 "-preset",
                 "medium",
                 "-crf",
-                "18",
+                "16",
+                "-x264-params",
+                "deblock=-1,-1",
                 "-pix_fmt",
                 "yuv420p",
                 "-c:a",
@@ -908,11 +893,11 @@ class Renderer:
             for row in self.plan.get("scenes", [])
             if row.get("enabled", True)
         ]
-        supported_layouts = {"intro", "show_image", "outro", "1cam", "2cam", "2cam_broll", "3cam", "3cam_broll"}
+        supported_layouts = {"intro", "show_image", "outro"} | ALL_PROGRAM_LAYOUTS
         timeline_scenes = [row for row in enabled_scenes if row.get("layout") in supported_layouts]
         timeline_scenes = self.infer_scene_durations(timeline_scenes)
         has_explicit_bookends = any(row.get("layout") in {"intro", "show_image", "outro"} for row in timeline_scenes)
-        program_layouts = {"1cam", "2cam", "2cam_broll", "3cam", "3cam_broll"}
+        program_layouts = ALL_PROGRAM_LAYOUTS
         scenes = [row for row in timeline_scenes if row.get("layout") in program_layouts]
         if self.max_scenes:
             timeline_scenes = timeline_scenes[: self.max_scenes]

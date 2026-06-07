@@ -19,7 +19,7 @@ Branch: **`feat/podcast-parlay-planning`** (PR #2). All code committed.
 - `video_system/templates/visual_systems/parlayvu_interview/` — Show Kit: `show_kit.json` (format, music, editing_style, known_terms, show_name) + `legacy/` template (layouts/styles).
 
 ## Current episode
-- Project dir: `client_artifacts/ramair/03_Deliverables/podcast/straight-from-the-hart-test/` (gitignored).
+- Project dir: `client_artifacts/ramair/03_Deliverables/podcast/ep05/` (gitignored).
   - `assets/` — real media + `broll.json` (vision descriptions; some `source:corrected`).
   - `planning/` — `transcript.srt`, `transcript.rebased.txt`, `video_plan.json`, `segment_analysis.json`, `show_notes.md`.
   - `renders/final_no_subtitles.mp4` — latest cut.

@@ -157,6 +157,48 @@ class AlexNodeTests(unittest.TestCase):
         self.assertEqual(out, {})
 
 
+class ShowNotesContextTests(unittest.TestCase):
+    """show_notes must reach both planners as LOOSE context, and be absent when unset."""
+
+    def _capture_prompt(self, node, state):
+        captured = {}
+
+        def _capturing(name: str):
+            llm = MagicMock()
+
+            def _invoke(messages):
+                captured["text"] = "\n".join(getattr(m, "content", "") for m in messages)
+                return MagicMock(content=BLAKE_JSON if name == "blake" else ALEX_JSON)
+
+            llm.invoke = MagicMock(side_effect=_invoke)
+            return llm
+
+        with patch.object(pp, "_agent_llm", _capturing):
+            node(state)
+        return captured["text"]
+
+    def test_show_notes_injected_as_loose_into_blake(self):
+        state = pp.PodcastPlanState(transcript="hi", show_notes="Topic: SaniJet rollout")
+        text = self._capture_prompt(pp.blake_node, state)
+        self.assertIn("SaniJet rollout", text)
+        self.assertIn("LOOSE", text)        # framed as loose, not a structure
+        self.assertIn("DO NOT force", text)
+
+    def test_show_notes_injected_into_alex(self):
+        state = pp.PodcastPlanState(
+            transcript="hi", show_notes="Topic: SaniJet rollout",
+            segment_analysis=json.loads(BLAKE_JSON),
+        )
+        text = self._capture_prompt(pp.alex_node, state)
+        self.assertIn("SaniJet rollout", text)
+        self.assertIn("LOOSE", text)
+
+    def test_absent_when_unset(self):
+        state = pp.PodcastPlanState(transcript="hi")
+        text = self._capture_prompt(pp.blake_node, state)
+        self.assertNotIn("Show notes", text)
+
+
 class RunWorkflowTests(unittest.TestCase):
     def test_end_to_end_returns_video_plan(self):
         with patch.object(pp, "_agent_llm", _dispatch()):

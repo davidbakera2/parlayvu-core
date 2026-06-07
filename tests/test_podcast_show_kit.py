@@ -92,6 +92,21 @@ class BrollManifestTests(unittest.TestCase):
         self.assertEqual(sk.build_broll_manifest(None), [])
         self.assertEqual(sk.build_broll_manifest("/no/such/dir"), [])
 
+    def test_excludes_clips_marked_usage_exclude(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            for n in ("broll_01.png", "broll_02.jpg", "broll_03.mp4"):
+                (d / n).write_text("x")
+            (d / "broll.json").write_text(json.dumps([
+                {"file": "broll_02.jpg", "description": "bad take", "tags": [], "usage": "exclude"},
+            ]), encoding="utf-8")
+            manifest = sk.build_broll_manifest(d)
+        names = [m["file_name"] for m in manifest]
+        self.assertEqual(names, ["broll_01.png", "broll_03.mp4"])  # broll_02 filtered out
+
 
 class CameraRosterTests(unittest.TestCase):
     def test_formats_names_and_titles(self):
@@ -134,6 +149,28 @@ class CameraSelectionTests(unittest.TestCase):
         self.assertEqual(scene["host_source"], "host.mp4")
         self.assertEqual(scene["guest_01_source"], "guest_01.mp4")
         self.assertEqual(scene["guest_02_source"], "guest_02.mp4")  # 3cam -> all three
+
+    def test_4cam_infers_four_cameras_including_guest_03(self):
+        plan = sk.merge_with_show_kit(
+            program_scenes=[{"layout": "4cam", "source_start": "0", "duration": "10"}],
+            show_kit=self.kit, project="ep",
+        )
+        scene = next(s for s in plan["scenes"] if s["scene_id"].startswith("S"))
+        self.assertEqual(scene["host_source"], "host.mp4")
+        self.assertEqual(scene["guest_01_source"], "guest_01.mp4")
+        self.assertEqual(scene["guest_02_source"], "guest_02.mp4")
+        self.assertEqual(scene["guest_03_source"], "guest_03.mp4")  # 4cam -> all four
+
+    def test_new_portrait_broll_layouts_are_program_layouts(self):
+        for layout in ("1cam_broll", "1cam_brollp", "2cam_brollp", "3cam_brollp", "4cam_brollp", "4cam", "4cam_broll"):
+            self.assertIn(layout, sk.PROGRAM_LAYOUTS)
+            plan = sk.merge_with_show_kit(
+                program_scenes=[{"layout": layout, "source_start": "0", "duration": "10",
+                                 "broll_file": "broll_01.png"}],
+                show_kit=self.kit, project="ep",
+            )
+            # the scene survives the merge (not skipped as a non-program layout)
+            self.assertTrue(any(s.get("layout") == layout for s in plan["scenes"]))
 
 
 if __name__ == "__main__":

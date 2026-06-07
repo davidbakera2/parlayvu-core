@@ -50,6 +50,9 @@ PLANS_SUBPATH = Path("02_Planning") / "podcast_plans"
 # ---------------------------------------------------------------------------
 LAYOUTS = {
     "intro", "show_image", "1cam", "2cam", "2cam_broll", "3cam", "3cam_broll", "outro",
+    # Data-driven layouts (render_video.py LAYOUT_BOXES). "*p" = tall/portrait b-roll panel;
+    # 4cam layouts use a 4th camera (guest_03).
+    "1cam_broll", "1cam_brollp", "2cam_brollp", "3cam_brollp", "4cam_brollp", "4cam", "4cam_broll",
 }
 GRAPHIC_TYPES = {"name_card", "broll_card", "callout", "topic_card"}
 
@@ -118,11 +121,11 @@ exactly — no markdown, no extra text:
       "segment_id": "SEG01",
       "start": "HH:MM:SS.000",
       "end": "HH:MM:SS.000",
-      "speaker": "host|guest_01|guest_02|both",
+      "speaker": "host|guest_01|guest_02|guest_03|both",
       "topic": "short topic label",
       "summary": "1-2 sentence summary of this segment",
       "notable_quote": "a strong verbatim quote from this segment, or empty",
-      "suggested_layout": "1cam|2cam|2cam_broll|3cam|3cam_broll",
+      "suggested_layout": "1cam|2cam|3cam|4cam|*_broll (landscape b-roll) or *_brollp (portrait b-roll)",
       "lower_third_top": "speaker name or identity for the lower third",
       "lower_third_bottom": "topic line for the lower third",
       "broll_ideas": ["short b-roll idea", "..."]
@@ -136,8 +139,12 @@ Rules:
 - Prefer 4-12 substantive segments. Merge trivial back-and-forth into coherent topics.
 - suggested_layout: use 2cam_broll or 3cam_broll only when there is a clear b-roll idea.
 - If a camera roster is provided, use its EXACT name spellings and map each segment's
-  `speaker` to the correct roster slot (host / guest_01 / guest_02). The transcript may
-  misspell names — always prefer the roster spelling.
+  `speaker` to the correct roster slot (host / guest_01 / guest_02 / guest_03). The transcript
+  may misspell names — always prefer the roster spelling. When the roster gives a title, use it
+  verbatim.
+- `title` is the person's role/affiliation only — e.g. "Host", "Founder & CEO, RAM AIR
+  International". NEVER fold the show name into a title (the host is "Host", not
+  "Host, <Show Name>").
 - Be evidence-based; do not invent facts not supported by the transcript."""
 
 ALEX_PLAN_PROMPT = """You are Alex Rivera, Visuals & Design specialist at ParlayVU.ai.
@@ -149,11 +156,11 @@ show's Show Kit — do NOT include them. Return ONLY valid JSON, no markdown, no
 {
   "program_scenes": [
     {
-      "layout": "2cam|2cam_broll|3cam|3cam_broll|1cam",
+      "layout": "1cam|2cam|3cam|4cam|1cam_broll|2cam_broll|3cam_broll|4cam_broll|1cam_brollp|2cam_brollp|3cam_brollp|4cam_brollp",
       "cameras": ["host", "guest_01"],
       "source_start": "HH:MM:SS.000",
       "duration": "HH:MM:SS.000",
-      "primary_camera": "host|guest_01|guest_02",
+      "primary_camera": "host|guest_01|guest_02|guest_03",
       "top_row_text": "NAME | TITLE of the person speaking",
       "bottom_row_text": "topic line",
       "broll_file": ""
@@ -165,16 +172,24 @@ Rules:
 - One scene per segment, in order. `source_start` is the segment's start and `duration` is
   (end - start) — positions IN THE TRIMMED INTERVIEW FOOTAGE (what the segment timestamps
   already represent).
-- `cameras`: the camera slots to show, from the camera roster. This is a multi-camera shoot —
-  when two or more guests are part of the exchange, use `3cam` and list all three
-  (["host","guest_01","guest_02"]). For a single guest, use `2cam` with the host and THAT
-  guest (e.g. ["host","guest_02"] when guest_02 is speaking) — make sure the guest who is
-  actually talking appears on screen, not always guest_01.
+- `cameras`: WHICH people to show (not their position). The renderer always places them in fixed
+  role order — host far-left/top, then guest_01, guest_02, guest_03 — so you do NOT control
+  left/right; just choose who is on screen. Match the count to the layout: `2cam`=2, `3cam`=3,
+  `4cam`=4 (only when the roster has guest_03).
+- Two-box layouts (`2cam`, `2cam_broll`, `2cam_brollp`) must be EITHER ["host","guest_01"] OR
+  ["guest_01","guest_02"] — never ["host","guest_02"] (don't skip guest_01). If the host is in a
+  two-person exchange with guest_02, use `3cam` so guest_01 is still shown, or pair host+guest_01.
+- Use `3cam`/`3cam_broll`/`3cam_brollp` when all three are engaged, and to feature a specific
+  guest (e.g. when guest_02 is telling his own story) while keeping everyone on screen.
 - Lower thirds: top = "NAME | TITLE" of the current speaker (exact spelling from the roster);
-  bottom = the topic.
-- B-roll: only use a *_broll layout when a relevant clip exists in the provided B-ROLL LIBRARY.
-  Set `broll_file` to an EXACT file name from that library — never invent a file name. (Note:
-  2cam_broll shows host + guest_01; use 3cam_broll if you need guest_02 on screen with b-roll.)
+  bottom = the topic. NEVER append the show name to a lower third — for the host that means
+  "DAVID BAKER | HOST", not "... | HOST, STRAIGHT FROM THE HART".
+- B-roll: only use a b-roll layout when a relevant clip exists in the provided B-ROLL LIBRARY.
+  Set `broll_file` to an EXACT file name from that library — never invent a file name. Choose the
+  b-roll panel shape by the clip: `*_broll` = a wide LANDSCAPE panel (good for documents, wide
+  shots); `*_brollp` = a tall PORTRAIT panel (good for phone-shot vertical clips or tall images).
+  List the cameras to keep on screen alongside the b-roll (e.g. `2cam_broll` = 2 cameras + a
+  landscape panel; `3cam_brollp` = 3 cameras + a portrait panel).
 - Do NOT emit intro / show_image / outro scenes, graphics, settings, or audio — the Show Kit
   owns all of that."""
 
@@ -192,6 +207,7 @@ class PodcastPlanState(BaseModel):
     visual_system: str = "parlayvu_interview"
     assets_dir: Optional[str] = None
     cameras: Optional[dict] = None          # {host/guest_01/guest_02: {name, title}}
+    show_notes: Optional[str] = None        # LOOSE pre-interview notes (topics/names/terms), not a structure
     broll_manifest: Optional[list] = None   # real b-roll files; auto-built from assets_dir
     segment_analysis: Optional[dict] = None
     video_plan: Optional[dict] = None
@@ -328,10 +344,28 @@ def _roster_block(state: PodcastPlanState) -> str:
     return ("\n" + "\n\n".join(parts) + "\n") if parts else ""
 
 
+def _show_notes_block(state: PodcastPlanState) -> str:
+    """Pre-interview show notes as LOOSE context only.
+
+    These help with spellings, names, titles, terms, and lower-third topic phrasing, but the
+    actual conversation usually diverges from any planned outline — so they must NOT be treated
+    as a structure the segments/scenes follow.
+    """
+    notes = (state.show_notes or "").strip()
+    if not notes:
+        return ""
+    return (
+        "\nShow notes (LOOSE background only — pre-interview topics, names, and terms. The real "
+        "conversation diverged from any plan, so DO NOT force the segments/scenes to follow this "
+        "outline or its ordering; use it only as hints for correct spellings and lower-third "
+        f"topic phrasing):\n{notes[:6000]}\n"
+    )
+
+
 def blake_node(state: PodcastPlanState) -> dict:
     llm = _agent_llm("blake")
 
-    context_block = _roster_block(state)
+    context_block = _roster_block(state) + _show_notes_block(state)
     if state.project_context:
         context_block += f"\nProject context:\n{json.dumps(state.project_context, default=str)[:2000]}\n"
 
@@ -395,7 +429,7 @@ def alex_node(state: PodcastPlanState) -> dict:
     brand_block = f"\nBrand voice: {state.brand_voice}\n" if state.brand_voice else ""
     user = (
         f"Episode: {state.episode_title}{brand_block}"
-        f"{_roster_block(state)}{editing_block}{manifest_block}\n"
+        f"{_roster_block(state)}{_show_notes_block(state)}{editing_block}{manifest_block}\n"
         f"Segment analysis:\n{json.dumps(analysis, default=str)[:40000]}"
     )
 
@@ -455,13 +489,16 @@ async def run_podcast_parlay_planning(
     visual_system: str = "parlayvu_interview",
     assets_dir: Optional[str] = None,
     cameras: Optional[dict] = None,
+    show_notes: Optional[str] = None,
 ) -> dict:
     """Run the Podcast Parlay planning workflow and return its final state dict.
 
     `visual_system` selects the client's Show Kit; pass `assets_dir` (the episode's assets
     folder) so the intro plays its full length and the real b-roll library is read; pass
     `cameras` (host/guest_01/guest_02 -> {name, title}) so the planner uses the right cameras
-    and exact name spellings.
+    and exact name spellings. `show_notes` is optional LOOSE pre-interview context (topics,
+    names, terms) — it sharpens spellings and lower-thirds but is NOT treated as a structure
+    the segments/scenes must follow (the real conversation typically diverges).
     """
     graph = get_podcast_plan_graph()
     initial = PodcastPlanState(
@@ -474,6 +511,7 @@ async def run_podcast_parlay_planning(
         visual_system=visual_system,
         assets_dir=assets_dir,
         cameras=cameras,
+        show_notes=show_notes,
     )
     result = await graph.ainvoke(initial)
     return result if isinstance(result, dict) else result.model_dump()
