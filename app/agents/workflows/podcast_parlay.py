@@ -377,11 +377,15 @@ def alex_node(state: PodcastPlanState) -> dict:
             + "\n".join(f"- {b['file_name']}" for b in manifest) + "\n"
         )
 
+    editing_block = ""
+    if show_kit.get("editing_style"):
+        editing_block = f"\nEditing style:\n{show_kit['editing_style']}\n"
+
     llm = _agent_llm("alex")
     brand_block = f"\nBrand voice: {state.brand_voice}\n" if state.brand_voice else ""
     user = (
         f"Episode: {state.episode_title}{brand_block}"
-        f"{_roster_block(state)}{manifest_block}\n"
+        f"{_roster_block(state)}{editing_block}{manifest_block}\n"
         f"Segment analysis:\n{json.dumps(analysis, default=str)[:40000]}"
     )
 
