@@ -223,6 +223,36 @@ class Renderer:
             inputs.extend(["-stream_loop", "-1", "-ss", f"{broll_start:.3f}", "-i", broll_path])
         return str(sum(1 for item in inputs if str(item) == "-i") - 1)
 
+    def add_mixed_camera_audio(self, inputs: list[str | Path], filters: list[str], source_start: float, duration: float) -> None:
+        """Append every available camera file as an audio input and mix into [a].
+
+        Each camera carries only its own mic, so summing all of them (normalize=0)
+        reconstructs the full conversation no matter which cameras are on screen — so an
+        off-camera speaker (e.g. during a 1cam shot, or a guest not shown in a 2cam) is
+        still heard. Cameras are added as dedicated audio inputs at the scene's source_start.
+        """
+        cam_idxs: list[int] = []
+        for cam in ("host.mp4", "guest_01.mp4", "guest_02.mp4"):
+            path = self.assets / cam
+            if path.exists():
+                inputs.extend(["-ss", f"{source_start:.3f}", "-t", f"{duration:.3f}", "-i", path])
+                cam_idxs.append(sum(1 for item in inputs if str(item) == "-i") - 1)
+        if not cam_idxs:
+            filters.append("anullsrc=r=44100:cl=stereo[a]")
+            return
+        labels = []
+        for idx in cam_idxs:
+            filters.append(f"[{idx}:a]aformat=sample_rates=44100:channel_layouts=stereo[ca{idx}]")
+            labels.append(f"[ca{idx}]")
+        if len(labels) == 1:
+            filters.append(f"{labels[0]}volume=1.35,alimiter=limit=0.96[a]")
+        else:
+            filters.append(
+                "".join(labels)
+                + f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0,"
+                + "volume=1.35,alimiter=limit=0.96[a]"
+            )
+
     def duration_if_exists(self, path: Path) -> float:
         return media_duration(path) if path.exists() else 0.0
 
@@ -507,7 +537,7 @@ class Renderer:
             )
             filters.append("[1:v]fps=24,format=rgba[ltv]")
             filters.append("[basev][ltv]overlay=0:0:format=auto,format=yuv420p[v]")
-            filters.append("[0:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.35,alimiter=limit=0.96[a]")
+            self.add_mixed_camera_audio(inputs, filters, source_start, duration)
             self.encode(out, inputs, ";".join(filters), duration)
             return out
 
@@ -653,24 +683,9 @@ class Renderer:
                 current_label = next_label
             video_label = current_label
 
-        # Mix audio from every camera in the scene. Each camera carries only its own mic,
-        # so summing them (normalize=0) reconstructs the full conversation — using only the
-        # host track (the old behavior) dropped every guest's audio.
-        camera_audio = [host_input, guest_input]
-        if layout in {"3cam", "3cam_broll"} and guest_02.exists():
-            camera_audio.append(guest2_input)
-        if len(camera_audio) == 1:
-            filters.append(f"[{camera_audio[0]}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.35,alimiter=limit=0.96[a]")
-        else:
-            mix_labels = []
-            for ci in camera_audio:
-                filters.append(f"[{ci}:a]aformat=sample_rates=44100:channel_layouts=stereo[a{ci}]")
-                mix_labels.append(f"[a{ci}]")
-            filters.append(
-                "".join(mix_labels)
-                + f"amix=inputs={len(mix_labels)}:duration=longest:dropout_transition=0:normalize=0,"
-                + "volume=1.35,alimiter=limit=0.96[a]"
-            )
+        # Always mix ALL camera mics (not just the on-screen ones) so an off-camera speaker
+        # is never silent — each camera carries only its own mic.
+        self.add_mixed_camera_audio(inputs, filters, source_start, duration)
         self.encode(out, inputs, ";".join(filters), duration, video_label=video_label)
         return out
 
