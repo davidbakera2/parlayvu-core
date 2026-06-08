@@ -765,7 +765,7 @@ class Renderer:
                 "-c:v",
                 "copy",
                 "-af",
-                "aresample=async=1:first_pts=0,loudnorm=I=-16:LRA=11:TP=-1.5",
+                "aresample=async=1:first_pts=0,loudnorm=I=-14:LRA=11:TP=-1.5",
                 "-c:a",
                 "aac",
                 "-ar",
