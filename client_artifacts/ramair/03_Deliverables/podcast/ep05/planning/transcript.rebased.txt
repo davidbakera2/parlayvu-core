@@ -1,0 +1,551 @@
+00:00:00.000  Welcome to Straight from the Heart, because HVAC cleaning should be a positive experience.
+00:00:04.942  I'm David Baker.
+00:00:06.583  Most HVAC contractors see traditional negative air cleaning as the standard for duct cleaning.
+00:00:12.546  But a new report shows negative air cleaning is structurally incompatible with flexible duct systems.
+00:00:18.809  Today we unpack what that means, what the lab found, and the implications it has for contractors who perform HVAC cleaning.
+00:00:27.756  David Hardis, founder and CEO of Ram Air International and author of this new report.
+00:00:33.597  David, how are you doing today?
+00:00:35.688  Great, thank you, David.
+00:00:37.206  What's going on with this report?
+00:00:38.238  Are you getting some reaction to this breaking news?
+00:00:41.544  Yeah.
+00:00:42.126  Yeah.
+00:00:42.497  It just came out, I'm gonna say roughly ten days ago and it's really making waves already.
+00:00:47.764  Uh 'cause it's it's it's pretty profound.
+00:00:50.077  Yeah.
+00:00:50.764  Tell us before we get into it, we got a lot to cover, but and we have our guests we'll introduce, but before we do that, what's what's the gist of this report?
+00:00:58.908  Okay, well I'll read you the title.
+00:01:00.769  it is structural incompatibility of negative air cleaning in flexible HVAC duct systems.
+00:01:06.780  And that's what the paper is about.
+00:01:08.471  It's about the negative air duct cleaning method, which was devised back in the 50s and has remained the traditional way of cleaning ducts, how it's incompatible with the ducting
+00:01:19.054  that's dominated structures since the 1980s, flex ducting.
+00:01:24.795  It was designed originally for metal ducting.
+00:01:27.682  And then the implementation of flex ducting into the building of structures, the the methodology used in the cleaning did not evolve with it.
+00:01:37.182  that's a that's a big news because that's the most widely used uh method used, right?
+00:01:41.913  So before we get before we get into it, let's let's introduce our guest.
+00:01:45.452  Who do we have here today?
+00:01:48.050  John Miles.
+00:01:48.820  I've known John for years.
+00:01:50.541  Incredible guy.
+00:01:51.641  One of my favorite people in the industry.
+00:01:53.162  He's just a brainiac.
+00:01:55.962  he is formerly uh the way he's so impacting in this paper is because of a sentence that he said to me a couple of years ago in a meeting I was having with Superstratum, which is the
+00:02:07.946  company that makes the mold chemist mold decontamination chemistry that we use in our cleaning company.
+00:02:14.248  And
+00:02:14.769  It's just knocked it out of the park for us every time.
+00:02:17.000  I love Superstratum.
+00:02:18.611  And we had a meeting with him and the CEO, Seth Jones.
+00:02:22.452  And out of the blue, because this is what scientists do, have a we have a blurting issue.
+00:02:27.904  We just happen to just say things as they pop into our heads.
+00:02:31.316  Out of the blue, he happens to say, David, you know, I really like the way that you clean HVAC systems because you use positive pressure.
+00:02:38.218  Flex ducting was never meant to be under negative pressure.
+00:02:42.120  And
+00:02:42.864  All of a sudden it was like a record scratch.
+00:02:44.795  Okay.
+00:02:45.205  It's like, excuse me?
+00:02:46.256  Uh, could you say that again?
+00:02:48.397  And Seth Jones, the CEO of Superstratum, laughed.
+00:02:50.608  He goes, Yeah, I thought that might get your attention, David.
+00:02:52.589  I was like, Yeah, you got my attention, brother.
+00:02:54.430  Let's hear what you have to say.
+00:02:55.551  And then John went into this brilliant um description of how flex ducting is made, because John actually was uh designed.
+00:03:02.925  Uh you're gonna word this better than I did, uh, John, but the adhesive, the seam seal adhesive with which flex ducting is made.
+00:03:11.059  So you could literally say,
+00:03:12.934  That this guy knows more about seam seal adhesive with which flex acting is made than anybody in the world.
+00:03:19.427  And so, you know, what he had to say was was pretty important.
+00:03:22.629  And that's what started this whole research.
+00:03:25.470  Uh anyway, I'm gonna turn it over to John.
+00:03:27.901  John, uh tell us about yourself.
+00:03:30.435  Name's John Miles.
+00:03:31.795  I'm a chemist by education.
+00:03:33.975  Went to the Citadel.
+00:03:36.215  Been in the adhesive, water-based adhesive development all my career, 35 years.
+00:03:42.895  So started off as technical service and developing different types of coatings, all basically water-based, and then into sales and sales management.
+00:03:52.635  But in that career, I worked with the polymer producer.
+00:03:56.315  I worked for polymer producers that manufactured the base polymer
+00:04:00.459  sold to the adhesive manufacturers that sold that finished product onto the flexible duct markets.
+00:04:08.535  One of the characteristics, the main characteristics of a flexible duct and that adhesive, because it's a two and a half inch, two inch strip of polyester, so it has to have good
+00:04:19.742  adhesion to that polyester, but what it needed was high shear strength.
+00:04:25.446  It has very, very low peel strength.
+00:04:28.708  The shear strength is when you're putting pressure
+00:04:30.442  against something you have that ability you know if you're looking at it in this direction it won't move but the little flap on it has no peel strength to it very little and so when
+00:04:43.345  you put negative pressure on something on this side it flaps up very very easily
+00:04:50.050  So that's it that's what we're gonna go into first because the the report really talks about that the the structure of flexible duck duct systems really isn't designed for
+00:04:57.923  negative air pressure.
+00:04:58.972  It's because of the flaps, predominantly because of the flaps are are one direction.
+00:05:03.060  I I described it as like petting a cat from the tail to the head, something like that.
+00:05:07.127  Is that similar to the concept or
+00:05:09.044  be, yes, that'd be a good concept.
+00:05:12.012  For for us for us, you know, neophytes.
+00:05:16.854  Is that the primary issue then, the flaps?
+00:05:19.189  Is that the st main structural problem with uh the the way that flex ducting does isn't compatible with negative air duct cleaning?
+00:05:26.605  Well, it's because of the difference in the strengths.
+00:05:31.176  The sheer strength on it can withstand 20 times the amount of pressure put against that.
+00:05:37.978  And this is all in the specs from the flexible duct manufacturers and has what, 10 % of the same amount under the vacuum.
+00:05:48.902  So that alone should tell you the, you know, what...
+00:05:53.591  which you should always should be doing positive pressure if you're going to be cleaning these particular ducts.
+00:05:59.515  Keep them what they were manufactured to do and not move it into a different direction where the adhesives or the structure alone, the wire structure can withstand that negative
+00:06:09.661  pressure.
+00:06:11.772  I'd like to quickly clarify, if I may, the difference between shear strength and peel strength.
+00:06:18.376  And this is this is how I understand it, John.
+00:06:20.107  Of course, you're the expert, so you know, uh jump in anytime.
+00:06:23.399  But when you have two uh surfaces that are adhesed together, uh the shear strength is is the s the slide um coefficient, shall I say.
+00:06:36.615  Uh, the peel strength is if you were to pull them straight across.
+00:06:39.617  For example, I think that's one of the things that makes a post-it work so well is the low peel strength and the high shear strength.
+00:06:45.760  And it the way you explained it to me, the way I understood it was you can't have both.
+00:06:50.543  If you're gonna have a lot of shear strength, you're gonna sacrifice peel strength and vice versa.
+00:06:54.445  And when you div when you designed the adhesive with which flex ducting is made, you went all out on shear strength.
+00:07:00.308  Because it's a called a forced air duct system for a reason.
+00:07:02.929  It's meant to have, if you look at a tube, okay,
+00:07:06.307  Of ducting, it's meant to have air force into it, so you're gonna get pressure this way as it expands due to that positive pressure.
+00:07:12.910  You put negative, you put it under negative pressure, pull the air out from the inside, you're gonna get it pulling this way.
+00:07:18.152  And because flex ducting is two layers of of poly uh sheeting that are glued together with a metal coil down the middle for support, when you put pressure from the inside, negative
+00:07:30.238  pressure, you're pulling that inner layer.
+00:07:32.749  of of plastic apart from the outer layer and it doesn't take much.
+00:07:35.912  Like you said, 20 times the the positive pressure it can handle.
+00:07:39.526  Negative pressure tolerance is between one half inch to one inch negative stratic pressure.
+00:07:44.241  That's water column.
+00:07:45.192  Okay.
+00:07:45.772  One half to one inch, the the positive pressure is ten inch.
+00:07:49.096  So it can handle literally 10 to 20 times the amount of positive pressure.
+00:07:52.799  So would would you concur with that, uh John?
+00:07:57.105  And the reason is that everyone knows that through these ducts, they absorb a huge amount of oil deposits from fragments of the skin, all the things that's going in there.
+00:08:10.811  And that oil, when it comes in contact with the polymer, if it is a very tactful polymer that has high peel strength, it will soften it too much.
+00:08:22.897  So the shear strength properties
+00:08:25.281  is with a polymer that has great shear strength, okay, and has resistance to that oil.
+00:08:31.296  So it's two-fold why the adhesive was developed the way it was.
+00:08:35.219  It was so that it would not, over time, the oil deposits and the dirt and debris in there would not lose the performance of that adhesive, but then also maintain that high shear
+00:08:47.398  strength.
+00:08:48.109  If you went to a more softer polymer, straight acrylic or something like that, yes, it would have incredible peel strength and have good resistance
+00:08:55.514  But then it would have no resistance.
+00:08:58.465  The oil itself would absorb into that and it would get very mushy and it would lose all that performance.
+00:09:05.898  People see that when you have different, or not a post-it note, but real high-tech things.
+00:09:11.340  What do you do to get that label off the good, you put a little bit of oil and it gets really mushy and it comes off.
+00:09:18.964  That's exactly what would have happened in the flexible duct had you used an acrylic-based polymer for that.
+00:09:26.043  Sounds you put a little bit of thought into this.
+00:09:29.845  So clearly the you know, th these are not designed for negative air pressure.
+00:09:34.579  They're designed for positive air pressure, positive airflow, maybe some negative air pressure, but not a lot.
+00:09:41.276  What are the
+00:09:42.062  pressure that would be generated by the return portion of the HVAC system, which you like again is not very much.
+00:09:48.453  So
+00:09:48.798  Yeah, yeah, yeah.
+00:09:49.449  And what we say it did we talk about what negative air pressure is?
+00:09:51.873  I didn't know if he defined it.
+00:09:52.824  Does everybody know what like it's it's what is negative air pressure?
+00:09:56.512  What is negative air duct cleaning?
+00:09:58.961  John, you're the you're the you're the scient you're the scientist.
+00:10:02.215  sucking in, know, kind of just like your regular vacuum that you have at your house.
+00:10:06.766  um And you're literally putting it in an environment and sucking that debris.
+00:10:12.328  But the walls of that will pull in at the force of what's coming from the vacuum.
+00:10:19.031  So that's the whole concept of that.
+00:10:21.549  Yeah.
+00:10:21.850  And then negate and then neg that's good.
+00:10:25.133  Negative pressure sucks.
+00:10:26.954  And it sucks backwards, right?
+00:10:28.295  It's the different flow.
+00:10:29.686  Positive is through the through positively from where from the from the system.
+00:10:35.541  Yeah.
+00:10:36.122  And then yeah.
+00:10:38.404  Yeah.
+00:10:38.634  Yeah.
+00:10:38.774  Yeah.
+00:10:39.014  So so it's not designed for neg strong and negative air pressure.
+00:10:43.388  What what are the consequences?
+00:10:44.739  Talk about that.
+00:10:45.369  Like cause your report identifies some of the damage and some of the
+00:10:49.230  ways that negative heavy n negative air pressure can impact the structure and uh what are the consequences?
+00:10:57.753  Once again, John, I I can't compete with your articulation, so please, if you would.
+00:11:02.355  naturally, that cross slap we were talking about, once it pulls from that, now you've got, it's not gonna re-adh- there's no re-adhesion of these types of polymers.
+00:11:13.010  So once that flap opens, then you're gonna have unconditioned air to be able to migrate in there.
+00:11:19.053  Also, the wire that's on there, if it deforms, there's nothing to push it back out.
+00:11:25.516  So the, and so now you've got a deformed, oh flexible duct.
+00:11:30.878  So that's,
+00:11:32.039  you know, those are two major areas that you're gonna get.
+00:11:35.321  And naturally once that deforms or that flap is opened up, when you do the mechanical sweeping or something in there, it's gonna grab a hold of that little piece and rip it
+00:11:45.067  even further.
+00:11:46.268  And then...
+00:11:47.303  So the more it rips, the more the it's like a snowball effect.
+00:11:52.090  It sounds like.
+00:11:52.690  Yeah.
+00:11:53.290  once it comes undone, like I say, it's not going to open up.
+00:11:55.908  Now for...
+00:11:57.913  you know, if you ran a camera back down there and you said had positive back on it, it may lay up against it.
+00:12:03.616  Okay, when you're looking at it and don't see anything, but once it relaxes, that flaps going to come down, that unconditioned air is going to come back in and then you're going
+00:12:12.390  to turn the unit on and it may go back up, but you just keep sit.
+00:12:16.922  mean, it's fooling you thinking it's repaired and it's not.
+00:12:20.984  And once unconditioned gets in there, we all know that a cold glass in the South is going to make condensation.
+00:12:27.227  That is a
+00:12:27.960  environment, spores and mold and all the different debris that's in an attic or in a crawl space where these ducts are, all that air is going to now be entrapped, going to grow
+00:12:38.140  mold, going to grow contaminants.
+00:12:39.772  And what are you doing?
+00:12:40.613  Just forcing that through your whole house.
+00:12:43.356  You you just did create one problem.
+00:12:45.087  You just pushed it in all the different rooms.
+00:12:49.221  One thing I'd like to ask you, John, um, because when you transitioned, and by the way, I'm from Oregon, so we got to be careful with that word transitioned, but when you
+00:12:56.207  transitioned from uh flex duct manufacturing to the design of mold decontamination chemistry, uh, did you say that you've noticed how much mold is growing in HVAC systems
+00:13:10.951  after having been subjected to negative air duct cleaning?
+00:13:14.434  Did I hear that correctly?
+00:13:15.534  mean, people that get their duck cleaned and then...
+00:13:20.323  we see it a good bit that they have more issues and then we come to find out their damage from the negative error.
+00:13:27.757  So that's honestly in my business in offering a chemistry that neutralizes the organics and oh detoxes these systems from the microtoxins that could be produced from the molds.
+00:13:43.164  uh What we recognize is that by partnering with somebody like David in the recommendation,
+00:13:50.257  is using POSIT that they don't initially, those homeowners that are having issues with their home, they don't create another problem behind it.
+00:13:58.361  So you use the right proper technique of cleaning the ducts, then you decontaminate the duct with our chemistry, the building cleaner, and then put a protectant with the
+00:14:09.810  Endurance Coating Pro in that.
+00:14:11.481  And then those particular customers don't have those issues, at least in the lungs of the home.
+00:14:16.885  This is what you're breathing and what you're circulating throughout the home.
+00:14:21.841  The lungs of the home, that's a really good analogy.
+00:14:23.879  I use that one myself.
+00:14:25.726  Yeah.
+00:14:27.414  What but the structure is still compromised.
+00:14:30.911  Even even now it's clean and it's good, it needs to be clean, but you're still compromised from the negative air deck pressure that you had.
+00:14:37.474  If you cleaned it with negative air.
+00:14:38.775  Now I think that John was suggesting that you do clean it, but you use positive pressure in the process.
+00:14:43.880  Yeah.
+00:14:44.045  Yeah.
+00:14:45.347  Right.
+00:14:45.727  So talk about uh w you may have this on your home.
+00:14:50.302  You may get cleaning, but you don't like I my ducks are fine, I've had it cleaned, they look great.
+00:14:55.658  But the problem is you can't really see or detect whether or not your your ducks are compromised.
+00:15:02.000  Somebody who has lung cancer looks great.
+00:15:05.992  You know, you can't see it, doesn't mean the problem's not there.
+00:15:08.523  there's typically a layer of uh insulation around flex ducting.
+00:15:14.346  Uh you can't see the damage that's been done.
+00:15:18.518  John, concur?
+00:15:19.724  right.
+00:15:19.884  The only way you'd be able to see it is with some type of video through the actual duck.
+00:15:28.430  But the internal portion of that duck has been compromised now.
+00:15:34.273  And now you've put it in an environment that it wasn't meant to be in if unconditioned air is getting into that environment.
+00:15:44.039  And so that's the big problem.
+00:15:47.415  even a camera down there, I don't believe would also would uh always show the damage.
+00:15:53.818  In fact, if you look at the images that were supplied by the laboratory that provided the results for this research paper that did we did, which by the way, uh this laboratory, we
+00:16:02.291  went all out, okay.
+00:16:03.542  Shot for the stars on this one, you know, and that's the way I've always liked to do things, it's just shoot for the almost ridiculous.
+00:16:10.645  Okay.
+00:16:10.985  Then if you come up short, you're still pretty, pretty awesome, right?
+00:16:14.427  So I reached out to what I can found to be the ultimate laboratory to do this testing.
+00:16:18.930  In fact, they actually do testing for uh Military Department of Defense and NASA, things like this.
+00:16:23.372  And they actually took on the project for us, which I thought was really, really cool.
+00:16:27.515  And they have some images in the report that they supplied for us that it show a uh enlarged view of the delamination, which you might not see with a naked eye or a camera or
+00:16:39.544  something of that nature.
+00:16:42.046  You had talked about um okay, so you do negative air duct cleaning, it can be real problematic.
+00:16:47.379  Um, well, there's different ways you can mitigate against it.
+00:16:51.041  If I'm if I use negative air duct cleaning, well, you not really, but technically there are things you can do to help address it.
+00:16:58.656  Talk about that and why those are are not really uh doable.
+00:17:03.430  There are things that you can do.
+00:17:04.780  I mean, nobody in the right mind ever would.
+00:17:06.501  And here's what they are.
+00:17:07.991  Okay.
+00:17:08.671  Because first of all, if you're going to clean an HVAC system and you want to use negative error, you need to decipher whether or not there is any flex duct within that network of
+00:17:18.314  ducting of that structure.
+00:17:19.574  Okay.
+00:17:20.615  And that's going to be more than just asking somebody or even looking at the blueprints, because there may have been some remodeling done to some of that.
+00:17:28.387  Maybe a piece was re uh what was was replaced at some point.
+00:17:32.248  Uh
+00:17:33.358  Otherwise completely metal, but now there's a flex duct section in there.
+00:17:37.202  So it's going to take eyes on throughout that whole system.
+00:17:39.674  So first step, decipher whether or not there's any flex duct in it.
+00:17:43.357  That means getting eyes on every foot of ducting within that structure.
+00:17:48.011  Who's going to do that?
+00:17:48.882  That's ridiculous.
+00:17:49.893  Okay.
+00:17:50.038  It would take forever and all that.
+00:17:52.175  But let's say you do.
+00:17:53.596  Okay, well, now you need to decipher whether or not that flex ducting has a one-half inch or a one-inch.
+00:18:00.578  Negative pressure tolerance, because those are the two different tolerances that that are out there by manufacturers.
+00:18:06.650  Uh, that's going to require you to find out the make and model of that ducting, find out which pressure tolerance it is.
+00:18:15.102  Who's going to do that?
+00:18:15.853  How could you do that?
+00:18:17.123  So, because you can't or won't, you need to just assume that it's the weaker of the two, one half-inch flex negative pressure.
+00:18:26.606  So
+00:18:27.233  After crawling through the entire structure to decipher whether or not there's any flex ducting, then deciphering whether it's one half inch or one inch negative static pressure,
+00:18:35.407  and then assuming that it's half inch, now you need to set up pressure monitoring devices throughout that flex duct in order to ensure that you don't surpass those tolerances,
+00:18:47.214  which you're going to.
+00:18:49.195  Okay, I've I've talked with so many negative, negative former negative uh pressure uh people.
+00:18:55.258  That have just been straight up honest with me.
+00:18:57.259  And one one individual even was one of the uh top NADCA National Air Duck Cleaning Association's instructors.
+00:19:05.461  He was with them for 30 years.
+00:19:07.881  he was actually an international liaison for for that organization.
+00:19:12.573  And he said, Look, he said, when we hook up negative air pressure equipment to a duct system, we we we hook it up until we get that flex duct just shaking, and then we back it
+00:19:22.695  off a hair.
+00:19:23.766  Now, if it's shaking.
+00:19:25.344  What kind of what kind of pressures have we got there?
+00:19:27.345  All right.
+00:19:27.916  He said that we create such negative pressures, we have actually flattened metal ducting before.
+00:19:34.342  Now, if you're flattening metal ducting, tell me that, tell me you're not surpassing one inch negative static pressure.
+00:19:39.786  So back to back to the process though.
+00:19:42.669  Deciphering if there's any flex duct, deciphering what the tolerance is, setting up monitoring equipment and monitoring it constantly during that negative pressure.
+00:19:50.415  Nobody's in their right mind, even you know, nobody even
+00:19:53.858  out of their right mind would do that.
+00:19:55.459  It's it's it's insane.
+00:19:56.780  It's asinine.
+00:19:57.981  Okay.
+00:19:58.662  And the whole thing was even brought up just to show the asinineness of it.
+00:20:02.405  So you could do all that or just do what you should do.
+00:20:06.428  And that is use positive pressure and and get the job done, get the job done right.
+00:20:12.056  Did you in the in the paper did you test positive and near air duct cleaning, or is it all just focused on the implications and the effects of negative air duct cleaning?
+00:20:21.338  The the paper focuses on on the negative uh pressures.
+00:20:25.083  We didn't go heavy into the positive because the positive pressure tolerance is so high.
+00:20:30.871  It's like like like like John said, it's it's ten to twenty times the amount that you're never gonna you're never you're gonna come close to that.
+00:20:38.268  we know that because it's using the HVAC system to do the positive air duct cleaning.
+00:20:42.881  So the the the actual pr air pressure that the system was designed for is what's being used to clean the ducts.
+00:20:48.845  Is that fair to say?
+00:20:50.216  Yeah.
+00:20:50.693  utilizing the uh air handler, uh, air movement in the process, which by the way has has other awesome attributes.
+00:20:59.477  For example, when I teach our courses here, uh we teach, you know, training and certification courses in positive air declining here in Bend, Oregon.
+00:21:06.841  Uh, we have a lot of people that transition from negative air declining to positive.
+00:21:11.663  And a lot of them will say, you know, I get tired of getting things stuck on the dampers.
+00:21:17.221  Okay, now this is whole nother topic, and I don't want to go heavy into it right now, but but you know, any when you have a multi-zone system, you typically have trunk line and
+00:21:24.623  then you have branches that come off of that.
+00:21:26.347  And at that branch to trunk intersection, there'll be a damper.
+00:21:30.160  It's a flap that opens and closes to allow or disallow airflow into certain sections of the structure.
+00:21:35.554  Now, when they build a structure like a home, there's almost always construction garbage that gets done in there, chunks of wood, chunks of sheetrock, lunch wrappers.
+00:21:45.713  Um, I mean, tools.
+00:21:47.504  I've pulled every I pulled seven bricks out of a duct one time.
+00:21:50.747  People stuck them down in there in order to divert airflow.
+00:21:54.509  I pulled 24 pieces of silverware out of another another duct system one time, and it was the good, expensive silverware.
+00:22:00.123  It was in a hundred year old home.
+00:22:02.124  We figured that back in the depression, we know that a lot of people uh would hide their valuables in ducts.
+00:22:09.149  How do we know that?
+00:22:10.050  Because for 28 years, I've pulled valuables out of ducts of homes that are pre 1930.
+00:22:15.096  Okay.
+00:22:15.686  So all these things are always in the branch.
+00:22:17.537  They're not in the trunk line.
+00:22:18.357  They're in the branch.
+00:22:18.937  And when you're doing negative error, you're pulling in reverse of the direction that was intended by the engineering of the HVAC system.
+00:22:25.470  And all that big stuff, those chunks of wood, chunks of sheetrock, and everything I just named, have to go past that damper, they get stuck on that damper, or worse yet, damage
+00:22:33.233  that damper.
+00:22:34.093  And now you've just made the whole situation worse.
+00:22:36.204  So, you know, there's there's more than more than just this pressure reason to get away from from negative error methodology.
+00:22:44.960  In I I want to talk about one more thing about positive air duct cleaning and then move on to the industry standards.
+00:22:50.422  Positive air duct cleaning, you have your Santa jet and it it's a ball and it sprays out um formula to disinfect or disinfectants inside.
+00:23:00.885  That's the super stratum, right?
+00:23:02.387  That's what we're talking about, right?
+00:23:03.727  Along with the Santa jet.
+00:23:05.815  It's whatever decontaminant you want to apply for whatever reason.
+00:23:09.867  there's there's times and places in in order to apply a decontaminant.
+00:23:13.441  And once again, I use that word rather than disinfectant because let's say we're doing meth or fentanyl decontamination, you're not disinfecting it.
+00:23:20.037  There's no pathogens to kill.
+00:23:21.558  You're chemically neutralizing it.
+00:23:23.400  So in order to combine disinfectant with chemical neutralizer, I simply use the word decontaminant.
+00:23:29.125  But in order to get that into a duct system, the traditional way.
+00:23:34.605  was to fog it.
+00:23:35.926  We've all heard of fogging a duct system.
+00:23:37.787  I'm gonna fog the ducts.
+00:23:39.048  And the way that's done is to take a fogging machine, put your chemical in there, and then blast it into the return duct with the air handler running and it carries it through the
+00:23:47.802  duct system.
+00:23:48.473  And at surface value, that sounds like it makes sense.
+00:23:51.434  It does carry it through the duct system.
+00:23:53.966  But then again, let's examine that preposition through as opposed to onto okay.
+00:23:59.419  It carries it through the duct system.
+00:24:00.989  And I've done this, okay, because I've been in this industry for over 30 years.
+00:24:04.067  And SantaJet's only been around for 15.
+00:24:06.418  So I did the same thing everybody else is doing, which is to fog it.
+00:24:09.940  And you blow it in through the return and you watch the supplies until that fog starts to come out of the supply ducts and you can see it entering the room and you shut your fogger
+00:24:17.754  off.
+00:24:17.905  That's what everybody does.
+00:24:19.525  But golden rule from apply for applying a disinfectant is there's two golden rules: coat the surface completely and allow dwell time, right?
+00:24:28.530  Well, if you're not going to coat the surface completely, you're not going to achieve what that decontaminant is supposed to do.
+00:24:33.924  The only way you will really have coded all that ducting is if you continue to fog and you're watching all that fog come out of the return or the supply ducts, and you fill that
+00:24:43.758  structure so full of fog that you will have coated the tabletops, the windows, the wall, the ceiling, the you will have coded the interior structure and contents to the point of
+00:24:52.952  just absurdity.
+00:24:54.782  And nobody does that.
+00:24:55.753  Nobody would.
+00:24:56.903  And so therefore, fogging a duct system doesn't work.
+00:25:00.605  It can't work.
+00:25:01.849  So we came up with Santa jet, which is a compressed air canister that has a long hose, and on the end of that hose is the ball to which you referred that has 13 holes, has six holes
+00:25:11.672  45 degree angle backward, six holes 45 degree angle forward.
+00:25:15.334  And by the way, they're they're staggered for a starburst effect.
+00:25:19.125  And we have one at the very tip that shoots it straight forward.
+00:25:21.616  We run that down into the duct, depress the lever.
+00:25:25.525  It it mists the the decontaminant along the side of the duct and you slowly retract that through the duct with the HVAC handler turned off so that there's no airflow, nothing
+00:25:34.829  blows into the structure.
+00:25:36.000  You're putting a hundred percent that you could decontaminate exactly where you want it to be, zero percent where you don't, and it gives you a hundred percent control over how much
+00:25:44.013  you put in there.
+00:25:45.734  And yes, super stratum is what we use for mold.
+00:25:48.275  And I tell you what, ever since we switched, you know, because I've been doing this forever.
+00:25:51.437  Superstrat, how long you been?
+00:25:52.559  was the longest yes I've ever seen in my life.
+00:25:54.755  You warned him.
+00:25:55.729  You warned us.
+00:25:56.913  Yeah.
+00:25:58.016  man, I get on the phone with people.
+00:25:59.250  I'm like
+00:25:59.667  let me tell ya.
+00:26:01.446  Well, you use super stratum for the decontaminants.
+00:26:04.318  Remember, we got to focus on that.
+00:26:06.680  As a disinfectant, it's not the chemistry is focused around the organics that are left in that environment.
+00:26:14.487  Now there are some properties that that chemistry has that could be that, but the EP regulates that language on that.
+00:26:24.065  So we're focused around the organics and the removal of those things.
+00:26:28.008  And you're using the right amount.
+00:26:29.669  Because also when you're following something at the beginning, you're saturating a whole lot of there before even a little bit just comes out the end.
+00:26:39.287  And so you're wasting a lot of chemicals and you're putting much more stress on all those adhesives again because you've got this water saturant that is just dripping in there.
+00:26:48.454  And it's just not, it's not a good practice to have that much water, you know, in your HVAC system.
+00:26:54.649  It will take a little time for it to dry out when you follow like that.
+00:26:59.382  And the so the point is that positive air duct cleaning works quite well hand in glove with uh super stratum uh solutions, and it should be the way it should air duct uh HVAC
+00:27:10.541  cleaning should be a positive experience.
+00:27:12.543  But let's talk about the industry now.
+00:27:14.134  Like what what's going on with the industry?
+00:27:16.566  What standard where does it I don't think the industry really differentiates between negative air duct cleaning and positive air duct cleaning?
+00:27:23.892  They don't really have a voice on that.
+00:27:25.233  What what's happening there and where should things go?
+00:27:27.315  What should happen next until
+00:27:28.984  For the industry to how should the industry react?
+00:27:31.850  You know, a lot of industries are slow to evolve.
+00:27:35.863  you can have new methodology that is superior, and it will take forever for the industry to really adopt it.
+00:27:43.299  I will say that positive air dye cleaning, the it is very, very widely used.
+00:27:48.284  In fact, uh I've personally trained people in several countries.
+00:27:53.558  We have come, we just had a group from Bermuda actually come and get trained and certified by us.
+00:27:58.942  so there are users of positive air diet cleaning in every major city, the United States and twenty-four foreign countries.
+00:28:05.036  Bermuda was our twenty fourth.
+00:28:06.297  Um so yeah, it's it's very widely used, but but still uh
+00:28:12.920  The traditional method still dominates the industry.
+00:28:16.569  But the industry does the industry say anything about negative versus positive air?
+00:28:25.181  No, the industry hasn't addressed it.
+00:28:28.282  And I think that's a couple of reasons.
+00:28:30.083  I think that the positive air duct cleaning methodology is new enough that it hasn't gotten into the conversation enough yet.
+00:28:39.026  And, you know, getting people to change something, people don't like change.
+00:28:44.348  Especially old organizations that have been around forever and they make money by the methodology they've been preaching for years, to to sit there and say,
+00:28:54.552  You know what?
+00:28:55.064  That doesn't work anymore.
+00:28:56.592  You get they're not gonna be real big on jumping.
+00:28:59.627  don't we in the interview we'll cut that part 'cause we don't need to to throw any shade at the industries, right?
+00:29:03.675  I don't think you want to.
+00:29:04.738  Yeah.
+00:29:05.088  I'm just I'm just knowing what you said about IR C R C so.
+00:29:07.952  throwing shade, but honestly, think part of it is because I think they're a little embarrassed, honestly, uh because David pointed this out um and none of them recognized
+00:29:20.698  that the adhesive and the structural design has all been written for the last 40 some years with flexible duct that one is much stronger than the other, but no one took notice
+00:29:33.524  of that.
+00:29:34.695  And for that, I think is the biggest problem.
+00:29:37.816  where I think they're basically, don't know how to move forward because if they acknowledge they made a mistake, then they've got 40 years of having to deal with people
+00:29:49.315  coming back with that, oh, that's the reason why I'm sick in my home and these other things.
+00:29:55.120  I don't know what the industry, I think we're doing the right thing by bringing it up and we'll see how they react, but it's gonna be curious.
+00:30:04.802  We're following the science, right, David?
+00:30:06.598  I know you like that, David.
+00:30:07.621  We're following the science.
+00:30:08.725  What does the data say?
+00:30:10.638  It kind of reminds me of and I shouldn't say reminds me because I wasn't around back then, but when doctors used to medical doctors used to uh promote cigarette smoking as a healthy
+00:30:21.141  thing to do.
+00:30:21.761  And then it's like, guess what?
+00:30:23.061  You know, it's not.
+00:30:24.382  Um, you know, it like like John said, it's embarrassing to to to the industry that has supported that for so long.
+00:30:33.612  Anyway, well thank you both for for talking through this report and it's really exciting.
+00:30:37.988  This is uh as we said, a seismic shift in the industry and we're looking forward to hearing more.
+00:30:44.647  any final thoughts?
+00:30:48.344  No final thoughts.
+00:30:50.849  No, please cut that.
+00:30:51.810  Please don't put that in there.
+00:30:54.210  I'm gonna put that at the front, at the beginning.
+00:30:55.865  You have the intro?
+00:30:57.851  No thoughts.
+00:30:58.814  No thoughts.
+00:30:59.626  No final cut the final.
+00:31:00.790  No thoughts.
+00:31:01.946  like with Bill Clinton, I don't have the answers.
+00:31:04.891  Yeah.
+00:31:05.364  the answers, right.
+00:31:07.726  Okay, well let's do a little goodbye then.
+00:31:09.117  Okay, well thank both.
+00:31:10.067  Thank you, John, for for joining this conversation.
+00:31:12.539  Thank you, David, for this great report.
+00:31:14.040  We're looking forward to see uh great things from this new study.
+00:31:18.808  Sounds great, thank you.
+00:31:21.031  And by the way, um if you want to do that again and do your seismic shift, I think that was beautiful.
+00:31:27.178  By the way, seismic shift is fucking cool.
+00:31:29.411  shift.
+00:31:29.630  I know I keep using that one.
+00:31:30.482  That's a good one.
+00:31:32.503  What did I say?
+00:31:33.074  I can't remember.
+00:31:33.632  I I uh I think I think I said it okay the first time.
+00:31:36.307  I'll we'll use that one.
+00:31:38.840  Yeah, but then I f'd it up.
+00:31:40.314  But anywho.
+00:31:42.796  Well, let me do one more take just in case.
+00:31:45.120  well thank you both for for joining uh joining this uh discussion of this report.
+00:31:49.506  It's gonna be a seismic shift in the industry.
+00:31:51.640  It's really, really exciting.
+00:31:52.571  John, thank you for for joining this call.
+00:31:54.404  And David, congratulations on this new report.
+00:31:56.607  We're looking forward to seeing great things.
+00:31:59.502  Thank you, David.
+00:32:00.204  Thank you, John.
+00:32:05.240  That's it.
+00:32:05.562  All right.
+00:32:05.993  Thank you.
+00:32:06.486  Anything are we we okay?
+00:32:07.860  D did that go okay?
+00:32:09.177  I thought we had covered a lot of good stuff.
+00:32:11.061  I think so.
+00:32:13.378  And and we have a couple for the blooper reel too, so that's good.
+00:32:15.824  Yeah, we got a we got a lot of bloopers.
+00:32:17.424  We have a a whole you know section of bloopers over the last number of s episodes we've done.
+00:32:23.809  We should, yeah.
+00:32:24.590  I've been I've I've been holding I haven't really thought through how we're gonna do it yet.
+00:32:26.981  But yeah, we should.
+00:32:27.842  Yeah.
+00:32:28.651  on a serious note, seriously, John, that was freaking I d I mean, by far, and no, I don't tell everybody this, our best guest, man.
+00:32:36.151  I mean, hands down.
+00:32:37.029  think Second was Clay, but you're best.
+00:32:40.122  you're number one so far.
+00:32:41.136  thank you.
+00:32:42.721  One out of two.
+00:32:43.434  don't no no dis to Bob Jordan though.
+00:32:45.455  Don't tell Bob He's really hard to edit.
+00:32:52.819  He's really hard to edit it.
+00:32:53.646  God bless him.
+00:32:54.200  We love him, but Bob Jordan, he's great.
+00:32:56.911  He's great.
+00:32:57.391  But he's yeah, Bob, yeah.
+00:32:59.419  Oh, clay is a fucking mechanism.
+00:33:01.823  Yeah.
+00:33:02.133  Yeah.
+00:33:04.186  He's so crystal clear in his thinking.
+00:33:06.001  So okay.
+00:33:08.439  Well
+00:33:09.423  I'm excited to see.
+00:33:11.499  I think this is going to accelerate for all of us very quickly for a lot of opportunities because.
+00:33:18.715  you know it's like that light bulb moment and no one's gone to flip the light on and once that light comes on no one else can hide you can't hide even from a little bit of light in
+00:33:29.554  the in the darkness and that's where naturally these flexible duct has been in the dark for a while and this is going to be a way to to
+00:33:38.627  That was great.
+00:33:39.078  I wish we were recording right now.
+00:33:40.428  We are.
+00:33:40.948  Can I use that?
+00:33:42.480  Ultimately.
+00:33:45.000  yeah.
+00:33:45.522  Yeah.
+00:33:46.543  It's that's that's good.
+00:33:51.327  Yeah.
+00:33:52.408  Well, the biggest, the biggest things that we have with Superstratum Labs and is it's what I try to get customers.
+00:33:59.324  Yeah.
+00:33:59.535  The, the homeless is a toxic environment.
+00:34:02.397  They know they're sick.
+00:34:03.518  We got to fix that.
+00:34:05.380  But I really want those customers to
+00:34:09.177  first clean their HVAC systems before they do the rest of the house because if you spend that money and do all that and then don't change the other, I don't know what, I know
+00:34:18.916  there's same toxins are in there and then you just release them back out into a clean environment.
+00:34:23.591  It makes no sense.
+00:34:25.603  And so that's why it's so important.
+00:34:29.207  Needs.
+00:34:29.639  when Jeff Jones asked me to write the standards for Microbi Warrior, we came into this very room right here to write.
+00:34:34.200  I mean, we came in here for two months, eight hours a day straight and came down to brass, you know, let's figure this out.
+00:34:40.455  We decided that it had to be done first in the process of of restoration project.
+00:34:45.137  We tried to see, well, how will it work if we do it midway or at the end?
+00:34:49.249  And it just didn't line up.
+00:34:50.880  First and then seal it off is the way to go.
+00:34:53.612  Yeah.
+00:34:54.682  Or with your coding, John.
+00:34:56.727  With your coding, I think you could even not seal it and it's fine, right?
+00:34:59.579  Well, yeah, mean, the coating is going to ensure you um even if contaminants get down there or anything, they're not going to grow on that surface, you know, after that.
+00:35:11.108  through and that's the biggest key, you know.
+00:35:15.295  Ever ever since we've implemented this the superstratum products into our mold decontamination processes, which we have done a ton of.
+00:35:21.397  Okay.
+00:35:21.687  I've been to Hawaii five times in the last year to do mold, three times to redo mold of HVAC that was done improperly.
+00:35:28.040  Ever since we've implemented the superstratum products, we have not failed a test.
+00:35:33.162  Yeah.
+00:35:35.243  Beautiful.
+00:35:35.883  Love it.
+00:35:36.328  and I don't know, this is one thing, because this is going to be out there, we talked about in there, you said disinfected.
+00:35:44.716  You got to be very careful around my product.
+00:35:47.419  And you probably noticed me backtrack on that.
+00:35:51.843  Yes, Artemis can talk about being a disinfectant or that, but they can't talk about being a cleaner.

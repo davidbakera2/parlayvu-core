@@ -1,0 +1,157 @@
+{
+  "episode_summary": "David Hart, Founder & CEO of RAM AIR International, and John Miles, Chief Science Officer of Superstratum Labs, join host David Baker to unpack Hart's new research report on the structural incompatibility of negative-air duct cleaning with flexible duct systems. The conversation covers the adhesive science behind flex duct design, the specific failure modes caused by negative pressure, why damage is largely hidden from visual inspection, and why positive-pressure cleaning is the mechanically sound alternative. The episode closes with a discussion of industry inertia and the implications for HVAC cleaning standards.",
+  "people": [
+    {
+      "name": "David Baker",
+      "title": "Host",
+      "speaker": "host"
+    },
+    {
+      "name": "David Hart",
+      "title": "Founder & CEO, RAM AIR International",
+      "speaker": "guest_01"
+    },
+    {
+      "name": "John Miles",
+      "title": "Chief Science Officer, Superstratum Labs",
+      "speaker": "guest_02"
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "SEG01",
+      "start": "00:00:00.000",
+      "end": "00:01:45.452",
+      "speaker": "host",
+      "topic": "Episode Introduction & Report Overview",
+      "summary": "David Baker opens Straight from the Hart, frames the central premise that negative-air cleaning is structurally incompatible with flexible duct systems, and introduces David Hart as the report's author. Hart briefly describes the report's title and explains that the negative-air method was designed for metal ducting and never evolved when flex duct became dominant in the 1980s.",
+      "notable_quote": "A new report shows negative air cleaning is structurally incompatible with flexible duct systems.",
+      "suggested_layout": "1cam",
+      "lower_third_top": "David Baker",
+      "lower_third_bottom": "Negative Air vs. Flex Duct: The New Report",
+      "broll_ideas": [
+        "Flex duct installed in an attic or crawlspace",
+        "Cover art or title card of the research report"
+      ]
+    },
+    {
+      "segment_id": "SEG02",
+      "start": "00:01:45.452",
+      "end": "00:03:30.435",
+      "speaker": "guest_01",
+      "topic": "Introducing John Miles & the Origin of the Research",
+      "summary": "David Hart introduces John Miles and recounts the pivotal moment at a Superstratum Labs meeting when Miles offhandedly remarked that flex ducting was never meant to be under negative pressure, sparking the entire research project. Hart credits Miles's deep expertise in the seam-seal adhesive used in flex duct manufacturing as the foundation of the report.",
+      "notable_quote": "Flex ducting was never meant to be under negative pressure.",
+      "suggested_layout": "2cam",
+      "lower_third_top": "David Hart",
+      "lower_third_bottom": "The Insight That Started the Research",
+      "broll_ideas": [
+        "Close-up of flex duct seam adhesive",
+        "Meeting-room or lab setting evoking a scientific discussion"
+      ]
+    },
+    {
+      "segment_id": "SEG03",
+      "start": "00:03:30.435",
+      "end": "00:09:41.276",
+      "speaker": "both",
+      "topic": "Adhesive Science: Shear vs. Peel Strength",
+      "summary": "John Miles explains his 35-year career in water-based adhesive development and details why the adhesive bonding flex duct seams was engineered for high shear strength and very low peel strength \u2014 a deliberate trade-off that also provides oil resistance inside the duct. David Hart and Miles together clarify the shear-vs.-peel distinction and quantify the pressure asymmetry: flex duct tolerates 10\u201320\u00d7 more positive pressure than negative, with negative tolerance only \u00bd\"\u20131\" water column.",
+      "notable_quote": "The shear strength is when you're putting pressure against something \u2014 you have that ability \u2014 but the little flap on it has no peel strength to it, very little. And so when you put negative pressure on something on this side, it flaps up very, very easily.",
+      "suggested_layout": "2cam_broll",
+      "lower_third_top": "John Miles",
+      "lower_third_bottom": "Why Flex Duct Is Built for Positive Pressure",
+      "broll_ideas": [
+        "Animation or diagram showing shear force vs. peel force on a duct seam",
+        "Cross-section of flex duct layers (inner liner, wire coil, outer jacket)",
+        "Post-it note analogy visual \u2014 high shear, low peel"
+      ]
+    },
+    {
+      "segment_id": "SEG04",
+      "start": "00:09:41.276",
+      "end": "00:14:37.474",
+      "speaker": "both",
+      "topic": "Failure Modes: What Negative Pressure Does to Flex Duct",
+      "summary": "Miles and Hart describe the cascade of structural failures triggered by negative-air cleaning: adhesive seam flaps peel open and cannot re-adhere, the wire coil deforms inward with no restoring force, and mechanical agitation then grabs the open flap and tears it further. They explain that once unconditioned attic or crawlspace air infiltrates through the compromised seam, condensation, mold, and contaminants are drawn into the duct and distributed throughout the home.",
+      "notable_quote": "Once that flap opens, then you're gonna have unconditioned air able to migrate in there. Also, the wire that's on there, if it deforms, there's nothing to push it back out.",
+      "suggested_layout": "2cam_broll",
+      "lower_third_top": "John Miles & David Hart",
+      "lower_third_bottom": "Delamination, Collapse & Mold Pathways",
+      "broll_ideas": [
+        "Slow-motion or macro footage of a duct seam peeling under suction",
+        "Thermal or moisture imagery showing unconditioned air infiltration",
+        "Mold growth inside a compromised flex duct"
+      ]
+    },
+    {
+      "segment_id": "SEG05",
+      "start": "00:14:37.474",
+      "end": "00:16:42.046",
+      "speaker": "both",
+      "topic": "Hidden Damage: Why Visual Inspection Fails",
+      "summary": "Hart and Miles explain that most negative-pressure damage is invisible from the outside because the outer insulation jacket masks internal delamination, and even a camera inserted into the duct may miss it \u2014 especially when positive pressure temporarily re-seats the flap. Hart references lab images from the testing facility (which also works with the Department of Defense and NASA) showing enlarged views of delamination not detectable by the naked eye.",
+      "notable_quote": "Somebody who has lung cancer looks great. You know, you can't see it \u2014 doesn't mean the problem's not there.",
+      "suggested_layout": "2cam_broll",
+      "lower_third_top": "David Hart",
+      "lower_third_bottom": "Damage Hidden Behind the Outer Jacket",
+      "broll_ideas": [
+        "Lab microscopy images of flex duct delamination",
+        "Duct camera footage showing a duct interior that appears normal",
+        "Side-by-side of intact vs. delaminated duct cross-section"
+      ]
+    },
+    {
+      "segment_id": "SEG06",
+      "start": "00:16:42.046",
+      "end": "00:20:12.056",
+      "speaker": "guest_01",
+      "topic": "Why a 'Safe' Negative-Air Protocol Is Impractical",
+      "summary": "Hart outlines the three safeguards theoretically required to use negative-air cleaning without damaging flex duct \u2014 full visual inspection of every duct foot, identification of each duct's pressure tolerance, and real-time multi-point pressure monitoring \u2014 and argues all three are operationally absurd. He cites a 30-year NADCA instructor who admitted crews hook up equipment until flex duct shakes and then back off slightly, and notes they have even flattened metal ducting, far exceeding the \u00bd\"\u20131\" tolerance.",
+      "notable_quote": "When we hook up negative air pressure equipment to a duct system, we hook it up until we get that flex duct just shaking, and then we back it off a hair.",
+      "suggested_layout": "2cam",
+      "lower_third_top": "David Hart",
+      "lower_third_bottom": "Three Safeguards Nobody Actually Follows",
+      "broll_ideas": [
+        "Negative-air machine connected to a duct system",
+        "Pressure gauge showing readings exceeding safe thresholds",
+        "Technician attempting to inspect every foot of ductwork"
+      ]
+    },
+    {
+      "segment_id": "SEG07",
+      "start": "00:20:12.056",
+      "end": "00:27:14.134",
+      "speaker": "both",
+      "topic": "Positive-Pressure Cleaning & the SaniJet System",
+      "summary": "Hart explains why positive-pressure cleaning is mechanically compatible with flex duct design, using the HVAC system's own air handler and staying well within the duct's high positive-pressure tolerance. He also details why fogging fails to coat duct surfaces and introduces the SaniJet device \u2014 a compressed-air canister with a 13-hole spray ball \u2014 as the precise, controlled method for applying Superstratum Labs decontaminants directly onto duct surfaces without over-saturating the system.",
+      "notable_quote": "You're putting a hundred percent that you could decontaminate exactly where you want it to be, zero percent where you don't, and it gives you a hundred percent control over how much you put in there.",
+      "suggested_layout": "2cam_broll",
+      "lower_third_top": "David Hart & John Miles",
+      "lower_third_bottom": "Positive Pressure + SaniJet: The Compatible Method",
+      "broll_ideas": [
+        "SaniJet device being inserted into a duct and slowly retracted",
+        "Close-up of the 13-hole spray ball misting a duct interior",
+        "Side-by-side comparison: fogging vs. SaniJet application",
+        "HVAC air handler running during positive-pressure cleaning"
+      ]
+    },
+    {
+      "segment_id": "SEG08",
+      "start": "00:27:14.134",
+      "end": "00:32:05.993",
+      "speaker": "both",
+      "topic": "Industry Standards & the Path Forward",
+      "summary": "The three discuss how current industry standards do not distinguish between negative- and positive-air cleaning methods for flex duct, and why established organizations have been slow to address the issue. Miles suggests industry embarrassment over 40 years of undetected failures is a key barrier, while Hart draws a parallel to the historical medical endorsement of cigarette smoking. Both express optimism that the new report will accelerate change.",
+      "notable_quote": "If they acknowledge they made a mistake, then they've got 40 years of having to deal with people coming back with that \u2014 'oh, that's the reason why I'm sick in my home.'",
+      "suggested_layout": "3cam",
+      "lower_third_top": "David Hart & John Miles",
+      "lower_third_bottom": "Industry Standards: What Needs to Change",
+      "broll_ideas": [
+        "Industry association logos or standards documents (generic)",
+        "Timeline graphic: negative-air method origin (1950s) through flex duct adoption (1980s) to present",
+        "Newspaper or publication headline style graphic referencing the new report"
+      ]
+    }
+  ]
+}
