@@ -512,17 +512,23 @@ class Renderer:
             f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={FPS},format=yuv420p[basev]",
             "[0:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.35,alimiter=limit=0.96[a]",
         ]
-        lower_third_scene_id = (
-            scene.get("lower_third_scene_id")
-            or scene.get("intro_lower_third_scene_id")
-            or self.setting_text("intro_lower_third_scene_id", "")
-        )
-        lower_third = self.lower_third_scene(lower_third_scene_id)
-        if lower_third:
+        # Prefer the intro scene's own lower-third text (so the intro can carry the exact
+        # name+topic of the section it was pulled from); else fall back to a referenced scene.
+        top_text = str(scene.get("top_row_text") or "")
+        bottom_text = str(scene.get("bottom_row_text") or "")
+        if not (top_text or bottom_text):
+            lower_third_scene_id = (
+                scene.get("lower_third_scene_id")
+                or scene.get("intro_lower_third_scene_id")
+                or self.setting_text("intro_lower_third_scene_id", "")
+            )
+            lower_third = self.lower_third_scene(lower_third_scene_id)
+            if lower_third:
+                top_text = str(lower_third.get("top_row_text") or "")
+                bottom_text = str(lower_third.get("bottom_row_text") or "")
+        if top_text or bottom_text:
             overlay = self.make_onecam_lower_third_overlay(
-                f"lt_{idx:03d}_intro",
-                str(lower_third.get("top_row_text") or ""),
-                str(lower_third.get("bottom_row_text") or ""),
+                f"lt_{idx:03d}_intro", top_text, bottom_text,
             )
             inputs.extend(["-i", overlay])
             filters.append(f"[1:v]fps={FPS},format=rgba[ltv]")
@@ -899,6 +905,17 @@ class Renderer:
         has_explicit_bookends = any(row.get("layout") in {"intro", "show_image", "outro"} for row in timeline_scenes)
         program_layouts = ALL_PROGRAM_LAYOUTS
         scenes = [row for row in timeline_scenes if row.get("layout") in program_layouts]
+        # Guardrail: surface any program scene missing lower-third text BEFORE the long render,
+        # so a dropped top/bottom line is caught here instead of in the finished video.
+        missing_lt = [
+            row.get("scene_id")
+            for row in scenes
+            if not str(row.get("top_row_text") or "").strip()
+            or not str(row.get("bottom_row_text") or "").strip()
+        ]
+        if missing_lt:
+            print(f"WARNING: {len(missing_lt)} program scene(s) missing lower-third text "
+                  f"(top or bottom): {', '.join(map(str, missing_lt))}")
         if self.max_scenes:
             timeline_scenes = timeline_scenes[: self.max_scenes]
             scenes = scenes[: self.max_scenes]

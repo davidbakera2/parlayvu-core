@@ -37,7 +37,7 @@ PROJECT = REPO / "client_artifacts" / "ramair" / "03_Deliverables" / "podcast" /
 CAMERAS = {
     "host":     {"name": "David Baker", "title": "Host"},
     "guest_01": {"name": "David Hart",  "title": "Founder & CEO, RAM AIR International"},
-    "guest_02": {"name": "John Miles",  "title": "Chief Science Officer, Superstratum Labs"},
+    "guest_02": {"name": "John Miles",  "title": "President, Superstratum Labs"},
 }
 
 # Both planners on Sonnet; max_tokens well above the default 1500 so a 30+ scene plan
