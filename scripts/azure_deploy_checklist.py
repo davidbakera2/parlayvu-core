@@ -114,7 +114,21 @@ def build_azure_steps(
             "title": "Set Container App Secrets",
             "command": (
                 "# Add secrets from infra/azure/secrets.env.example with "
-                "`az containerapp secret set --secrets NAME=value`."
+                "`az containerapp secret set --secrets NAME=value`.\n"
+                "# Includes the parlayvu.ai login/subscription secrets: APP_BASE_URL,\n"
+                "# SESSION_SECRET, STRIPE_SECRET_KEY, STRIPE_PRICE_ID,\n"
+                "# STRIPE_WEBHOOK_SECRET, RESEND_API_KEY, EMAIL_FROM."
+            ),
+        },
+        {
+            "title": "Run Database Migrations",
+            "command": (
+                "# Apply Alembic migrations against Neon (creates accounts, magic_links,\n"
+                "# login_sessions, subscriptions on first run). The image includes alembic.\n"
+                'az containerapp exec '
+                '--name "$env:AZURE_CONTAINER_APP" '
+                '--resource-group "$env:AZURE_RESOURCE_GROUP" '
+                '--command "alembic upgrade head"'
             ),
         },
         {
@@ -180,6 +194,20 @@ def render_azure_checklist(
                 """\
                 After deployment, set the Azure Bot messaging endpoint to:
                 `https://<container-app-fqdn>/teams/messages`
+                """
+            ).strip(),
+            "",
+            "## Stripe Webhook (customer subscriptions)",
+            "",
+            dedent(
+                """\
+                After deployment, in the Stripe Dashboard (LIVE mode) add a webhook
+                endpoint at `https://<container-app-fqdn>/webhooks/stripe` subscribed to:
+                `checkout.session.completed`, `customer.subscription.created`,
+                `customer.subscription.updated`, `customer.subscription.deleted`.
+                Copy its signing secret into the `STRIPE_WEBHOOK_SECRET` app secret, and
+                set `APP_BASE_URL` to the same `https://<container-app-fqdn>` (or your
+                custom domain). The customer sign-in page is then at `/login`.
                 """
             ).strip(),
             "",

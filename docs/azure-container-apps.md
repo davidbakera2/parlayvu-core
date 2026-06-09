@@ -11,6 +11,7 @@ This checklist moves the ParlayVU FastAPI/LangGraph backend to Azure while keepi
 - Neon remains the database via `DATABASE_URL`.
 - Log Analytics for application logs.
 - Azure Bot messaging endpoint points to `/teams/messages`.
+- Customer login + Stripe subscription served at `/login`, `/dashboard`, and `/webhooks/stripe`.
 
 ## Files
 
@@ -35,10 +36,12 @@ This checklist moves the ParlayVU FastAPI/LangGraph backend to Azure while keepi
 3. Build and push the Docker image to Azure Container Registry.
 4. Create the Container Apps environment.
 5. Deploy the API container with ingress enabled.
-6. Confirm `/health` returns `healthy`.
-7. Confirm `/readiness` returns `ready`.
-8. Run `python scripts/seed_demo.py` against the production `DATABASE_URL` from a secure operator environment if demo memory is not already present.
-9. Update the Azure Bot messaging endpoint to the hosted `/teams/messages` URL.
+6. Run `alembic upgrade head` against the production `DATABASE_URL` (creates `accounts`, `magic_links`, `login_sessions`, `subscriptions` on first run; the image includes Alembic). Use `az containerapp exec ... --command "alembic upgrade head"`.
+7. Confirm `/health` returns `healthy`.
+8. Confirm `/readiness` returns `ready`.
+9. Run `python scripts/seed_demo.py` against the production `DATABASE_URL` from a secure operator environment if demo memory is not already present.
+10. Update the Azure Bot messaging endpoint to the hosted `/teams/messages` URL.
+11. In the Stripe Dashboard (LIVE mode), add a webhook at `https://<container-app-host>/webhooks/stripe` (events: `checkout.session.completed`, `customer.subscription.created/updated/deleted`); set `STRIPE_WEBHOOK_SECRET` and `APP_BASE_URL` accordingly. Create the live $800/4-week price (`python scripts/setup_stripe.py` with the live key) and set `STRIPE_PRICE_ID`.
 
 ## Security Notes
 

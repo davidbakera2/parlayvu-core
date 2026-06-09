@@ -20,6 +20,14 @@ class Settings:
     groq_model: str
     anthropic_api_key: str
     allowed_origins: List[str]
+    # parlayvu.ai login + subscription
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_id: str = ""
+    resend_api_key: str = ""
+    email_from: str = "ParlayVU <login@parlayvu.ai>"
+    session_secret: str = ""
+    app_base_url: str = "http://localhost:8000"
 
     @property
     def active_model(self) -> str:
@@ -49,6 +57,13 @@ def get_settings() -> Settings:
         allowed_origins=_split_csv(
             os.getenv("ALLOWED_ORIGINS", "http://localhost:4321,http://127.0.0.1:4321")
         ),
+        stripe_secret_key=os.getenv("STRIPE_SECRET_KEY", os.getenv("STRIPE_API_KEY", "")),
+        stripe_webhook_secret=os.getenv("STRIPE_WEBHOOK_SECRET", ""),
+        stripe_price_id=os.getenv("STRIPE_PRICE_ID", ""),
+        resend_api_key=os.getenv("RESEND_API_KEY", os.getenv("RESEND_API", "")),
+        email_from=os.getenv("EMAIL_FROM", "ParlayVU <login@parlayvu.ai>"),
+        session_secret=os.getenv("SESSION_SECRET", ""),
+        app_base_url=os.getenv("APP_BASE_URL", "http://localhost:8000").rstrip("/"),
     )
 
 

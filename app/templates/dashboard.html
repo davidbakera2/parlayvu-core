@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Your subscription · ParlayVU{% endblock %}
+{% block content %}
+  <h1>Your subscription</h1>
+  <p class="muted">Signed in as {{ account.email }}</p>
+
+  {% if subscription.entitled %}
+    <p><span class="pill ok">Active</span></p>
+    <p class="muted">
+      Your Podcast Parlay subscription is active.
+      {% if subscription.current_period_end %}
+        {% if subscription.cancel_at_period_end %}
+          It will end on {{ subscription.current_period_end.strftime('%B %d, %Y') }}.
+        {% else %}
+          Renews on {{ subscription.current_period_end.strftime('%B %d, %Y') }}.
+        {% endif %}
+      {% endif %}
+    </p>
+    <form method="post" action="/billing/portal">
+      <button type="submit">Manage billing</button>
+    </form>
+  {% else %}
+    {% if subscription.status %}
+      <p><span class="pill warn">{{ subscription.status|capitalize }}</span></p>
+    {% endif %}
+    <p class="muted">Subscribe to start your Podcast Parlay production.</p>
+    <div class="price">$800 <small>every 4 weeks</small></div>
+    <form method="post" action="/billing/checkout">
+      <button type="submit">Subscribe</button>
+    </form>
+    {% if subscription.status %}
+      <form method="post" action="/billing/portal">
+        <button type="submit" class="secondary">Manage billing</button>
+      </form>
+    {% endif %}
+  {% endif %}
+
+  <form method="post" action="/auth/logout">
+    <button type="submit" class="secondary">Sign out</button>
+  </form>
+{% endblock %}

@@ -30,6 +30,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# parlayvu.ai customer login + subscription (magic-link auth + Stripe billing)
+from .auth import router as auth_router
+from .billing import router as billing_router
+
+app.include_router(auth_router)
+app.include_router(billing_router)
+
 # ========================= MODELS =========================
 class NathanRequest(BaseModel):
     message: str

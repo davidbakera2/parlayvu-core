@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Sign in · ParlayVU{% endblock %}
+{% block content %}
+  <h1>Sign in</h1>
+  <p class="muted">Enter your email and we'll send you a secure sign-in link. No password needed.</p>
+  {% if request.query_params.get('error') == 'invalid' %}
+    <p class="error">That sign-in link was invalid or expired. Request a new one below.</p>
+  {% endif %}
+  <form method="post" action="/auth/request-link">
+    <label for="email">Email address</label>
+    <input id="email" name="email" type="email" required autofocus placeholder="you@company.com" />
+    <button type="submit">Email me a sign-in link</button>
+  </form>
+{% endblock %}
