@@ -141,6 +141,23 @@ Teams front-door setup is documented in `docs/teams.md`. The current scaffold ac
 
 The native Teams media bot scaffold lives under `services/teams-media-bot/`. It is a separate .NET service for Microsoft Graph Cloud Communications calling-bot work and is not part of the Azure Container Apps deployment path. The current scaffold registers meetings and forwards questions/approved transcript notes to the existing ParlayVU live meeting endpoints; it does not yet implement a real Graph media join.
 
+## Customer Login & Subscription
+
+parlayvu.ai customers sign in with a passwordless **magic link** and manage a
+recurring **Podcast Parlay subscription** ($800 every 4 weeks) through Stripe.
+Login and a gated dashboard are server-rendered inside this FastAPI app; Stripe
+hosts Checkout and the Customer Portal. Setup (Stripe price, webhook, Resend
+domain, env vars) is documented in `docs/billing.md`.
+
+Customer-facing endpoints: `GET /login`, `POST /auth/request-link`,
+`GET /auth/verify`, `POST /auth/logout`, `GET /dashboard`,
+`POST /billing/checkout`, `POST /billing/portal`, and the Stripe sync webhook
+`POST /webhooks/stripe`. Create the subscription price with:
+
+```powershell
+python scripts/setup_stripe.py
+```
+
 ## Hardening Priorities
 
 1. Rotate any secrets that have been stored locally or shared outside secret managers.

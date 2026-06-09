@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Check your email · ParlayVU{% endblock %}
+{% block content %}
+  <h1>Check your email</h1>
+  <p class="muted">
+    If an account exists for <strong>{{ email }}</strong>, we just sent a sign-in
+    link there. It expires in 15 minutes and can be used once.
+  </p>
+  <a class="btn secondary" href="/login">Use a different email</a>
+{% endblock %}

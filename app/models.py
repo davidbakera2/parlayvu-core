@@ -160,3 +160,81 @@ class ConversationTurn(Base, TimestampMixin):
     surface: Mapped[str] = mapped_column(String(32), nullable=False, default="teams_chat")
     role: Mapped[str] = mapped_column(String(16), nullable=False)  # "user" | "assistant"
     content: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# parlayvu.ai customer login + subscription (magic-link auth + Stripe billing)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class Account(Base, TimestampMixin):
+    """A paying customer of parlayvu.ai (the people who buy Podcast Parlays).
+
+    Distinct from ``Client`` (the agency's internal project-memory record).
+    An Account may optionally be linked to a Client so a logged-in subscriber
+    can later be shown their own project's deliverables.
+    """
+
+    __tablename__ = "accounts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(128), unique=True, index=True)
+    client_id: Mapped[str | None] = mapped_column(ForeignKey("clients.id"), index=True)
+
+    client: Mapped[Client | None] = relationship()
+    subscriptions: Mapped[list["Subscription"]] = relationship(
+        back_populates="account", cascade="all, delete-orphan"
+    )
+
+
+class MagicLink(Base, TimestampMixin):
+    """Single-use, short-lived sign-in token. We email the raw token and store
+    only its SHA-256 hash, so a database read alone cannot mint a session."""
+
+    __tablename__ = "magic_links"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    account: Mapped[Account] = relationship()
+
+
+class LoginSession(Base, TimestampMixin):
+    """A logged-in browser session. The raw session token lives only in the
+    user's httponly cookie; we store its hash for lookup."""
+
+    __tablename__ = "login_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    account: Mapped[Account] = relationship()
+
+
+class Subscription(Base, TimestampMixin):
+    """Mirror of a Stripe subscription, kept in sync by the Stripe webhook.
+
+    ``status`` mirrors Stripe values (active, trialing, past_due, canceled, …);
+    the dashboard treats ``active`` and ``trialing`` as entitled.
+    """
+
+    __tablename__ = "subscriptions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
+    stripe_subscription_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, unique=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="incomplete")
+    price_id: Mapped[str | None] = mapped_column(String(128))
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_at_period_end: Mapped[bool] = mapped_column(default=False)
+
+    account: Mapped[Account] = relationship(back_populates="subscriptions")
