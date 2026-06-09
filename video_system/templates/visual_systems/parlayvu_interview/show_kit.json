@@ -1,0 +1,66 @@
+{
+  "name": "parlayvu_interview",
+  "show_name": "Straight from the Hart",
+  "known_terms": ["Straight from the Hart", "RAM AIR International", "SaniJet"],
+  "editing_style": "Multi-camera show with isolated per-camera mics (the audio always carries every speaker regardless of who is on screen). Layout: use 1cam ONLY for a sustained single-speaker monologue, and show the person who is actually speaking — never use 1cam during back-and-forth dialogue. For any back-and-forth or group discussion use 3cam so whoever speaks is visible. Use 2cam (host + the guest who is actually speaking) when the exchange is really a back-and-forth between just two people — the host and one guest — rather than the whole group; pick the two cameras to match who is talking. Use 3cam / 3cam_broll when all three are engaged in the discussion. Use 2cam_broll or 3cam_broll for b-roll beats (2cam_broll during a two-person exchange, 3cam_broll otherwise). Keep b-roll inserts BRIEF: a static image or document should be on screen only ~6-12 seconds — make the b-roll scene short and cut back to a camera beat for the rest of the topic; do NOT hold a static b-roll for a long stretch. When a guest references a specific document, report, study, product, or page on screen, cut to the b-roll clip whose description matches it at that exact moment. Avoid more than two consecutive scenes with the same layout. Camera-count layouts: 1cam (one person), 2cam (host + one guest), 3cam (three people), 4cam (four people — only when a guest_03 camera exists on the shoot). B-roll panels come in two shapes: *_broll is a wide LANDSCAPE panel (documents, wide shots); *_brollp is a tall PORTRAIT panel (vertical phone clips, tall images) — pick the shape that fits the clip.",
+  "description": "RamAir 'Straight from the Hart' podcast Show Kit — the constant per-episode format (background, music, bookends, render settings). Per-episode creative content (scenes, lower-third text, b-roll) comes from the planner and is merged onto this.",
+  "template_config": "legacy/template_config.json",
+
+  "bookends": {
+    "intro": {
+      "scene_id": "INTRO",
+      "layout": "intro",
+      "asset": "intro.mp4",
+      "play_full": true,
+      "default_duration": "00:00:15.000"
+    },
+    "opening_show_image": {
+      "scene_id": "OPENING_SHOW_IMAGE",
+      "layout": "show_image",
+      "asset": "show_image.png",
+      "duration": "00:00:05.000"
+    },
+    "outro": {
+      "scene_id": "OUTRO",
+      "layout": "outro",
+      "asset": "show_image.png",
+      "duration": "00:00:05.000"
+    }
+  },
+
+  "settings": [
+    {"setting": "template_name", "value": "parlayvu_interview", "notes": ""},
+    {"setting": "render_width", "value": "1920", "notes": ""},
+    {"setting": "render_height", "value": "1080", "notes": ""},
+    {"setting": "fps", "value": "24", "notes": ""},
+    {"setting": "subtitle_style", "value": "template_default", "notes": ""},
+    {"setting": "background_video", "value": "background.mov", "notes": "Looped behind multi-box (2cam/3cam) layouts."},
+    {"setting": "show_image_asset", "value": "show_image.png", "notes": ""},
+    {"setting": "intro_asset", "value": "intro.mp4", "notes": ""},
+    {"setting": "timeline_mode", "value": "full_rendered", "notes": ""}
+  ],
+
+  "audio": [
+    {"enabled": true, "audio_id": "intro_music", "anchor": "intro_start", "file": "music.wav",
+     "start": "00:00:00.000", "duration": "00:00:50.000", "source_start": "00:00:00.000",
+     "volume": "0.2", "fade_in": "00:00:00.000", "fade_out": "00:00:12.000",
+     "notes": "Music over intro (full length), opening show image, and into the host intro; fades out ~12s into the interview."},
+    {"enabled": true, "audio_id": "outro_music", "anchor": "outro_start", "file": "music.wav",
+     "start": "-00:00:10.000", "duration": "00:00:15.000", "source_start": "00:01:49.000",
+     "volume": "0.72", "fade_in": "00:00:15.000", "fade_out": "00:00:00.000",
+     "notes": "Music begins ~10s before the closing show image and plays through it."}
+  ],
+
+  "assets": [
+    {"asset_key": "show_image", "file_name": "show_image.png", "purpose": "Main show image / outro"},
+    {"asset_key": "show_image_lower_third", "file_name": "show_image_lower_third.png", "purpose": "Left lower-third image"},
+    {"asset_key": "logo_square", "file_name": "logo_square.png", "purpose": "Right lower-third logo"},
+    {"asset_key": "background_video", "file_name": "background.mov", "purpose": "Looped background behind multi-box layouts"},
+    {"asset_key": "intro", "file_name": "intro.mp4", "purpose": "Opening clip (cut from the episode)"},
+    {"asset_key": "music", "file_name": "music.wav", "purpose": "Intro/outro music bed"},
+    {"asset_key": "host", "file_name": "host.mp4", "purpose": "Host camera"},
+    {"asset_key": "guest_01", "file_name": "guest_01.mp4", "purpose": "Guest camera 1"},
+    {"asset_key": "guest_02", "file_name": "guest_02.mp4", "purpose": "Guest camera 2"},
+    {"asset_key": "guest_03", "file_name": "guest_03.mp4", "purpose": "Guest camera 3 (only when a 4th person is on the shoot; used by 4cam layouts)"}
+  ]
+}

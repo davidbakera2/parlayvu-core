@@ -71,6 +71,11 @@ CacheClip/
 # planning/*.vtt
 # planning/*.ass
 
+# --- Scratch / experimental tool scripts ---
+# Underscore-prefixed scripts in tools/ are personal scratch helpers, not part
+# of the tracked toolchain. Promote one by renaming it without the leading _.
+tools/_*.py
+
 # --- Generated / Temporary ---
 __pycache__/
 *.py[cod]

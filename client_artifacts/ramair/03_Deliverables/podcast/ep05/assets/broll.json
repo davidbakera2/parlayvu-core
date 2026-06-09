@@ -1,0 +1,160 @@
+[
+  {
+    "file": "broll_01.png",
+    "description": "LinkedIn profile page of John W. Miles, President & Chief Science Officer at Superstratum Labs, specializing in mycotoxin cleaning and mold protection; cut to this when introducing the interview subject or establishing his credentials.",
+    "tags": [
+      "LinkedIn profile",
+      "expert introduction",
+      "mold specialist",
+      "indoor air quality",
+      "Superstratum Labs",
+      "credentials"
+    ],
+    "usage": "specific",
+    "source": "auto"
+  },
+  {
+    "file": "broll_02.jpg",
+    "description": "A tightly wound roll of flexible HVAC duct material viewed end-on, revealing its hollow core; cut to this when discussing ductwork materials, installation components, or airflow pathways.",
+    "tags": [
+      "ductwork",
+      "flexible duct",
+      "HVAC materials",
+      "roll",
+      "airflow",
+      "installation"
+    ],
+    "usage": "specific",
+    "source": "corrected"
+  },
+  {
+    "file": "broll_03.mp4",
+    "description": "Superstratum Labs \u2014 John Miles' company. Show when John Miles introduces himself or discusses Superstratum.",
+    "tags": [
+      "superstratum",
+      "john miles",
+      "company"
+    ],
+    "usage": "specific",
+    "source": "corrected"
+  },
+  {
+    "file": "broll_04.jpg",
+    "description": "Infographic comparing peel strength vs. shear strength with labeled diagrams and directional arrows; cut to this when explaining adhesive or mechanical bonding concepts.",
+    "tags": [
+      "infographic",
+      "adhesion",
+      "engineering",
+      "peel strength",
+      "shear strength"
+    ],
+    "usage": "specific",
+    "source": "auto"
+  },
+  {
+    "file": "broll_05.mp4",
+    "description": "Interior view looking down a corrugated flexible HVAC duct with a camera or probe cable visible, ideal for cutting to when discussing duct inspection or the condition of existing ductwork.",
+    "tags": [
+      "duct interior",
+      "HVAC inspection",
+      "flexible duct",
+      "camera probe",
+      "ductwork condition",
+      "air quality"
+    ],
+    "usage": "exclude",
+    "source": "corrected"
+  },
+  {
+    "file": "broll_06.mp4",
+    "description": "A rotating brush agitates dust and debris inside a metal HVAC duct, ideal for cutting to during discussion of the mechanical cleaning process.",
+    "tags": [
+      "duct cleaning",
+      "brush agitation",
+      "interior duct",
+      "air duct",
+      "debris removal"
+    ],
+    "usage": "specific",
+    "source": "auto"
+  },
+  {
+    "file": "broll_07.jpg",
+    "description": "Cover page of the CIRI Journal of Cleaning Science (the journal that published the report). Show this journal cover JUST BEFORE the article (broll_08) when the report is introduced.",
+    "tags": [
+      "journal cover",
+      "ciri",
+      "report"
+    ],
+    "usage": "specific",
+    "source": "corrected"
+  },
+  {
+    "file": "broll_08.jpg",
+    "description": "The feature article itself \u2014 David Hart's report. Show when he reads or references the report title.",
+    "tags": [
+      "report",
+      "article",
+      "david hart"
+    ],
+    "usage": "specific",
+    "source": "corrected"
+  },
+  {
+    "file": "broll_09.jpg",
+    "description": "Page from David Hart's report (test results / failure-mode figures). Part of the report; show briefly in sequence after the article.",
+    "tags": [
+      "report page",
+      "results"
+    ],
+    "usage": "specific",
+    "source": "corrected"
+  },
+  {
+    "file": "broll_10.jpg",
+    "description": "Page from David Hart's report (lab data table of duct damage). Part of the report; show briefly in sequence.",
+    "tags": [
+      "report page",
+      "data table"
+    ],
+    "usage": "specific",
+    "source": "corrected"
+  },
+  {
+    "file": "broll_11.jpg",
+    "description": "Page from David Hart's report (risks & recommendations). Part of the report; show briefly in sequence.",
+    "tags": [
+      "report page",
+      "recommendations"
+    ],
+    "usage": "specific",
+    "source": "corrected"
+  },
+  {
+    "file": "broll_12.webp",
+    "description": "A gallon jug of Superstratum Building Cleaner with product callouts highlighting mycotoxin removal and HE-HOCl formula; cut to this when discussing chemical treatments or sanitizing agents used after duct cleaning.",
+    "tags": [
+      "building cleaner",
+      "mycotoxins",
+      "HOCl",
+      "disinfectant",
+      "indoor air quality",
+      "product"
+    ],
+    "usage": "specific",
+    "source": "auto"
+  },
+  {
+    "file": "broll_13.webp",
+    "description": "A gallon jug of Superstratum Endurance Coating Pro with feature callouts highlighting mold resistance and water-resistant film; cut to this when discussing mold-prevention treatments or protective coatings applied inside ductwork.",
+    "tags": [
+      "mold resistance",
+      "protective coating",
+      "duct treatment",
+      "HVAC product",
+      "antimicrobial"
+    ],
+    "usage": "specific",
+    "source": "auto"
+  }
+]

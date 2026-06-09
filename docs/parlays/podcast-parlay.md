@@ -25,7 +25,7 @@ It is one of the core Parlays in the ParlayVU system, focused on client-facing t
 | **Ingestion**      | Riverside + Human     | Record interview, light cleanup, export rich data  | Raw video, enhanced audio, transcript with timestamps |
 | **Agentic Planning** | AI Agents (Nathan + specialists) | Scene cuts, layouts, lower thirds, b-roll selection, pacing, graphics | Structured `video_plan.json` equivalent |
 | **Human Review**   | Human (with approvals) | Review plan, adjust tone/accuracy, approve key elements | Approved plan + any change requests |
-| **Execution**      | DaVinci Resolve (scripted) | Assemble final video with proper compositing, graphics, subtitles | `final_no_subtitles.mp4`, `final_with_subtitles.mp4` |
+| **Execution**      | FFmpeg renderer (scripted) | Assemble final video with compositing, graphics, subtitles | `final_no_subtitles.mp4`, `final_with_subtitles.mp4` |
 | **Delivery**       | Agents + Tools        | Long-form delivery + social cutdowns               | Published assets + metadata         |
 | **Metrics & Learning** | System + Agents     | Performance tracking, client feedback, refinement  | Updated preferences, improved agent prompts |
 
@@ -79,7 +79,7 @@ Key responsibilities of the agents in this Parlay:
 - Suggest graphics (name cards, b-roll cards, callouts).
 - Flag sections that may need human review or client approval.
 
-The output should be a structured, machine-readable plan (evolving from the current `video_plan.json` model) that can directly drive DaVinci Resolve.
+The output should be a structured, machine-readable plan (evolving from the current `video_plan.json` model) that can directly drive the FFmpeg renderer.
 
 ## Human Review & Approvals
 
@@ -93,17 +93,21 @@ Approval gates should include:
 
 The existing ParlayVU Approvals system will be used here.
 
-## Execution Layer (DaVinci Resolve)
+## Execution Layer (FFmpeg)
 
-Final video assembly moves to **DaVinci Resolve Studio**.
+Final video assembly is done by a **scripted FFmpeg renderer** that consumes the approved
+`video_plan` directly.
 
 Rationale:
-- Dramatically more powerful and reliable compositing than the current custom Python + FFmpeg renderer.
-- Excellent scripting/API support for driving renders from structured plans.
-- Industry-standard quality and deliverables.
-- Much better long-term maintainability.
+- Fully programmatic and headless — no GUI app or per-render licensing in the loop.
+- Reads `video_plan.json` straight through (one scene → one render step), so the approved
+  plan drives the render with no manual tweaking for standard episodes.
+- Already built: `video_system/tools/render_video.py` renders intro/show-image/program/outro
+  scenes, lower thirds, graphics, and subtitles from the plan. (DaVinci Resolve was an
+  earlier candidate for the execution layer and has been dropped.)
 
-The goal is for the approved plan from the Agentic Planning layer to largely drive the Resolve project (via scripting or data import), with minimal manual tweaking for standard episodes.
+The goal is for the approved plan from the Agentic Planning layer to drive the FFmpeg
+render end-to-end, with minimal manual tweaking for standard episodes.
 
 ## Delivery & Metrics
 
@@ -112,22 +116,28 @@ The goal is for the approved plan from the Agentic Planning layer to largely dri
 - Performance data and client feedback captured back into ParlayVU project memory.
 - Continuous improvement of agent prompts, templates, and planning logic based on what actually performs.
 
-## Current State (v1)
+## Current State
 
 - Riverside is already being used successfully for recording.
-- Basic planning still happens largely manually in spreadsheets.
-- Custom renderer exists but is difficult to scale and maintain.
-- No strong agentic planning layer yet.
-- Execution is not yet in DaVinci Resolve.
+- **Agentic planning layer is implemented** (`app/agents/workflows/podcast_parlay.py`):
+  Blake analyzes the transcript into timestamped segments; Alex composes a structured
+  `video_plan` (scenes, lower thirds, graphics, b-roll). Exposed at
+  `POST /parlays/podcast/plan`. Output contract: `docs/parlays/video-plan-schema.md`.
+  The plan is persisted under `client_artifacts/<client>/02_Planning/podcast_plans/` and,
+  when a client + project are supplied, a `video_plan` approval is requested before render.
+- Execution is the FFmpeg renderer at `video_system/tools/render_video.py`, which reads a
+  `video_plan.json` in the documented schema directly (verified end-to-end against plans
+  in this schema). The planning output targets that contract.
 
 ## Roadmap
 
-1. Formalize Podcast Parlay definition and data contracts (this document).
-2. Build initial agentic planning agents that can propose cuts, lower thirds, and b-roll from Riverside transcripts.
-3. Define clean interface between planning output and DaVinci Resolve.
-4. Pilot the full flow on 1–2 episodes.
-5. Gradually reduce human time in the planning phase while maintaining quality.
-6. Evolve Shorts production into its own sub-Parlay or integrated flow.
+1. ✅ Formalize Podcast Parlay definition and data contracts (this document + `video-plan-schema.md`).
+2. ✅ Build initial agentic planning agents that propose cuts, lower thirds, and b-roll from transcripts.
+3. ✅ Wire the planning output into approvals + persist plans to `client_artifacts` (a `video_plan` approval is requested before render; plans saved under `02_Planning/podcast_plans/`).
+4. ✅ Confirm the planning output drives the FFmpeg renderer (`render_video.py`) end-to-end.
+5. Pilot the full flow on 1–2 episodes.
+6. Gradually reduce human time in the planning phase while maintaining quality.
+7. Evolve Shorts production into its own sub-Parlay or integrated flow.
 
 ## Related Parlays & Systems
 
