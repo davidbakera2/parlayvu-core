@@ -156,6 +156,75 @@ class DashboardGatingTests(unittest.TestCase):
             self.assertIn("Active", resp.text)
 
 
+class MultiPlanTests(unittest.TestCase):
+    """The dashboard and per-plan status resolution must handle more than one
+    productized offering (Podcast Parlay + Ads Parlay)."""
+
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        initialize_database(self.engine)
+        self.Session = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
+        self.scope = build_fake_scope(self.Session)
+
+    def _login(self, client, email):
+        with patch("app.auth.session_scope", self.scope):
+            token = auth_module.create_magic_link(email)
+            account_id = auth_module.consume_magic_link(token)
+            sess_token = auth_module.create_session(account_id)
+        client.cookies.set("pv_session", sess_token)
+        return account_id
+
+    def test_dashboard_lists_both_offerings(self):
+        client = TestClient(app)
+        self._login(client, "shopper@co.com")
+        with patch("app.auth.session_scope", self.scope), patch(
+            "app.billing.session_scope", self.scope
+        ):
+            resp = client.get("/dashboard")
+            self.assertEqual(resp.status_code, 200)
+            self.assertIn("Podcast Parlay", resp.text)
+            self.assertIn("Ads Parlay", resp.text)
+            self.assertIn("$800", resp.text)
+            self.assertIn("$500", resp.text)
+
+    def test_ads_parlay_subscription_resolves_to_its_own_plan(self):
+        from app import billing as billing_module
+
+        client = TestClient(app)
+        account_id = self._login(client, "ads@co.com")
+        with self.Session() as s:
+            s.add(
+                Subscription(
+                    account_id=account_id,
+                    stripe_subscription_id="sub_ads_1",
+                    status="active",
+                    price_id="price_ads_live",
+                    current_period_end=datetime.now(timezone.utc) + timedelta(days=20),
+                )
+            )
+            s.commit()
+        with patch.dict(
+            "os.environ", {"STRIPE_PRICE_ID_ADS_PARLAY": "price_ads_live"}
+        ), patch("app.billing.session_scope", self.scope):
+            statuses = billing_module.get_subscriptions_by_plan(account_id)
+            self.assertTrue(statuses["ads_parlay"]["entitled"])
+            self.assertFalse(statuses["podcast_parlay"]["entitled"])
+
+    def test_checkout_rejects_unknown_plan(self):
+        client = TestClient(app)
+        self._login(client, "weird@co.com")
+        with patch("app.auth.session_scope", self.scope):
+            resp = client.post(
+                "/billing/checkout", data={"plan": "not_a_plan"},
+                follow_redirects=False,
+            )
+            self.assertEqual(resp.status_code, 404)
+
+
 class WebhookSyncTests(unittest.TestCase):
     def setUp(self):
         self.engine = create_engine(

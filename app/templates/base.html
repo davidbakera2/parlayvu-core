@@ -12,6 +12,11 @@
            min-height: 100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
     .card { background: var(--card); border:1px solid #23262f; border-radius:16px; padding:40px;
             width:100%; max-width:440px; box-shadow:0 20px 60px rgba(0,0,0,.45); }
+    .plan-card { padding:22px 0; border-top:1px solid #23262f; }
+    .plan-card h2 { font-size:19px; margin:0 0 4px; }
+    .plan-card ul { list-style:none; padding:0; margin:12px 0 0; font-size:13px; line-height:1.5; }
+    .plan-card ul li { padding-left:18px; position:relative; margin:6px 0; }
+    .plan-card ul li::before { content:"✓"; position:absolute; left:0; color:var(--accent2); }
     .brand { font-weight:700; letter-spacing:.5px; font-size:14px; color:var(--accent2); text-transform:uppercase; }
     h1 { font-size:24px; margin:8px 0 4px; }
     p.muted { color: var(--muted); margin-top:0; line-height:1.5; }

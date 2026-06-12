@@ -15,13 +15,17 @@ This is the rendered static output (HTML + compiled CSS in `_astro/` + assets in
 `brand/`, `agents/`, `case-studies/`). It is not an Astro project anymore; edit
 `index.html` directly. A future clean rebuild can replace it.
 
-## Podcast Parlay section
+## Offering sections
 
-- Nav link **Podcast Parlay** → `#podcast-parlay` (header + footer).
-- Section `#podcast-parlay` pitches the $800 / 4-week subscription and links to
-  **https://app.parlayvu.ai/login** (the login-first Stripe subscribe flow).
-- Styles are a self-contained `<style>` block (`.pp-*`) in `index.html`, themed
-  to the site's dark palette — it does not depend on the compiled Tailwind CSS.
+- Nav links **Podcast Parlay** → `#podcast-parlay` and **Ads Parlay** →
+  `#ads-parlay` (header + footer).
+- Section `#podcast-parlay` pitches the $800 / 4-week subscription; section
+  `#ads-parlay` pitches the $500 / month managed-Google-Ads subscription. Both
+  link to **https://app.parlayvu.ai/login** (the login-first Stripe subscribe
+  flow), where the dashboard now lists every offering as its own subscribe card.
+- Both sections share the self-contained `<style>` block (`.pp-*`) in
+  `index.html`, themed to the site's dark palette — it does not depend on the
+  compiled Tailwind CSS.
 
 ## Preview locally
 

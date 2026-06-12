@@ -20,9 +20,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app import plans as plans_catalog
 from app.auth import current_account
 from app.database import session_scope
 from app.models import Account, Subscription
@@ -110,6 +111,44 @@ def get_subscription_status(account_id: str) -> dict:
         }
 
 
+def get_subscriptions_by_plan(account_id: str) -> dict:
+    """Return ``{plan_slug: status_dict}`` for every plan in the catalog.
+
+    A plan's status reflects the most recent local ``Subscription`` whose
+    ``price_id`` matches that plan's configured Stripe price. A subscription
+    whose price is unrecognized (e.g. legacy rows written before the catalog,
+    or a price that predates a rotation) is attributed to the default plan so
+    existing single-product subscribers keep their entitlement. Plans with no
+    matching subscription come back not-entitled.
+    """
+    result = {
+        slug: {"entitled": False, "status": None, "current_period_end": None,
+               "cancel_at_period_end": False}
+        for slug in plans_catalog.PLANS
+    }
+    with session_scope() as session:
+        subs = (
+            session.query(Subscription)
+            .filter(Subscription.account_id == account_id)
+            .order_by(Subscription.created_at.desc())
+            .all()
+        )
+        seen: set[str] = set()
+        for sub in subs:
+            plan = plans_catalog.plan_for_price_id(sub.price_id)
+            slug = plan.slug if plan is not None else plans_catalog.DEFAULT_PLAN
+            if slug in seen:  # keep only the most recent per plan
+                continue
+            seen.add(slug)
+            result[slug] = {
+                "entitled": sub.status in ENTITLED_STATUSES,
+                "status": sub.status,
+                "current_period_end": sub.current_period_end,
+                "cancel_at_period_end": sub.cancel_at_period_end,
+            }
+    return result
+
+
 def _upsert_subscription_from_stripe(stripe_subscription: dict) -> None:
     """Create or update the local Subscription row from a Stripe object,
     mapping it to the local account via the Stripe customer id."""
@@ -178,30 +217,51 @@ def handle_webhook_event(event: dict) -> None:
 def dashboard(request: Request, account: Optional[dict] = Depends(current_account)):
     if account is None:
         return RedirectResponse(url="/login", status_code=303)
-    status = get_subscription_status(account["id"])
+    statuses = get_subscriptions_by_plan(account["id"])
+    plan_views = [
+        {
+            "slug": plan.slug,
+            "name": plan.name,
+            "tagline": plan.tagline,
+            "price_label": plan.price_label,
+            "period_label": plan.period_label,
+            "features": plan.features,
+            "subscription": statuses[plan.slug],
+        }
+        for plan in plans_catalog.PLANS.values()
+    ]
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context={"account": account, "subscription": status},
+        context={"account": account, "plans": plan_views},
     )
 
 
 @router.post("/billing/checkout")
-def checkout(request: Request, account: Optional[dict] = Depends(current_account)):
+def checkout(
+    request: Request,
+    plan: str = Form(plans_catalog.DEFAULT_PLAN),
+    account: Optional[dict] = Depends(current_account),
+):
     if account is None:
         return RedirectResponse(url="/login", status_code=303)
-    settings = get_settings()
-    if not settings.stripe_price_id:
+    selected = plans_catalog.get_plan(plan)
+    if selected is None:
+        raise HTTPException(status_code=404, detail="Unknown plan")
+    price_id = selected.price_id()
+    if not price_id:
         raise HTTPException(status_code=503, detail="Billing price is not configured")
+    settings = get_settings()
     stripe = _stripe()
     customer_id = ensure_stripe_customer(account["id"])
     checkout_session = stripe.checkout.Session.create(
         mode="subscription",
         customer=customer_id,
-        line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
+        line_items=[{"price": price_id, "quantity": 1}],
         success_url=f"{settings.app_base_url}/billing/success",
         cancel_url=f"{settings.app_base_url}/billing/cancel",
         allow_promotion_codes=True,
+        metadata={"plan": selected.slug},
     )
     return RedirectResponse(url=checkout_session["url"], status_code=303)
 
