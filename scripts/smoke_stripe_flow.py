@@ -1,18 +1,19 @@
 """End-to-end smoke test for the parlayvu.ai Stripe subscription half.
 
-Runs against your Stripe TEST API (refuses live keys). It:
-  1. Ensures the $800/4-week price exists (idempotent via lookup_key).
+Runs against your Stripe TEST API (refuses live keys). For the chosen plan it:
+  1. Ensures the plan's recurring price exists (idempotent via lookup_key).
   2. Logs a user in via the real magic-link flow.
-  3. Drives the real POST /billing/checkout route and verifies it redirects to a
-     live checkout.stripe.com session URL (this also creates the Stripe customer).
+  3. Drives the real POST /billing/checkout route (with the plan) and verifies it
+     redirects to a live checkout.stripe.com session URL (also creates the customer).
   4. Creates a real test subscription (test card pm_card_visa) and runs the
      resulting Stripe object through our webhook handler.
-  5. Confirms GET /dashboard now shows the subscription as Active.
+  5. Confirms GET /dashboard now shows that plan's subscription as Active.
   6. Cleans up: cancels the subscription and deletes the test customer.
 
 Prereqs: STRIPE_SECRET_KEY=sk_test_... in your environment / .env.
 
-    python scripts/smoke_stripe_flow.py
+    python scripts/smoke_stripe_flow.py [plan_slug]   # default: podcast_parlay
+    python scripts/smoke_stripe_flow.py ads_parlay
 """
 import os
 import sys
@@ -23,8 +24,18 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.plans import PLANS, DEFAULT_PLAN  # noqa: E402
+
+PLAN_SLUG = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_PLAN
+PLAN = PLANS.get(PLAN_SLUG)
+if PLAN is None:
+    print(f"Unknown plan '{PLAN_SLUG}'. Choose one of: {', '.join(PLANS)}")
+    raise SystemExit(2)
+
 # Throwaway DB, set before importing the app (engine builds at import time).
-_db_path = Path(tempfile.gettempdir()) / "parlayvu_smoke_stripe.db"
+_db_path = Path(tempfile.gettempdir()) / f"parlayvu_smoke_stripe_{PLAN_SLUG}.db"
 if _db_path.exists():
     _db_path.unlink()
 os.environ["DATABASE_URL"] = f"sqlite:///{_db_path.as_posix()}"
@@ -32,10 +43,8 @@ os.environ.pop("RESEND_API_KEY", None)
 os.environ.pop("RESEND_API", None)
 os.environ["APP_BASE_URL"] = "http://localhost:8000"
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-PRICE_LOOKUP_KEY = "podcast_parlay_800_per_4w"
-EMAIL = "smoke-stripe@example.com"
+PRICE_LOOKUP_KEY = PLAN.lookup_key
+EMAIL = f"smoke-{PLAN_SLUG}@example.com"
 
 
 def fail(msg: str):
@@ -64,24 +73,24 @@ def main() -> int:
 
     stripe.api_key = secret
 
-    print("1. Ensure $800/4-week price exists")
+    print(f"1. Ensure {PLAN.price_label}/{PLAN.period_label} price exists ({PLAN.name})")
     existing = stripe.Price.list(lookup_keys=[PRICE_LOOKUP_KEY], active=True, limit=1)
     if existing.data:
         price = existing.data[0]
         print(f"  [PASS] found existing price {price.id}")
     else:
-        product = stripe.Product.create(name="Podcast Parlay Subscription")
+        product = stripe.Product.create(name=f"{PLAN.name} Subscription")
         price = stripe.Price.create(
             product=product.id,
-            unit_amount=80000,
+            unit_amount=PLAN.amount_cents,
             currency="usd",
-            recurring={"interval": "week", "interval_count": 4},
+            recurring={"interval": PLAN.interval, "interval_count": PLAN.interval_count},
             lookup_key=PRICE_LOOKUP_KEY,
-            nickname="$800 / 4 weeks",
+            nickname=f"{PLAN.price_label} {PLAN.period_label}",
         )
         print(f"  [PASS] created price {price.id}")
-    # Make the price visible to the billing module via env.
-    os.environ["STRIPE_PRICE_ID"] = price.id
+    # Make the price visible to the billing module via the plan's env var.
+    os.environ[PLAN.price_env] = price.id
 
     # Import the app only now that env (DB + price) is in place.
     from fastapi.testclient import TestClient
@@ -117,7 +126,9 @@ def main() -> int:
         print(f"  [PASS] logged in as {EMAIL} (account {account_id})")
 
         print("3. POST /billing/checkout -> live Stripe Checkout URL")
-        r = client.post("/billing/checkout", follow_redirects=False)
+        r = client.post(
+            "/billing/checkout", data={"plan": PLAN_SLUG}, follow_redirects=False
+        )
         location = r.headers.get("location", "")
         if r.status_code != 303 or "checkout.stripe.com" not in location:
             fail(f"expected 303 to checkout.stripe.com, got {r.status_code} {location[:80]}")
@@ -147,9 +158,14 @@ def main() -> int:
 
         print("5. Dashboard reflects the active subscription")
         r = client.get("/dashboard")
-        if r.status_code != 200 or "Manage billing" not in r.text or "Active" not in r.text:
+        if (
+            r.status_code != 200
+            or "Manage billing" not in r.text
+            or "Active" not in r.text
+            or PLAN.name not in r.text
+        ):
             fail("dashboard did not show an active subscription")
-        print("  [PASS] /dashboard shows Active + Manage billing")
+        print(f"  [PASS] /dashboard shows {PLAN.name} Active + Manage billing")
 
         print()
         print("STRIPE SMOKE TEST PASSED — checkout + subscription sync work end-to-end.")

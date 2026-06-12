@@ -1,8 +1,21 @@
 # parlayvu.ai login + subscription
 
-Customer-facing login and recurring billing for the **Podcast Parlay
-subscription** ($800 every 4 weeks). Built into the FastAPI app as
-server-rendered pages; Stripe hosts all payment UI.
+Customer-facing login and recurring billing for the parlayvu.ai subscription
+offerings. Built into the FastAPI app as server-rendered pages; Stripe hosts all
+payment UI.
+
+**Offerings** are defined in one place — the product catalog at
+[`app/plans.py`](../app/plans.py). Each `Plan` carries its Stripe price (read at
+runtime from the env var named in `price_env`), display copy, and feature list.
+The dashboard renders one subscribe/manage card per plan, and a customer may hold
+several subscriptions at once. Adding a new offering = adding one `Plan`.
+
+Current catalog:
+
+| Plan | Price | Stripe price env |
+|---|---|---|
+| Podcast Parlay | $800 every 4 weeks | `STRIPE_PRICE_ID` |
+| Ads Parlay (managed Google Ads) | $500 / month | `STRIPE_PRICE_ID_ADS_PARLAY` |
 
 ## What a customer sees
 
@@ -40,11 +53,12 @@ alembic upgrade head   # creates accounts, magic_links, login_sessions, subscrip
 
 ### 2. Stripe
 1. Create a Stripe account; grab the **secret key** (`sk_test_…` to start).
-2. Create the recurring price:
+2. Create the recurring prices (one per catalog plan, idempotent):
    ```powershell
    $env:STRIPE_SECRET_KEY="sk_test_..."; python scripts/setup_stripe.py
    ```
-   Copy the printed `STRIPE_PRICE_ID` into `.env`.
+   Copy each printed `<PRICE_ENV>=price_…` line (e.g. `STRIPE_PRICE_ID` and
+   `STRIPE_PRICE_ID_ADS_PARLAY`) into `.env`.
 3. Add a **webhook endpoint** in the Stripe dashboard pointing to
    `https://<your-domain>/webhooks/stripe`, subscribed to:
    - `checkout.session.completed`

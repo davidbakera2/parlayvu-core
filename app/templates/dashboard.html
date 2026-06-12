@@ -1,39 +1,50 @@
 {% extends "base.html" %}
-{% block title %}Your subscription · ParlayVU{% endblock %}
+{% block title %}Your subscriptions · ParlayVU{% endblock %}
 {% block content %}
-  <h1>Your subscription</h1>
+  <h1>Your subscriptions</h1>
   <p class="muted">Signed in as {{ account.email }}</p>
 
-  {% if subscription.entitled %}
-    <p><span class="pill ok">Active</span></p>
-    <p class="muted">
-      Your Podcast Parlay subscription is active.
-      {% if subscription.current_period_end %}
-        {% if subscription.cancel_at_period_end %}
-          It will end on {{ subscription.current_period_end.strftime('%B %d, %Y') }}.
-        {% else %}
-          Renews on {{ subscription.current_period_end.strftime('%B %d, %Y') }}.
+  {% for plan in plans %}
+    {% set sub = plan.subscription %}
+    <section class="plan-card">
+      <h2>{{ plan.name }}</h2>
+      <p class="muted">{{ plan.tagline }}</p>
+
+      {% if sub.entitled %}
+        <p><span class="pill ok">Active</span></p>
+        <p class="muted">
+          Your {{ plan.name }} subscription is active.
+          {% if sub.current_period_end %}
+            {% if sub.cancel_at_period_end %}
+              It will end on {{ sub.current_period_end.strftime('%B %d, %Y') }}.
+            {% else %}
+              Renews on {{ sub.current_period_end.strftime('%B %d, %Y') }}.
+            {% endif %}
+          {% endif %}
+        </p>
+        <form method="post" action="/billing/portal">
+          <button type="submit">Manage billing</button>
+        </form>
+      {% else %}
+        {% if sub.status %}
+          <p><span class="pill warn">{{ sub.status|capitalize }}</span></p>
+        {% endif %}
+        <div class="price">{{ plan.price_label }} <small>{{ plan.period_label }}</small></div>
+        <ul class="muted">
+          {% for feature in plan.features %}<li>{{ feature }}</li>{% endfor %}
+        </ul>
+        <form method="post" action="/billing/checkout">
+          <input type="hidden" name="plan" value="{{ plan.slug }}">
+          <button type="submit">Subscribe</button>
+        </form>
+        {% if sub.status %}
+          <form method="post" action="/billing/portal">
+            <button type="submit" class="secondary">Manage billing</button>
+          </form>
         {% endif %}
       {% endif %}
-    </p>
-    <form method="post" action="/billing/portal">
-      <button type="submit">Manage billing</button>
-    </form>
-  {% else %}
-    {% if subscription.status %}
-      <p><span class="pill warn">{{ subscription.status|capitalize }}</span></p>
-    {% endif %}
-    <p class="muted">Subscribe to start your Podcast Parlay production.</p>
-    <div class="price">$800 <small>every 4 weeks</small></div>
-    <form method="post" action="/billing/checkout">
-      <button type="submit">Subscribe</button>
-    </form>
-    {% if subscription.status %}
-      <form method="post" action="/billing/portal">
-        <button type="submit" class="secondary">Manage billing</button>
-      </form>
-    {% endif %}
-  {% endif %}
+    </section>
+  {% endfor %}
 
   <form method="post" action="/auth/logout">
     <button type="submit" class="secondary">Sign out</button>
